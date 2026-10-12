@@ -3,6 +3,8 @@ name: Desktop-Apps bauen
 on:
   push:
     tags: ['v*']
+    branches: [main]
+    paths-ignore: ['**.md']
   workflow_dispatch:
 
 permissions:
