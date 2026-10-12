@@ -34,8 +34,9 @@ jobs:
       - run: npm ci
       - run: npm run prepare-web
 
+      # Push auf main oder Tag: Release „v<version aus package.json>“ anlegen (gibt es sie schon, bleibt sie)
       - name: Installer bauen
-        run: npx electron-builder --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+        run: npx electron-builder --publish ${{ (startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main') && 'always' || 'never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false

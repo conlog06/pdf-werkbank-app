@@ -46,9 +46,9 @@ Installer lokal bauen: `npm run dist:win` (unter Windows) bzw. `npm run dist:mac
 
 ## Neue Version veröffentlichen
 
-1. In `package.json` die `version` erhöhen.
-2. Commit, dann Tag setzen und pushen: `git tag v1.0.1 && git push --tags`
-3. GitHub Actions baut Windows- und Mac-Installer und legt sie als Release ab. Ohne Tag (Actions → *Desktop-Apps bauen* → *Run workflow*) landen die Installer nur als Artefakte am Lauf.
+1. In `package.json` die `version` erhöhen (z. B. `1.0.1`).
+2. Committen und auf `main` pushen.
+3. GitHub Actions baut Windows- und Mac-Installer und legt sie als Release `v1.0.1` ab. Die installierte Windows-App holt sich das Update von selbst.
 
 ## Aufbau
 
