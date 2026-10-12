@@ -3483,8 +3483,8 @@ function bindUI() {
   $('#btnSave').onclick = savePdf;
   if ($('#btnLib')) $('#btnLib').onclick = () => goLibrary();
   // beim Verlassen schnell noch sichern (Tab schließen, App wechseln)
-  document.addEventListener('visibilitychange', () => { if (document.hidden && S.lib && S.dirty) libSave(); });
-  window.addEventListener('pagehide', () => { if (S.lib && S.dirty) libSave(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && S.lib && S.dirty && !S.renderMode) libSave(); });
+  window.addEventListener('pagehide', () => { if (S.lib && S.dirty && !S.renderMode) libSave(); });
   $('#fileOpen').onchange = e => { openFiles(e.target.files, 'replace'); e.target.value = ''; };
   $('#fileMerge').onchange = e => { openFiles(e.target.files, 'append'); e.target.value = ''; };
   $('#fileImg').onchange = e => { insertImages([...e.target.files]); e.target.value = ''; };
@@ -3848,9 +3848,27 @@ async function libSave() {
       const sources = [...S.sources.values()].map(x => ({ id: x.id, name: x.name, bytes: x.bytes }));
       await LIB.saveDoc(S.lib.id, { state, sources, thumb: await pageThumb(), pages: S.pages.length });
       S.dirty = false; updateTitle(); libState('saved');
+      scheduleDrive();
     } catch (e) { console.error(e); libState('error'); toast('In der Bibliothek sichern fehlgeschlagen: ' + (e.message || e)); }
   })();
   try { await libSaving; } finally { libSaving = null; }
+}
+/* Google-Drive-Backup des offenen Dokuments: kurz nach dem Sichern die PDF erzeugen und hochladen */
+let driveT = 0, driveBusy = false;
+function scheduleDrive(ms = 10000) {
+  if (!S.lib || S.renderMode || !window.WBDrive || !window.WBDrive.enabled()) return;
+  clearTimeout(driveT); driveT = setTimeout(driveBackup, ms);
+}
+async function driveBackup() {
+  if (driveBusy) { scheduleDrive(3000); return; }
+  if (!S.lib || S.dirty) { scheduleDrive(4000); return; }
+  driveBusy = true;
+  try {
+    const id = S.lib.id, bytes = await buildPdf(S.pages);
+    if (await window.WBDrive.backupNow(id, bytes)) { const el = $('#libState'); if (el && el.dataset.s === 'saved') { el.textContent = 'Gesichert · Drive'; el.title = 'In der Bibliothek und in Google Drive gesichert'; } }
+    else if (window.WBDrive.info().status === 'auth') { const el = $('#libState'); if (el) el.title = 'Google Drive: Anmeldung abgelaufen, in der Bibliothek auf „Fortsetzen“ tippen'; }
+  } catch (e) { console.warn('Drive', e); }
+  driveBusy = false;
 }
 async function openLibDoc(id) {
   busy(true, 'Dokument wird geöffnet …');
@@ -3882,6 +3900,7 @@ async function openLibDoc(id) {
   } catch (e) {
     console.error(e); busy(false);
     S.lib = null;
+    if (S.renderMode) { parent.postMessage({ wbRender: id, error: e.message || String(e) }, location.origin === 'null' ? '*' : location.origin); return false; }
     await ask('Dokument nicht verfügbar', e.message || String(e), 'Zur Bibliothek', 'Hier bleiben', false).then(y => { if (y) location.href = 'library.html'; });
     return false;
   }
@@ -3946,8 +3965,18 @@ async function boot() {
     } catch (e) { console.warn('Standardschriften nicht geladen', e); }
   }
   libUI();
-  if (LIB && window.WBSync) window.WBSync.init();
   const qp = new URLSearchParams(location.search);
+  // unsichtbar in der Bibliothek: nur die PDF für das Drive-Backup erzeugen
+  if (LIB && qp.get('render') === '1' && qp.get('doc') && parent !== window) {
+    S.renderMode = true;
+    const id = qp.get('doc');
+    if (await openLibDoc(id)) {
+      try { const buf = (await buildPdf(S.pages)).slice().buffer; parent.postMessage({ wbRender: id, bytes: buf }, location.origin === 'null' ? '*' : location.origin, [buf]); }
+      catch (e) { parent.postMessage({ wbRender: id, error: e.message || String(e) }, location.origin === 'null' ? '*' : location.origin); }
+    }
+    return;
+  }
+  if (LIB && window.WBSync) window.WBSync.init();
   if (LIB && qp.get('doc')) {
     if (await openLibDoc(qp.get('doc'))) { if (qp.get('export') === '1') { history.replaceState(null, '', 'index.html?doc=' + encodeURIComponent(qp.get('doc'))); savePdf(); } return; }
   }

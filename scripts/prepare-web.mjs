@@ -35,6 +35,11 @@ for (const f of ['index.html', 'library.html']) {
   const p = path.join(OUT, f);
   fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/<script>\s*if \('serviceWorker'[\s\S]*?<\/script>\s*/, ''));
 }
+// Clientschlüssel der Google-Desktop-Anmeldung kommt aus einem GitHub-Secret, nicht aus dem Repo
+if (process.env.GOOGLE_DESKTOP_SECRET) {
+  fs.appendFileSync(path.join(OUT, 'js/config.js'), `\nwindow.WB_CONFIG.googleDesktopSecret = ${JSON.stringify(process.env.GOOGLE_DESKTOP_SECRET)};\n`);
+  console.log('Google-Desktop-Schlüssel eingesetzt');
+}
 const left = files.filter(f => /cdnjs\.cloudflare\.com/.test(fs.readFileSync(path.join(OUT, f), 'utf8')));
 if (left.length) { console.error('CDN-Verweise übrig in', left); process.exit(1); }
 console.log('Weboberfläche aus', SRC, '→ web/');

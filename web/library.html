@@ -84,7 +84,9 @@ svg.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;st
 .sync[data-s="ok"] .dot{background:var(--ok)}
 .sync[data-s="syncing"] .dot{background:var(--accent);animation:pulse 1s infinite}
 .sync[data-s="error"] .dot{background:var(--danger)}
-.sync[data-s="offline"] .dot{background:var(--warn)}
+.sync[data-s="offline"] .dot,.sync[data-s="auth"] .dot{background:var(--warn)}
+.sync[data-s="running"] .dot{background:var(--accent);animation:pulse 1s infinite}
+.sync[data-s="auth"]{border-color:color-mix(in srgb,var(--warn) 60%,var(--line))}
 @keyframes pulse{50%{opacity:.35}}
 .sync .st{display:flex;flex-direction:column;min-width:0;flex:1}
 .sync b{font-weight:600;font-size:13px}
@@ -276,6 +278,7 @@ body{padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area
       <div class="tree" id="tree" role="tree"></div>
     </div>
     <div class="side-foot">
+      <button class="sync" id="driveBtn" data-s="off" style="margin-bottom:8px"><span class="dot"></span><span class="st"><b id="driveTitle">Google Drive</b><small id="driveSub">Automatisches Backup</small></span><span id="driveIco"></span></button>
       <button class="sync" id="syncBtn" data-s="off"><span class="dot"></span><span class="st"><b id="syncTitle">Sync aus</b><small id="syncSub">Geräte verbinden</small></span><span id="syncIco"></span></button>
     </div>
   </aside>
@@ -301,6 +304,7 @@ body{padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area
 <script src="js/vendor/supabase.js"></script>
 <script src="js/store.js"></script>
 <script src="js/sync.js"></script>
+<script src="js/gdrive.js"></script>
 <script src="js/library.js"></script>
 </body>
 </html>

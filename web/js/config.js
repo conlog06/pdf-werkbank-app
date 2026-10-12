@@ -3,7 +3,14 @@
  *   supabaseUrl  = „Project URL“
  *   supabaseKey  = „anon public“ Schlüssel (darf öffentlich sein, die Daten schützt die Zeilen-Sicherheit)
  * Leer lassen: dann kann man die Werte in der App unter „Sync“ eintragen. */
+/* Google Drive (automatisches Backup): Client-IDs aus der Google Cloud Console, siehe README „Google Drive“.
+ *   googleClientId         = OAuth-Client vom Typ „Webanwendung“ (für die Webseite)
+ *   googleDesktopClientId  = OAuth-Client vom Typ „Desktop-App“ (für die Desktop-App)
+ * Den Clientschlüssel der Desktop-App nicht hier eintragen, sondern als GitHub-Secret GOOGLE_DESKTOP_SECRET
+ * im Repo pdf-werkbank-app hinterlegen; er wird beim Bauen der App eingesetzt. */
 window.WB_CONFIG = {
   supabaseUrl: 'https://yhvvoqqcelkadvfdkblx.supabase.co',
   supabaseKey: 'sb_publishable_rK6cdlgv40IMEr5CUf1HTQ_P0LzRQRX',
+  googleClientId: '',
+  googleDesktopClientId: '',
 };

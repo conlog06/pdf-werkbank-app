@@ -3,9 +3,11 @@
  * damit Bibliothek (IndexedDB), Cloud-Abgleich und Editor genau wie auf der Webseite laufen.
  */
 'use strict';
-const { app, BrowserWindow, protocol, net, Menu, shell, ipcMain, nativeTheme, dialog } = require('electron');
+const { app, BrowserWindow, protocol, net, Menu, shell, ipcMain, nativeTheme, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const crypto = require('crypto');
 const { pathToFileURL } = require('url');
 
 const isMac = process.platform === 'darwin';
@@ -46,6 +48,80 @@ app.on('second-instance', (e, argv) => {
   if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
 });
 ipcMain.on('renderer-ready', e => { if (win && e.sender === win.webContents) { rendererReady = true; deliver(); } });
+
+/* ---------- Google Drive: Anmeldung im System-Browser, Zugang bleibt verschlüsselt gespeichert ----------
+   Ablauf für installierte Apps (OAuth mit PKCE und Rücksprung auf 127.0.0.1), Google erlaubt keine Anmeldung im App-Fenster. */
+const G_SCOPE = 'https://www.googleapis.com/auth/drive.file openid email';
+const gFile = () => path.join(app.getPath('userData'), 'google.bin');
+let gAccess = null;
+const b64url = b => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function readRefresh() {
+  try { const b = fs.readFileSync(gFile()); return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(b) : b.toString('utf8'); } catch (e) { return null; }
+}
+function writeRefresh(rt) { fs.writeFileSync(gFile(), safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(rt) : Buffer.from(rt, 'utf8')); }
+async function tokenReq(params) {
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(params) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error_description || j.error || 'Google-Anmeldung fehlgeschlagen'); e.code = j.error; throw e; }
+  return j;
+}
+const donePage = ok => `<!doctype html><meta charset="utf-8"><title>PDF Werkbank</title><body style="font:16px system-ui;display:grid;place-items:center;height:90vh;color:#1b2130"><div style="text-align:center"><h2>${ok ? 'Google Drive ist verbunden' : 'Anmeldung abgebrochen'}</h2><p>Du kannst dieses Fenster schließen und zur PDF Werkbank zurückkehren.</p></div>`;
+async function googleConnect({ clientId, secret }) {
+  const verifier = b64url(crypto.randomBytes(48));
+  const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
+  const state = b64url(crypto.randomBytes(16));
+  let redirect = '';
+  const code = await new Promise((res, rej) => {
+    const srv = http.createServer((req, resp) => {
+      const u = new URL(req.url, 'http://127.0.0.1');
+      if (u.pathname !== '/') { resp.writeHead(404); resp.end(); return; }
+      const ok = !!u.searchParams.get('code') && u.searchParams.get('state') === state;
+      resp.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); resp.end(donePage(ok));
+      clearTimeout(to); srv.close();
+      if (ok) res(u.searchParams.get('code')); else rej(new Error(u.searchParams.get('error') === 'access_denied' ? 'Zugriff wurde nicht erlaubt.' : 'Anmeldung abgebrochen.'));
+    });
+    const to = setTimeout(() => { srv.close(); rej(new Error('Zeitüberschreitung bei der Anmeldung.')); }, 5 * 60000);
+    srv.listen(0, '127.0.0.1', () => {
+      redirect = `http://127.0.0.1:${srv.address().port}/`;
+      shell.openExternal('https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+        client_id: clientId, redirect_uri: redirect, response_type: 'code', scope: G_SCOPE,
+        code_challenge: challenge, code_challenge_method: 'S256', access_type: 'offline', prompt: 'consent', state,
+      }));
+    });
+  });
+  const tk = await tokenReq({ client_id: clientId, client_secret: secret, code, code_verifier: verifier, redirect_uri: redirect, grant_type: 'authorization_code' });
+  if (!tk.refresh_token) throw new Error('Google hat keinen dauerhaften Zugang erteilt.');
+  writeRefresh(tk.refresh_token);
+  gAccess = { token: tk.access_token, exp: Date.now() + (tk.expires_in - 120) * 1000 };
+  let email = '';
+  try { email = JSON.parse(Buffer.from(tk.id_token.split('.')[1], 'base64url').toString('utf8')).email || ''; } catch (e) { /* egal */ }
+  if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+  return { email };
+}
+async function googleToken({ clientId, secret }) {
+  if (gAccess && gAccess.exp > Date.now()) return { token: gAccess.token };
+  const rt = readRefresh();
+  if (!rt) return { token: null };
+  try {
+    const tk = await tokenReq({ client_id: clientId, client_secret: secret, refresh_token: rt, grant_type: 'refresh_token' });
+    gAccess = { token: tk.access_token, exp: Date.now() + (tk.expires_in - 120) * 1000 };
+    return { token: gAccess.token };
+  } catch (e) {
+    if (e.code === 'invalid_grant') { try { fs.unlinkSync(gFile()); } catch (x) { /* egal */ } return { token: null }; }
+    throw e;
+  }
+}
+async function googleDisconnect() {
+  const rt = readRefresh();
+  gAccess = null;
+  try { fs.unlinkSync(gFile()); } catch (e) { /* egal */ }
+  if (rt) try { await fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(rt), { method: 'POST' }); } catch (e) { /* egal */ }
+  return {};
+}
+const wrap = fn => async (_e, arg) => { try { return await fn(arg || {}); } catch (e) { return { error: e.message || String(e) }; } };
+ipcMain.handle('google-connect', wrap(googleConnect));
+ipcMain.handle('google-token', wrap(googleToken));
+ipcMain.handle('google-disconnect', wrap(googleDisconnect));
 
 /* ---------- Fenster ---------- */
 const stateFile = () => path.join(app.getPath('userData'), 'fenster.json');
@@ -112,7 +188,7 @@ function buildMenu() {
       { type: 'separator' }, { role: 'quit', label: 'PDF Werkbank beenden' }] },
     { label: 'Ablage', submenu: [
       item('Neues Notizbuch', 'new-notebook', 'Cmd+N'), item('Neuer Ordner', 'new-folder', 'Cmd+Shift+N'), item('PDF importieren …', 'import', 'Cmd+O'),
-      { type: 'separator' }, item('Bibliothek', 'library'), item('Geräte synchronisieren …', 'sync'),
+      { type: 'separator' }, item('Bibliothek', 'library'), item('Geräte synchronisieren …', 'sync'), item('Backup in Google Drive …', 'drive'),
       { type: 'separator' }, { role: 'close', label: 'Fenster schließen' }] },
     { label: 'Bearbeiten', submenu: [
       { role: 'undo', label: 'Widerrufen', registerAccelerator: false }, { role: 'redo', label: 'Wiederholen', registerAccelerator: false }, { type: 'separator' },

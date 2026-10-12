@@ -4,7 +4,7 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const ST = window.WBStore, SY = window.WBSync, PDFJS = window.pdfjsLib, PL = window.PDFLib;
+  const ST = window.WBStore, SY = window.WBSync, GD = window.WBDrive, PDFJS = window.pdfjsLib, PL = window.PDFLib;
   const DESK = window.wbDesktop || null;
   if (PDFJS) PDFJS.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
   if (DESK) document.documentElement.classList.add('desktop', DESK.platform === 'darwin' ? 'mac' : 'win');
@@ -555,6 +555,54 @@
     $('#syncIco').innerHTML = ico(I.user ? 'cloud' : 'gear');
   }
 
+  /* Google Drive: automatisches Backup aller Dokumente als PDF */
+  function renderDrive(I) {
+    const b = $('#driveBtn'); if (!b) return;
+    b.dataset.s = I.enabled ? (I.status === 'idle' ? 'ok' : I.status) : 'off';
+    $('#driveTitle').textContent = 'Google Drive';
+    $('#driveSub').textContent = !I.enabled ? 'Automatisches Backup einrichten'
+      : I.status === 'running' ? (I.total ? `Sichert ${Math.min(I.done + 1, I.total)} von ${I.total} …` : 'Sichert …')
+      : I.status === 'auth' ? 'Anmeldung abgelaufen · tippen zum Fortsetzen'
+      : I.status === 'error' ? I.error
+      : I.status === 'offline' ? 'Offline, wird nachgeholt'
+      : (I.lastRun ? 'Alles gesichert · ' + fmtDate(I.lastRun) : 'Verbunden · ' + (I.email || ''));
+    $('#driveIco').innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3h7l6 10.5-3.5 6h-12L2.5 13.5zM8.5 3l6.5 10.5h6.5M15.5 3L9 13.5 6 19.5M2.5 13.5H15l3 6"/></svg>`;
+  }
+  async function driveDialog() {
+    if (!GD) return;
+    const I = GD.info();
+    if (I.enabled && I.status === 'auth' && !I.desktop) {
+      try { await GD.resume(); toast('Google Drive: weiter geht’s'); } catch (e) { toast(e.message || String(e)); }
+      return;
+    }
+    const st = { ok: 'Alles gesichert', idle: 'Bereit', running: 'Sichert gerade …', auth: 'Anmeldung abgelaufen', error: 'Fehler: ' + I.error, offline: 'Offline, wird nachgeholt' }[I.status] || '';
+    let html = `<h2>Backup in Google Drive</h2><p class="lead">Wie bei GoodNotes: Jedes Dokument liegt automatisch als PDF mit allen Markierungen in deinem Drive, in derselben Ordnerstruktur wie hier. Änderungen, Umbenennen und Verschieben werden nachgezogen.</p>`;
+    if (!I.configured) {
+      html += `<p class="note">Für Google Drive braucht die Werkbank eine eigene Google-Cloud-Anmeldung (kostenlos). Die Einrichtung steht im README unter <b>Google Drive</b>; danach die Client-IDs in <code>js/config.js</code> eintragen.</p><div class="acts"><button class="btn primary" data-x="0">OK</button></div>`;
+    } else if (!I.enabled) {
+      html += `<div class="account"><span class="avatar" style="background:#fff;box-shadow:inset 0 0 0 1px var(--line)">${$('#driveIco').innerHTML.replace('class="ico"', 'class="ico" style="color:#1f9d55;width:22px;height:22px"')}</span><div><b>Ordner „PDF Werkbank“</b><div class="note">Die Werkbank sieht nur Dateien, die sie selbst angelegt hat.${I.desktop ? '' : ' Im Browser gilt die Anmeldung je eine Stunde, danach ein Tipp auf „Fortsetzen“.'}</div></div></div>
+        <p class="err" id="gdErr"></p><div class="acts"><button class="btn" data-x="0">Abbrechen</button><button class="btn primary" data-x="go">Mit Google verbinden</button></div>`;
+    } else {
+      html += `<div class="account"><span class="avatar">${esc((I.email || 'G')[0].toUpperCase())}</span><div style="flex:1;min-width:0"><b>${esc(I.email || 'Google-Konto')}</b><div class="note">${esc(st)}${I.lastRun ? ' · zuletzt ' + fmtDate(I.lastRun) : ''}</div></div></div>
+        <p class="note">Ziel: <b>Meine Ablage › ${esc(I.root)}</b></p>
+        <div class="acts" style="justify-content:space-between;flex-wrap:wrap"><button class="btn" data-x="off">Trennen</button><span style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="${GD.folderUrl()}" target="_blank" rel="noopener">${ico('open')}In Drive öffnen</a>${I.status === 'auth' ? `<button class="btn primary" data-x="resume">Fortsetzen</button>` : `<button class="btn primary" data-x="now">${ico('refresh')}Jetzt sichern</button>`}</span></div>`;
+    }
+    await dialog(html, {
+      onOpen: (d, close) => d.addEventListener('click', async e => {
+        const b = e.target.closest('[data-x]'); if (!b) return;
+        const k = b.dataset.x;
+        if (k === 'go') {
+          b.disabled = true; b.textContent = I.desktop ? 'Im Browser anmelden …' : 'Anmelden …';
+          try { await GD.connect(); close(); toast('Google Drive verbunden · Backup läuft'); }
+          catch (x) { d.querySelector('#gdErr').textContent = x.message || String(x); b.disabled = false; b.textContent = 'Mit Google verbinden'; }
+        } else if (k === 'now') { GD.run(); close(); toast('Backup gestartet'); }
+        else if (k === 'resume') { try { await GD.resume(); close(); } catch (x) { toast(x.message || String(x)); } }
+        else if (k === 'off') { if (await confirmDlg('Google Drive trennen?', 'Das automatische Backup endet. Die PDFs bleiben in deinem Drive.', 'Trennen')) { await GD.disconnect(); close(); } }
+        else close();
+      }),
+    });
+  }
+
   /* ---------- Kontextmenü ---------- */
   let menuEl = null;
   function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
@@ -648,6 +696,7 @@
     let qT = 0;
     $('#search').addEventListener('input', e => { clearTimeout(qT); qT = setTimeout(() => { V.q = e.target.value.trim(); render(); }, 120); });
     $('#syncBtn').onclick = syncDialog;
+    if (GD) { $('#driveBtn').onclick = driveDialog; GD.onStatus(renderDrive); GD.watch(); } else $('#driveBtn').hidden = true;
 
     $('#nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (b) go({ kind: b.dataset.nav, id: null }); };
     $('#tree').onclick = e => {
@@ -746,7 +795,7 @@
         await refresh();
         if (docs.length === 1) openDoc(docs[0].id); else if (docs.length) toast(`${docs.length} PDFs importiert`);
       });
-      DESK.onMenu && DESK.onMenu(k => { if (k === 'new-notebook') newAction('notebook'); else if (k === 'import') newAction('import'); else if (k === 'new-folder') newAction('folder'); else if (k === 'sync') syncDialog(); else if (k === 'find') $('#search').focus(); else if (k === 'library') go({ kind: 'folder', id: null }); });
+      DESK.onMenu && DESK.onMenu(k => { if (k === 'new-notebook') newAction('notebook'); else if (k === 'import') newAction('import'); else if (k === 'new-folder') newAction('folder'); else if (k === 'sync') syncDialog(); else if (k === 'find') $('#search').focus(); else if (k === 'library') go({ kind: 'folder', id: null }); else if (k === 'drive') driveDialog(); });
     }
   }
 

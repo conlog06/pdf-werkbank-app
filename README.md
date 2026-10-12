@@ -25,11 +25,16 @@ Unter Windows kommen Updates automatisch, auf dem Mac weist die App auf neue Ver
 - **Editor:** alles aus der Webversion – Texte ändern, Inhalte verschieben und entfernen, Schwärzen, Stifte mit Druckstärke, Formen, Markieren mit Text, Kommentare, Messen, Formulare, Seiten verwalten, Rechner mit Graphen. Änderungen werden automatisch in der Bibliothek gesichert, „Exportieren“ erzeugt die PDF-Datei.
 - **PDFs öffnen** per Doppelklick bzw. „Öffnen mit → PDF Werkbank“: landen in der Bibliothek und gehen direkt auf.
 - **Sync:** Mit demselben Konto haben Webseite und App dieselben Ordner, Dokumente und Markierungen, live und auch offline (Abgleich beim nächsten Online-Sein).
+- **Google Drive:** automatisches Backup aller Dokumente als PDF in „Meine Ablage › PDF Werkbank“, mit derselben Ordnerstruktur. Einmal im Browser anmelden, danach läuft es im Hintergrund.
 - Läuft komplett offline, eigene Fensterleiste, heller und dunkler Modus.
 
 ## Sync einrichten
 
 Der Abgleich nutzt ein kostenloses [Supabase](https://supabase.com)-Projekt. Die Schritte stehen im [README der Webversion](https://github.com/conlog06/pdf-werkbank#bibliothek-und-sync). Sind die Werte dort in `js/config.js` eingetragen, übernimmt die App sie beim nächsten Build automatisch. Sonst kann man sie in der App unten links unter **Sync** eintragen.
+
+## Google Drive einrichten
+
+Schritte im [README der Webversion](https://github.com/conlog06/pdf-werkbank#google-drive-automatisches-backup). Für die App zusätzlich den Clientschlüssel des Desktop-Clients hier im Repo unter *Settings → Secrets and variables → Actions → New repository secret* als **`GOOGLE_DESKTOP_SECRET`** speichern. Der Build setzt ihn ein.
 
 ## Entwickeln
 
