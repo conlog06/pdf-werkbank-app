@@ -4,6 +4,6 @@
  *   supabaseKey  = „anon public“ Schlüssel (darf öffentlich sein, die Daten schützt die Zeilen-Sicherheit)
  * Leer lassen: dann kann man die Werte in der App unter „Sync“ eintragen. */
 window.WB_CONFIG = {
-  supabaseUrl: '',
-  supabaseKey: '',
+  supabaseUrl: 'https://yhvvoqqcelkadvfdkblx.supabase.co',
+  supabaseKey: 'sb_publishable_rK6cdlgv40IMEr5CUf1HTQ_P0LzRQRX',
 };
