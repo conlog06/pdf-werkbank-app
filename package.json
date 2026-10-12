@@ -1,7 +1,7 @@
 {
   "name": "pdf-werkbank-app",
   "productName": "PDF Werkbank",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "PDF Werkbank als Desktop-App für Windows und macOS: Bibliothek mit Ordnern, PDF-Editor und Abgleich mit der Webseite.",
   "main": "main.js",
   "author": "Constantin Loggen <scrabby8@gmail.com>",
@@ -28,22 +28,63 @@
     "appId": "de.loggx.pdfwerkbank",
     "productName": "PDF Werkbank",
     "copyright": "© 2026 Constantin Loggen",
-    "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["main.js", "preload.js", "web/**/*", "build/icon.png", "package.json"],
-    "fileAssociations": [{ "ext": "pdf", "name": "PDF-Dokument", "role": "Editor", "mimeType": "application/pdf" }],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "web/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "pdf",
+        "name": "PDF-Dokument",
+        "role": "Editor",
+        "mimeType": "application/pdf"
+      }
+    ],
     "afterPack": "scripts/adhoc-sign.cjs",
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.png",
       "identity": null,
       "hardenedRuntime": false,
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }, { "target": "zip", "arch": ["arm64", "x64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "PDF-Werkbank-${version}-mac-${arch}.${ext}"
     },
-    "dmg": { "title": "PDF Werkbank ${version}" },
+    "dmg": {
+      "title": "PDF Werkbank ${version}"
+    },
     "win": {
       "icon": "build/icon.png",
-      "target": [{ "target": "nsis", "arch": ["x64", "arm64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
       "artifactName": "PDF-Werkbank-Setup-${version}.${ext}"
     },
     "nsis": {
@@ -55,6 +96,13 @@
       "shortcutName": "PDF Werkbank",
       "language": "1031"
     },
-    "publish": [{ "provider": "github", "owner": "conlog06", "repo": "pdf-werkbank-app", "releaseType": "release" }]
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "conlog06",
+        "repo": "pdf-werkbank-app",
+        "releaseType": "draft"
+      }
+    ]
   }
 }
