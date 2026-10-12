@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f4fd8">
+<meta name="description" content="PDF-Editor im Browser: Texte direkt ändern, Inhalte entfernen, kommentieren, unterschreiben und Seiten verwalten.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PDF Werkbank">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>PDF Werkbank</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: Kopfzeile und Werkzeugleisten oben, Miniaturen links, Schreibtischfläche mit Seiten in der Mitte, Statuszeile unten */
+:root{
+  --desk:#dde1e8; --chrome:#f5f6f9; --raise:#ffffff; --line:#d1d6df; --ink:#1b2130; --muted:#5a6374;
+  --accent:#1f4fd8; --accent-ink:#ffffff; --accent-soft:#e3e9fb; --danger:#c4352b;
+  --paper-shadow:0 1px 2px rgb(22 28 45 / .14), 0 8px 24px rgb(22 28 45 / .10);
+  --f-ui:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --f-display:"IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --desk:#111419; --chrome:#1a1e25; --raise:#222731; --line:#303744; --ink:#e5e8ee; --muted:#99a1b0;
+    --accent:#7598ff; --accent-ink:#0c1120; --accent-soft:#1f2a46; --danger:#ff7a6e;
+    --paper-shadow:0 1px 2px rgb(0 0 0 / .5), 0 10px 30px rgb(0 0 0 / .45);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --desk:#111419; --chrome:#1a1e25; --raise:#222731; --line:#303744; --ink:#e5e8ee; --muted:#99a1b0;
+  --accent:#7598ff; --accent-ink:#0c1120; --accent-soft:#1f2a46; --danger:#ff7a6e;
+  --paper-shadow:0 1px 2px rgb(0 0 0 / .5), 0 10px 30px rgb(0 0 0 / .45);
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+/* Bibliothek: Sicherungsstatus und Desktop-App-Fenster */
+.libstate{flex:none;font:500 11px/1 var(--f-mono);color:var(--muted);padding:4px 7px;border-radius:999px;background:var(--accent-soft);white-space:nowrap}
+.libstate[data-s="saved"]{color:#1f9d55;background:color-mix(in srgb,#1f9d55 14%,transparent)}
+.libstate[data-s="error"]{color:var(--danger);background:color-mix(in srgb,var(--danger) 14%,transparent)}
+.desktop .top{-webkit-app-region:drag}
+.desktop .top button,.desktop .top input,.desktop .top select,.desktop .top label,.desktop .top .find{-webkit-app-region:no-drag}
+.desktop.mac .top{padding-left:84px}
+.desktop.win .top{padding-right:150px}
+html,body{height:100%}
+body{margin:0;background:var(--desk);color:var(--ink);font:14px/1.4 var(--f-ui);overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+*{box-sizing:border-box}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+#app{height:100%;padding-top:env(safe-area-inset-top,0px);display:grid;grid-template-rows:auto auto auto minmax(0,1fr) auto;grid-template-columns:minmax(0,1fr)}
+
+/* Kopfzeile */
+.top{display:flex;flex-wrap:nowrap;align-items:center;gap:8px 12px;padding:8px 16px;background:var(--chrome);border-bottom:1px solid var(--line)}
+.top>*{flex:none}
+.top>.brand{flex:0 1 auto}
+.top>.find{flex:0 1 auto}
+.brand{display:flex;align-items:center;gap:10px;min-width:0;margin-right:4px}
+.mark{width:26px;height:26px;flex:none}
+.word{font:600 17px/1 var(--f-display);letter-spacing:.01em;white-space:nowrap}
+.docname{font:12px/1.2 var(--f-mono);color:var(--muted);max-width:30ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.grow{flex:1}
+.grp{display:flex;align-items:center;gap:4px}
+.btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--line);background:var(--raise);color:var(--ink);border-radius:6px;font:500 13px/1 var(--f-ui);cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:color-mix(in srgb,var(--accent) 50%,var(--line))}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{background:var(--danger);color:#fff;border-color:transparent}
+.btn:disabled{opacity:.55;cursor:progress}
+.ibtn{width:32px;height:32px;display:inline-grid;place-items:center;border:0;background:transparent;border-radius:6px;color:var(--ink);cursor:pointer;flex:none}
+.ibtn:hover{background:var(--accent-soft)}
+.ibtn:disabled{opacity:.35;cursor:default;background:transparent}
+.ibtn[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}
+.ibtn.warn:hover{color:var(--danger)}
+.zoomlbl{min-width:58px;height:32px;border:0;background:transparent;font:500 12px/1 var(--f-mono);color:var(--ink);cursor:pointer;border-radius:6px;font-variant-numeric:tabular-nums}
+.zoomlbl:hover{background:var(--accent-soft)}
+.find{display:flex;align-items:center;gap:2px;height:32px;padding:0 2px 0 8px;border:1px solid var(--line);border-radius:6px;background:var(--raise);min-width:0}
+.find input{border:0;background:transparent;outline:none;width:150px;min-width:40px;font-size:13px}
+.find .cnt{font:11px var(--f-mono);color:var(--muted);min-width:44px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.find .ibtn{width:26px;height:26px}
+
+/* Werkzeugleiste */
+.toolbar{display:flex;align-items:center;gap:2px;padding:4px 16px;background:var(--chrome);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:thin}
+.vsep{width:1px;height:22px;background:var(--line);margin:0 8px;flex:none}
+.tlabel{font:500 10.5px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 6px 0 2px;white-space:nowrap}
+
+/* Eigenschaftsleiste */
+.propbar{display:flex;align-items:center;gap:14px;min-height:42px;padding:5px 16px;background:var(--raise);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:thin;font-size:12.5px;color:var(--muted)}
+.ptarget{font:600 11px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);white-space:nowrap}
+.prop{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.sw{width:20px;height:20px;border-radius:50%;border:1px solid rgb(0 0 0 / .18);cursor:pointer;padding:0;flex:none}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--raise),0 0 0 4px var(--accent)}
+input[type=color]{width:26px;height:24px;padding:0;border:1px solid var(--line);border-radius:5px;background:var(--raise);cursor:pointer}
+input[type=range]{accent-color:var(--accent);width:96px}
+output{font:11.5px var(--f-mono);color:var(--ink);min-width:3.6em;font-variant-numeric:tabular-nums}
+.field{height:28px;border:1px solid var(--line);border-radius:5px;background:var(--raise);color:var(--ink);padding:0 8px;font-size:13px}
+.field.num{width:62px;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.boldbtn{font-weight:700;font-family:Georgia,serif;font-size:15px}
+.hint{color:var(--muted);white-space:nowrap}
+
+/* Arbeitsfläche */
+.work{display:grid;grid-template-columns:196px minmax(0,1fr);min-height:0}
+.work.nothumbs{grid-template-columns:minmax(0,1fr)}
+.work.nothumbs .side{display:none}
+.side{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--chrome);border-right:1px solid var(--line)}
+.stabs{display:flex;gap:2px;padding:6px 8px;border-bottom:1px solid var(--line);flex:none}
+.stabs button{flex:1;display:grid;place-items:center;height:30px;border:0;background:transparent;border-radius:6px;color:var(--muted);cursor:pointer;position:relative}
+.stabs button[aria-selected="true"]{background:var(--accent-soft);color:var(--accent)}
+.stabs .badge{position:absolute;top:1px;right:4px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font:600 9.5px/15px var(--f-mono)}
+.thumbs{flex:1;min-height:0;overflow-y:auto;padding:14px 10px 40px;display:flex;flex-direction:column;align-items:center;gap:6px;scrollbar-width:thin}
+.spanel{flex:1;min-height:0;overflow-y:auto;padding:10px 8px 40px;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin}
+.sphead{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 4px 8px;font:500 10.5px/1.2 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sphead .btn{height:26px;padding:0 8px;font-size:11.5px;text-transform:none;letter-spacing:0;font-family:var(--f-ui)}
+.sitem{display:flex;align-items:flex-start;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:12.5px;line-height:1.35;color:var(--ink);border:0;background:transparent;text-align:left;width:100%}
+.sitem:hover,.sitem:focus-visible{background:color-mix(in srgb,var(--accent-soft) 70%,transparent);outline:none}
+.sitem .pg{margin-left:auto;font:11px var(--f-mono);color:var(--muted);flex:none;padding-top:1px;font-variant-numeric:tabular-nums}
+.sitem .dot{width:10px;height:10px;border-radius:3px;flex:none;margin-top:3px;box-shadow:inset 0 0 0 1px rgb(0 0 0 / .15)}
+.sitem .tx{min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.sitem .tx small{display:block;color:var(--muted);font-size:11px}
+.sitem .x{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0 2px;font-size:15px;line-height:1;flex:none;opacity:.0}
+.sitem:hover .x,.sitem:focus-within .x{opacity:1}
+.sitem input{width:100%;font-size:12.5px;padding:2px 4px;border:1px solid var(--accent);border-radius:4px;background:var(--raise)}
+.sempty{padding:14px 8px;color:var(--muted);font-size:12.5px;line-height:1.45}
+.thumb{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;border-radius:8px;cursor:pointer;width:100%}
+.thumb:hover{background:color-mix(in srgb,var(--accent-soft) 60%,transparent)}
+.thumb.sel{background:var(--accent-soft)}
+.tbox{position:relative;background:#fff;box-shadow:0 0 0 1px var(--line),0 2px 6px rgb(0 0 0 / .08)}
+.tbox canvas,.tbox svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.thumb.cur .tbox{box-shadow:0 0 0 2px var(--accent),0 2px 6px rgb(0 0 0 / .08)}
+.tn{font:11px/1 var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.thumb.cur .tn{color:var(--accent);font-weight:500}
+.thumb.db::before,.thumb.da::after{content:"";position:absolute;left:10%;right:10%;height:3px;border-radius:2px;background:var(--accent)}
+.thumb.db::before{top:-2px}.thumb.da::after{bottom:-2px}
+
+.viewer{position:relative;overflow:auto;min-width:0;min-height:0;touch-action:pan-x pan-y;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.pages{display:flex;flex-direction:column;align-items:center;gap:36px;padding:24px 16px 64px;width:max-content;min-width:100%}
+.page{position:relative;flex:none;background:#fff;box-shadow:var(--paper-shadow);touch-action:pan-x pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.pages[data-draw] .page{touch-action:none}
+.pcv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.ov{position:absolute;inset:0;width:100%;height:100%;overflow:visible;display:block}
+.ov.un{pointer-events:none}
+.pnum{position:absolute;left:0;right:0;bottom:-24px;text-align:center;font:11px/1 var(--f-mono);color:var(--muted);pointer-events:none;font-variant-numeric:tabular-nums}
+.pages[data-tool="select"] .page{cursor:default}
+.pages[data-tool="text"] .page,.pages[data-tool="edittext"] .page{cursor:text}
+.pages[data-draw] .page{cursor:crosshair}
+.hbl{position:absolute;inset:0;pointer-events:none}
+.hbl>div{position:absolute}
+.pages[data-tool="select"] .hbl>div{pointer-events:auto;touch-action:none}
+.ov .selbox{fill:none;stroke:var(--accent);stroke-width:1.2;stroke-dasharray:4 3;vector-effect:non-scaling-stroke}
+.ov .handle{fill:#fff;stroke:var(--accent);stroke-width:1.5;vector-effect:non-scaling-stroke;cursor:nwse-resize}
+.ov .hit{fill:#ff9f1c;fill-opacity:.28}
+.ov .hit.on{fill-opacity:.55;stroke:#d97a00;stroke-width:1;vector-effect:non-scaling-stroke}
+.ghost{position:absolute;z-index:2;transform-origin:0 0;pointer-events:none;opacity:.92;outline:1.5px solid var(--accent);box-shadow:0 8px 24px rgb(0 0 0 / .25)}
+.ov .guide{stroke:#e0368c;stroke-width:1;stroke-dasharray:4 3;vector-effect:non-scaling-stroke}
+.ov .cunion{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:5 3;vector-effect:non-scaling-stroke}
+.ov .csel{fill:var(--accent);fill-opacity:.12;stroke:var(--accent);stroke-width:1.5;vector-effect:non-scaling-stroke}
+.ov .chov{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:3 2;vector-effect:non-scaling-stroke}
+.ov .marq{fill:var(--accent);fill-opacity:.08;stroke:var(--accent);stroke-width:1;stroke-dasharray:5 3;vector-effect:non-scaling-stroke}
+.pages[data-tool="objects"] .page{cursor:default}
+.ov .hov{fill:none;stroke:var(--accent);stroke-width:1;vector-effect:non-scaling-stroke;opacity:.8}
+.forml{position:absolute;inset:0;pointer-events:none}
+.forml .ff{position:absolute;pointer-events:none;border:0;margin:0;padding:0 .25em;background:rgb(31 79 216 / .07);box-shadow:inset 0 0 0 1px var(--fbc,transparent);color:#111;font:calc(var(--z,1) * var(--fs,10px)) Helvetica,Arial,sans-serif;outline:none;border-radius:2px;resize:none;line-height:1.15}
+.forml textarea.ff{padding-top:.15em}
+.forml .ff:focus{background:rgb(255 255 255 / .95);box-shadow:0 0 0 1.5px var(--accent)}
+.forml button.ff{display:grid;place-items:center;padding:0;cursor:pointer;font-weight:700;font-size:calc(var(--z,1) * var(--fs,10px) * 1.1)}
+.forml select.ff{-webkit-appearance:none;appearance:none}
+.pages[data-tool="select"] .forml .ff{pointer-events:auto}
+.night .page{filter:invert(.9) hue-rotate(180deg)}
+.ted.ced{background:rgb(255 255 255 / .96);color:#1b2130;box-shadow:0 2px 10px rgb(0 0 0 / .18);border-radius:2px}
+.ted{position:absolute;z-index:3;margin:0;padding:0;border:0;outline:1.5px dashed var(--accent);outline-offset:3px;background:transparent;resize:none;overflow:hidden;white-space:pre;caret-color:var(--accent)}
+
+/* Statuszeile */
+.status{display:flex;align-items:center;gap:18px;padding:6px 16px;background:var(--chrome);border-top:1px solid var(--line);font:11.5px/1.3 var(--f-mono);color:var(--muted);white-space:nowrap;overflow:hidden;font-variant-numeric:tabular-nums}
+.status b{font-weight:500;color:var(--ink)}
+.status .msg{margin-left:auto;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.spin{width:11px;height:11px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;display:inline-block;vertical-align:-1px;margin-right:6px;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+#drop{position:fixed;inset:12px;border:2px dashed var(--accent);border-radius:14px;background:color-mix(in srgb,var(--accent) 10%,transparent);display:grid;place-items:center;pointer-events:none;z-index:50;font:600 22px var(--f-display);color:var(--accent)}
+#toast{position:fixed;left:50%;bottom:52px;transform:translate(-50%,8px);background:var(--ink);color:var(--chrome);padding:9px 14px;border-radius:7px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:70;max-width:calc(100% - 32px)}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* Dialoge */
+.modal{position:fixed;inset:0;background:rgb(8 10 16 / .5);display:grid;place-items:center;padding:16px;z-index:60}
+.card{background:var(--raise);color:var(--ink);border-radius:12px;width:min(620px,100%);padding:20px;box-shadow:0 20px 60px rgb(0 0 0 / .3);display:flex;flex-direction:column;gap:14px}
+.card.small{width:min(400px,100%)}
+.card h2{margin:0;font:600 18px/1.2 var(--f-display)}
+.card p{margin:0;color:var(--muted)}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.row.end{justify-content:flex-end}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;padding:2px;gap:2px}
+.seg button{border:0;background:transparent;padding:5px 12px;border-radius:5px;cursor:pointer;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);font-weight:500}
+.sigpad{position:relative;background:#fff;border:1px solid var(--line);border-radius:8px;aspect-ratio:3/1;max-width:100%}
+.sigpad canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.sigline{position:absolute;left:7%;right:7%;top:72%;border-top:1px solid #c5cad3;pointer-events:none}
+.sigline span{position:absolute;left:-2px;top:-24px;font:16px/1 var(--f-ui);color:#9aa1ad}
+.chk{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer}
+.chk input{accent-color:var(--accent)}
+
+/* Menü und Formulare */
+.pgtools{display:flex;align-items:center;gap:2px}
+.menuwrap{position:relative}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:40;min-width:250px;max-height:min(70vh,560px);overflow-y:auto;background:var(--raise);border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 40px rgb(0 0 0 / .18);padding:6px;display:flex;flex-direction:column}
+.menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:9px 12px;border-radius:6px;font-size:13.5px;cursor:pointer;color:var(--ink)}
+.menu button:hover,.menu button:focus-visible{background:var(--accent-soft);outline:none}
+.menu button.danger{color:var(--danger)}
+.menu hr{border:0;border-top:1px solid var(--line);margin:5px 4px}
+.menu .m-only{display:none}
+.form{display:flex;flex-direction:column;gap:12px}
+.fld{display:flex;flex-direction:column;gap:5px;min-width:0}
+.frow>.fld{flex:1 1 130px}
+.fld>span{font:500 11px/1.2 var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.fld .field{width:100%;height:34px}
+.fld input[type=range]{width:100%;height:34px}
+.fld input[type=color]{width:100%;height:34px}
+.frow{display:flex;flex-wrap:wrap;gap:12px}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.field.area{height:auto;min-height:110px;padding:8px 10px;resize:vertical;line-height:1.45;width:100%}
+
+/* Kommentare, Mehrfachauswahl, Einstellungen */
+.ov .cmk path{fill:var(--accent);stroke:#fff;stroke-width:.8}
+.ov .msel{fill:none;stroke:var(--accent);stroke-width:1;stroke-dasharray:2 2;vector-effect:non-scaling-stroke}
+.hidemarks .ov .ann,.hidemarks .hbl{display:none}
+.stab{align-self:flex-start;flex-wrap:wrap}
+.spage{display:flex;flex-direction:column;gap:12px}
+.chk.big{align-items:flex-start;gap:9px;font-size:13.5px;color:var(--ink);line-height:1.35}
+.chk.big input{margin-top:3px;flex:none}
+.chk.big small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.nfbar{display:flex;align-items:center;gap:4px;padding:0 2px 8px}
+.nfbar .field{flex:1;min-width:0;height:30px;font-size:12.5px}
+.nfbar .ibtn{width:30px;height:30px}
+.sitem q{display:block;font-style:italic;color:var(--ink);quotes:"„" "“"}
+.sitem .cb{display:block;color:var(--ink);margin-top:2px;white-space:pre-wrap}
+.sitem .tx small{font:500 10.5px/1.3 var(--f-mono);letter-spacing:.04em;text-transform:uppercase}
+.spanel .sitem .tx{-webkit-line-clamp:5}
+
+/* Rechner */
+.calc{position:fixed;z-index:44;right:16px;bottom:44px;width:min(380px,calc(100vw - 32px));max-height:calc(100vh - 120px);display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px;background:var(--raise);border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 50px rgb(0 0 0 / .22);overflow:auto}
+.calc>*{flex-shrink:0}
+.calc-h{display:flex;align-items:center;gap:8px;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}
+.calc-h b{font:600 15px/1 var(--f-display)}
+.calc-hist{flex:0 0 auto;min-height:0;max-height:150px;overflow:auto;display:flex;flex-direction:column;gap:2px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.calc-hist .ch{display:flex;flex-direction:column;align-items:flex-end;border:0;background:transparent;padding:4px 6px;border-radius:6px;cursor:pointer;text-align:right;font:13px/1.35 var(--f-mono);color:var(--ink)}
+.calc-hist .ch:hover{background:var(--accent-soft)}
+.calc-hist .cs{color:var(--muted);word-break:break-all}
+.calc-hist .cr{font-weight:500;word-break:break-all}
+.calc-hist .err,.calc-out .err{color:var(--danger)}
+.calc-hist .chint{margin:0;font-size:12px;color:var(--muted);line-height:1.6}
+.calc-hist code{font:12px var(--f-mono);background:var(--chrome);padding:1px 4px;border-radius:4px}
+.calc-in textarea{width:100%;min-height:54px;resize:vertical;border:1px solid var(--line);border-radius:8px;background:var(--raise);color:var(--ink);padding:8px 10px;font:500 18px/1.35 var(--f-mono)}
+.calc-in textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.calc-out{min-height:22px;padding:4px 2px 0;text-align:right;font:600 16px/1.35 var(--f-mono);color:var(--accent);word-break:break-all}
+.calc-pad canvas{display:block;width:100%;height:140px;border:1px dashed var(--line);border-radius:8px;background:var(--chrome);touch-action:none;cursor:crosshair}
+.calc-pad small{color:var(--muted);font-size:11.5px}
+.calc-graph canvas{display:block;width:100%;height:220px;border:1px solid var(--line);border-radius:8px;touch-action:none;cursor:crosshair}
+.calc-gi{font-size:12px;line-height:1.5;color:var(--ink);padding:4px 2px}
+.calc-gi .gdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:0}
+.calc-gi .gmuted{color:var(--muted)}
+.calc-keys{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.calc-keys button{height:36px;border:1px solid var(--line);border-radius:7px;background:var(--chrome);color:var(--ink);font:500 14px var(--f-mono);cursor:pointer}
+.calc-keys button:hover{border-color:var(--accent)}
+.calc-keys button.ok{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.calc .row .btn{height:30px;font-size:12px}
+
+/* Lesemodus */
+.readbar{position:fixed;z-index:45;top:calc(10px + env(safe-area-inset-top, 0px));right:12px;display:flex;align-items:center;gap:4px;padding:4px;border-radius:10px;background:color-mix(in srgb,var(--raise) 88%,transparent);box-shadow:0 6px 24px rgb(0 0 0 / .18);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.readbar .rp{font:500 12px var(--f-mono);color:var(--muted);padding:0 8px;font-variant-numeric:tabular-nums}
+body.reading #app{grid-template-rows:minmax(0,1fr)}
+body.reading .top,body.reading .toolbar,body.reading .propbar,body.reading .status,body.reading .side{display:none!important}
+body.reading .work{grid-template-columns:minmax(0,1fr)!important}
+body.reading .forml .ff{pointer-events:auto}
+.seg.small button{padding:4px 9px;font-size:12px}
+.pchip{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border:0;border-radius:14px;background:var(--accent-soft);color:var(--accent);font:500 12px/1 var(--f-ui);white-space:nowrap;cursor:pointer;flex:none}
+.pchip[aria-pressed="false"]{background:transparent;box-shadow:inset 0 0 0 1px var(--line);color:var(--muted)}
+.pchip svg.ico{width:15px;height:15px}
+.pages[data-draw][data-pencil] .page{touch-action:pan-x pan-y}
+
+/* Touch-Geräte: größere Bedienflächen */
+@media (any-pointer:coarse){
+  .ibtn{width:42px;height:42px}
+  .btn{height:40px}
+  .sw{width:28px;height:28px}
+  .find{height:40px}
+  .find .ibtn{width:34px;height:34px}
+  .field{height:36px;font-size:16px}
+  input[type=range]{width:120px}
+  .menu button{padding:12px 14px;font-size:15px}
+  .calc-keys button{height:44px;font-size:16px}
+  .calc .row .btn{height:36px}
+  .stabs button{height:38px}
+  .sitem{padding:10px 8px;font-size:14px}
+  .sitem .x{opacity:1;font-size:18px;padding:0 4px}
+}
+
+/* iPad und Tablets (Touch, mittlere Breite): Seitenfunktionen ins Menü, kompaktere Kopfzeile */
+@media (min-width:761px) and (max-width:1400px) and (any-pointer:coarse){
+  .pgtools,.word,#btnMerge,.docname{display:none}
+  .menu .m-only{display:block}
+  .find input{width:140px}
+  .toolbar{padding:4px 10px}
+  .vsep{margin:0 4px}
+}
+@media (min-width:761px) and (max-width:920px) and (any-pointer:coarse){
+  .zoomgrp{display:none}
+  .find input{width:120px}
+}
+
+/* Handy */
+@media (max-width:760px){
+  #app{grid-template-rows:auto auto minmax(0,1fr) auto}
+  .top{order:1;padding:6px 12px;gap:6px;flex-wrap:wrap}
+  .top>.find{flex:1 1 100%;order:10}
+  .top{overflow:hidden}
+  .propbar{order:2;padding:4px 12px;min-height:44px;gap:10px}
+  .work{order:3;grid-template-columns:minmax(0,1fr);position:relative}
+  .toolbar{order:4;border-bottom:0;border-top:1px solid var(--line);padding:4px 8px calc(4px + env(safe-area-inset-bottom, 0px))}
+  .status{display:none}
+  .work .side{display:none}
+  .work.thumbs-open .side{display:flex;position:absolute;left:0;top:0;bottom:0;width:min(260px,80vw);z-index:20;box-shadow:8px 0 30px rgb(0 0 0 / .2)}
+  #btnRead{display:none}
+  .calc{left:0;right:0;bottom:0;width:auto;max-height:78vh;border-radius:14px 14px 0 0;padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px))}
+  .calc-h{cursor:default}
+  .btn .lbl{display:none}
+  .btn{padding:0 10px}
+  .docname,.tlabel,.word,.zoomgrp,.pgtools,#btnMerge{display:none}
+  .find input{width:100%}
+  .menu .m-only{display:block}
+  .menu{position:fixed;left:12px;right:12px;top:auto;bottom:calc(64px + env(safe-area-inset-bottom, 0px));min-width:0;max-height:70vh}
+  .pages{gap:24px;padding:16px 12px 40px}
+  .hint{white-space:normal;min-width:180px;font-size:12px}
+  .modal{align-items:end;padding:0}
+  .modal .card{border-radius:14px 14px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom, 0px));max-height:90vh;overflow-y:auto}
+  #toast{bottom:calc(72px + env(safe-area-inset-bottom, 0px))}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<div id="app">
+  <header class="top">
+    <button class="ibtn libbtn" id="btnLib" title="Zur Bibliothek" aria-label="Zur Bibliothek" hidden><i data-i="library"></i></button>
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 26 26" aria-hidden="true"><path d="M5 2.5h11l5 5v16H5z" fill="var(--accent)"/><path d="M16 2.5v5h5" fill="none" stroke="var(--chrome)" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 18.5l1.2-3.4 6-6 2.2 2.2-6 6z" fill="var(--chrome)"/></svg>
+      <span class="word">PDF Werkbank</span>
+      <span class="docname" id="docName" title=""></span>
+      <span class="libstate" id="libState" hidden></span>
+    </div>
+    <div class="grp">
+      <button class="btn" id="btnOpen" title="PDF öffnen (Strg+O)"><i data-i="open"></i><span class="lbl">Öffnen</span></button>
+      <button class="btn" id="btnMerge" title="Weitere PDFs hinten anhängen"><i data-i="add"></i><span class="lbl">Anhängen</span></button>
+      <button class="btn primary" id="btnSave" title="Als PDF speichern (Strg+S)"><i data-i="save"></i><span class="lbl">Speichern</span></button>
+    </div>
+    <div class="grp">
+      <button class="ibtn" id="btnUndo" title="Rückgängig (Strg+Z)" aria-label="Rückgängig"><i data-i="undo"></i></button>
+      <button class="ibtn" id="btnRedo" title="Wiederholen (Strg+Y)" aria-label="Wiederholen"><i data-i="redo"></i></button>
+    </div>
+    <div class="grow"></div>
+    <div class="grp zoomgrp">
+      <button class="ibtn" id="btnZoomOut" title="Verkleinern (Strg+−)" aria-label="Verkleinern"><i data-i="zout"></i></button>
+      <button class="zoomlbl" id="zoomLbl" title="Auf 100 % setzen">100 %</button>
+      <button class="ibtn" id="btnZoomIn" title="Vergrößern (Strg++)" aria-label="Vergrößern"><i data-i="zin"></i></button>
+      <button class="ibtn" id="btnFit" title="Seitenbreite (Strg+0)" aria-label="An Breite anpassen"><i data-i="fit"></i></button>
+    </div>
+    <button class="ibtn" id="btnRead" title="Lesemodus (F)" aria-label="Lesemodus"><i data-i="book"></i></button>
+    <div class="find" role="search">
+      <i data-i="search" style="color:var(--muted)"></i>
+      <input id="findInput" type="search" placeholder="Suchen" aria-label="Im Dokument suchen" autocomplete="off">
+      <span class="cnt" id="findCount"></span>
+      <button class="ibtn" id="findPrev" title="Vorheriger Treffer" aria-label="Vorheriger Treffer"><i data-i="up"></i></button>
+      <button class="ibtn" id="findNext" title="Nächster Treffer" aria-label="Nächster Treffer"><i data-i="down"></i></button>
+    </div>
+    <div class="menuwrap">
+      <button class="ibtn" id="btnMore" title="Weitere Funktionen" aria-label="Weitere Funktionen" aria-haspopup="menu" aria-expanded="false"><i data-i="more"></i></button>
+      <div class="menu" id="menu" role="menu" hidden>
+        <button role="menuitem" data-act="new">Neues Dokument …</button>
+        <button role="menuitem" data-act="open" class="m-only">PDF öffnen …</button>
+        <button role="menuitem" data-act="merge">Weitere PDF anhängen …</button>
+        <button role="menuitem" data-act="share" hidden>Teilen …</button>
+        <button role="menuitem" data-act="fit" class="m-only">Auf Seitenbreite zoomen</button>
+        <hr>
+        <button role="menuitem" data-act="read">Lesemodus</button>
+        <button role="menuitem" data-act="night" id="mNight">Nachtmodus für Seiten</button>
+        <button role="menuitem" data-act="pencil" id="mPencil">Nur Apple Pencil zeichnet</button>
+        <hr>
+        <button role="menuitem" data-act="wm">Wasserzeichen …</button>
+        <button role="menuitem" data-act="pn">Seitenzahlen …</button>
+        <button role="menuitem" data-act="bm">Lesezeichen für diese Seite</button>
+        <hr>
+        <button role="menuitem" data-act="dup">Seite duplizieren</button>
+        <button role="menuitem" data-act="blank">Neue Seite / Notizpapier …</button>
+        <button role="menuitem" data-act="rotl" class="m-only">Seite links drehen</button>
+        <button role="menuitem" data-act="rotr" class="m-only">Seite rechts drehen</button>
+        <button role="menuitem" data-act="extract">Seite(n) als eigene PDF speichern</button>
+        <button role="menuitem" data-act="del" class="m-only danger">Seite löschen</button>
+        <hr>
+        <button role="menuitem" data-act="png">Seite als Bild speichern (PNG)</button>
+        <button role="menuitem" data-act="txt">Text exportieren (TXT)</button>
+        <hr>
+        <button role="menuitem" data-act="calc">Rechner und Graphen</button>
+        <button role="menuitem" data-act="tolib" id="mToLib" hidden>In die Bibliothek übernehmen</button>
+        <button role="menuitem" data-act="meta">Dokumenteinstellungen …</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="toolbar" aria-label="Werkzeuge">
+    <button class="ibtn" id="btnThumbs" title="Seitenleiste ein/aus" aria-label="Seitenleiste" aria-pressed="true"><i data-i="sidebar"></i></button>
+    <span class="vsep"></span>
+    <button class="ibtn" data-tool="select" title="Auswählen und verschieben (V)"><i data-i="select"></i></button>
+    <button class="ibtn" data-tool="objects" title="PDF-Inhalte auswählen und entfernen (M)"><i data-i="objects"></i></button>
+    <button class="ibtn" data-tool="edittext" title="Text in der PDF ändern (E)"><i data-i="edittext"></i></button>
+    <button class="ibtn" data-tool="text" title="Neuen Text hinzufügen (T)"><i data-i="text"></i></button>
+    <button class="ibtn" data-tool="white" title="Weiß abdecken (W)"><i data-i="white"></i></button>
+    <button class="ibtn" data-tool="redact" title="Schwärzen – entfernt den Inhalt darunter (B)"><i data-i="redact"></i></button>
+    <span class="vsep"></span>
+    <button class="ibtn" data-tool="pen" title="Stift (P)"><i data-i="pen"></i></button>
+    <button class="ibtn" data-tool="eraser" title="Radierer (G)"><i data-i="eraser"></i></button>
+    <button class="ibtn" data-tool="hl" title="Markieren (H)"><i data-i="hl"></i></button>
+    <button class="ibtn" data-tool="ul" title="Unterstreichen (N)"><i data-i="ul"></i></button>
+    <button class="ibtn" data-tool="so" title="Durchstreichen (D)"><i data-i="so"></i></button>
+    <button class="ibtn" data-tool="rect" title="Rechteck (R)"><i data-i="rect"></i></button>
+    <button class="ibtn" data-tool="ellipse" title="Ellipse (O)"><i data-i="ellipse"></i></button>
+    <button class="ibtn" data-tool="line" title="Linie (L)"><i data-i="line"></i></button>
+    <button class="ibtn" data-tool="arrow" title="Pfeil (A)"><i data-i="arrow"></i></button>
+    <button class="ibtn" data-tool="measure" title="Messen (Q)"><i data-i="measure"></i></button>
+    <span class="vsep"></span>
+    <button class="ibtn" data-tool="check" title="Haken setzen (K)"><i data-i="check"></i></button>
+    <button class="ibtn" data-tool="cross" title="Kreuz setzen (X)"><i data-i="cross"></i></button>
+    <button class="ibtn" id="btnImg" title="Bild einfügen (I)"><i data-i="image"></i></button>
+    <button class="ibtn" id="btnSig" title="Unterschreiben (U)"><i data-i="sign"></i></button>
+    <button class="ibtn" data-tool="stamp" title="Stempel (S)"><i data-i="stamp"></i></button>
+    <button class="ibtn" data-tool="note" title="Notiz anheften (C)"><i data-i="note"></i></button>
+    <span class="vsep"></span>
+    <button class="ibtn" id="btnCalc" title="Rechner mit Graphen (Z)" aria-label="Rechner" aria-pressed="false"><i data-i="calc"></i></button>
+    <span class="grow"></span>
+    <div class="pgtools">
+    <span class="tlabel">Seiten</span>
+    <button class="ibtn" id="pgRotL" title="Seite links drehen" aria-label="Seite links drehen"><i data-i="rotl"></i></button>
+    <button class="ibtn" id="pgRotR" title="Seite rechts drehen" aria-label="Seite rechts drehen"><i data-i="rotr"></i></button>
+    <button class="ibtn" id="pgBlank" title="Neue Seite oder Notizpapier dahinter einfügen" aria-label="Neue Seite einfügen"><i data-i="blank"></i></button>
+    <button class="ibtn" id="pgExtract" title="Seite(n) als eigene PDF speichern" aria-label="Seiten extrahieren"><i data-i="extract"></i></button>
+    <button class="ibtn warn" id="pgDelete" title="Seite(n) löschen" aria-label="Seite löschen"><i data-i="trash"></i></button>
+    </div>
+  </nav>
+
+  <div class="propbar" id="propbar" aria-label="Eigenschaften">
+    <span class="ptarget" id="pTarget">Auswählen</span>
+    <button class="pchip" id="pencilChip" hidden aria-pressed="true" title="Umschalten: nur der Pencil zeichnet oder auch Finger"><i data-i="pencil"></i><span id="pencilLbl">Nur Pencil</span></button>
+    <div class="seg small" data-for="penkind" id="penKind" role="group" aria-label="Stiftart">
+      <button data-k="fount" aria-pressed="true" title="Füller: Strichstärke folgt dem Druck">Füller</button>
+      <button data-k="ball" aria-pressed="false" title="Kugelschreiber: gleichmäßige Linie">Kuli</button>
+      <button data-k="marker" aria-pressed="false" title="Textmarker: breit und durchscheinend">Marker</button>
+    </div>
+    <div class="prop" data-for="color" id="swatches"></div>
+    <label class="prop" data-for="color" title="Eigene Farbe"><input type="color" id="colorPick" value="#1f4fd8" aria-label="Eigene Farbe"></label>
+    <label class="prop" data-for="stroke">Stärke <input type="range" id="strokeIn" min="0.5" max="12" step="0.5"><output id="strokeOut">2 pt</output></label>
+    <label class="prop" data-for="opacity">Deckkraft <input type="range" id="opIn" min="10" max="100" step="5"><output id="opOut">100 %</output></label>
+    <label class="prop" data-for="font">Schrift
+      <select class="field" id="fontSel"><option value="Helvetica">Helvetica</option><option value="Times">Times</option><option value="Courier">Courier</option></select>
+    </label>
+    <label class="prop" data-for="font"><input class="field num" type="number" id="sizeIn" min="4" max="144" step="0.5" aria-label="Schriftgröße"> pt</label>
+    <button class="ibtn boldbtn" data-for="font" id="boldBtn" title="Fett" aria-label="Fett" aria-pressed="false">B</button>
+    <label class="prop" data-for="font">Hintergrund
+      <select class="field" id="bgSel"><option value="">Ohne</option><option value="#ffffff">Weiß</option><option value="#fff3a8">Gelb</option><option value="#e3e9fb">Hellblau</option><option value="#fde2e0">Rosa</option></select>
+    </label>
+    <label class="prop" data-for="stamp">Stempel <select class="field" id="stampSel"></select></label>
+    <label class="chk" data-for="penkind" title="Strich am Ende kurz halten: wird zu Linie, Rechteck oder Ellipse"><input type="checkbox" id="shapeChk" checked> Formen erkennen</label>
+    <label class="prop" data-for="scale">Einheit
+      <select class="field" id="unitSel"><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option><option value="in">Zoll</option><option value="ft">Fuß</option><option value="pt">pt</option></select>
+    </label>
+    <label class="prop" data-for="scale">Maßstab
+      <select class="field" id="scaleSel"><option value="1">1 : 1</option><option value="2">1 : 2</option><option value="5">1 : 5</option><option value="10">1 : 10</option><option value="20">1 : 20</option><option value="50">1 : 50</option><option value="100">1 : 100</option><option value="1000">1 : 1000</option></select>
+    </label>
+    <label class="prop" data-for="esize">Größe <input type="range" id="eraseIn" min="4" max="40" step="1"><output id="eraseOut">12 pt</output></label>
+    <span class="hint" id="pHint"></span>
+    <span class="grow"></span>
+    <button class="ibtn" id="cEditBtn" title="Text bearbeiten (Enter)" aria-label="Text bearbeiten" hidden><i data-i="edittext"></i></button>
+    <button class="ibtn" id="cRotL" title="Auswahl links drehen" aria-label="Auswahl links drehen" hidden><i data-i="rotl"></i></button>
+    <button class="ibtn" id="cRotR" title="Auswahl rechts drehen" aria-label="Auswahl rechts drehen" hidden><i data-i="rotr"></i></button>
+    <button class="ibtn" id="zBack" title="In den Hintergrund" aria-label="In den Hintergrund" hidden><i data-i="back"></i></button>
+    <button class="ibtn" id="zFront" title="In den Vordergrund" aria-label="In den Vordergrund" hidden><i data-i="front"></i></button>
+    <button class="ibtn" id="zUnder" title="Hinter den PDF-Inhalt legen (an/aus)" aria-label="Hinter den PDF-Inhalt legen" aria-pressed="false" hidden><i data-i="under"></i></button>
+    <button class="ibtn" id="cMark" title="Auswahl hervorheben (Textmarker)" aria-label="Auswahl hervorheben" hidden><i data-i="mark"></i></button>
+    <button class="ibtn" id="cmtBtn" title="Kommentar zum Element" aria-label="Kommentar" aria-pressed="false" hidden><i data-i="comment"></i></button>
+    <button class="ibtn" id="copyBtn" title="Kopieren (Strg+C)" aria-label="Kopieren" hidden><i data-i="copy"></i></button>
+    <button class="ibtn" id="pasteBtn" title="Einfügen (Strg+V)" aria-label="Einfügen" hidden><i data-i="paste"></i></button>
+    <button class="ibtn" id="dupBtn" title="Duplizieren (Strg+D)" aria-label="Duplizieren"><i data-i="dup"></i></button>
+    <button class="ibtn warn" id="delBtn" title="Element löschen (Entf)" aria-label="Element löschen"><i data-i="trash"></i></button>
+  </div>
+
+  <main class="work" id="work">
+    <aside class="side" id="side" aria-label="Seitenleiste">
+      <div class="stabs" role="tablist">
+        <button role="tab" data-tab="pages" aria-selected="true" title="Seiten" aria-label="Seiten"><i data-i="pages"></i></button>
+        <button role="tab" data-tab="marks" aria-selected="false" title="Lesezeichen" aria-label="Lesezeichen"><i data-i="bookmark"></i></button>
+        <button role="tab" data-tab="notes" aria-selected="false" title="Kommentare" aria-label="Kommentare"><i data-i="note"></i><span class="badge" id="noteBadge" hidden></span></button>
+      </div>
+      <div class="thumbs" id="thumbs" role="tabpanel" aria-label="Seitenübersicht"></div>
+      <div class="spanel" id="marksPanel" role="tabpanel" aria-label="Lesezeichen" hidden></div>
+      <div class="spanel" id="notesPanel" role="tabpanel" aria-label="Kommentare" hidden></div>
+    </aside>
+    <section class="viewer" id="viewer"><div class="pages" id="pages"></div></section>
+  </main>
+
+  <footer class="status">
+    <span><b id="stPage">–</b></span>
+    <span id="stSize"></span>
+    <span class="opt" id="stCursor"></span>
+    <span class="opt" id="stZoom"></span>
+    <span class="msg" id="stMsg"></span>
+  </footer>
+</div>
+
+<input type="file" id="fileOpen" accept="application/pdf,.pdf" hidden>
+<input type="file" id="fileMerge" accept="application/pdf,.pdf" multiple hidden>
+<input type="file" id="fileImg" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+
+<section class="calc" id="calc" hidden aria-label="Rechner">
+  <header class="calc-h">
+    <b>Rechner</b>
+    <div class="seg small" role="group" aria-label="Winkelmaß"><button data-ang="rad" aria-pressed="true" title="Bogenmaß">RAD</button><button data-ang="deg" aria-pressed="false" title="Grad">DEG</button></div>
+    <span class="grow"></span>
+    <button class="ibtn" id="calcWrite" title="Mit Stift oder Finger schreiben" aria-label="Schreibfeld" aria-pressed="false"><i data-i="pen"></i></button>
+    <button class="ibtn" id="calcClose" title="Schließen (Esc)" aria-label="Rechner schließen"><i data-i="close"></i></button>
+  </header>
+  <div class="calc-hist" id="calcHist"></div>
+  <div class="calc-in">
+    <textarea id="calcIn" rows="2" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Formel eingeben oder mit dem Pencil hineinschreiben, z. B. f(x)=x²−2" aria-label="Formel"></textarea>
+    <div class="calc-out" id="calcOut" aria-live="polite"></div>
+  </div>
+  <div class="calc-pad" id="calcPad" hidden>
+    <canvas id="calcPadCanvas" aria-label="Schreibfeld für Formeln"></canvas>
+    <div class="row"><small id="calcPadGuess">Ziffern, + − × / ( ) = und Hochzahlen schreiben, Brüche mit Bruchstrich</small><span class="grow"></span><button class="btn" id="calcPadClear">Leeren</button></div>
+  </div>
+  <div class="calc-graph" id="calcGraphWrap" hidden>
+    <canvas id="calcGraph" aria-label="Graph"></canvas>
+    <div class="calc-gi" id="calcGInfo"></div>
+    <div class="row"><button class="btn" id="calcGReset">Ausschnitt zurücksetzen</button><span class="grow"></span><button class="btn" id="calcGInsert">Graph in PDF einfügen</button></div>
+  </div>
+  <div class="calc-keys" id="calcKeys">
+    <button data-k="sin()">sin</button><button data-k="cos()">cos</button><button data-k="tan()">tan</button><button data-k="ln()">ln</button><button data-k="log()">log</button><button data-k="√()">√</button>
+    <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button><button data-k="÷">÷</button><button data-k="(">(</button><button data-k=")">)</button>
+    <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button><button data-k="×">×</button><button data-k="^">xʸ</button><button data-k="π">π</button>
+    <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button data-k="−">−</button><button data-k="x">x</button><button data-k="=">=</button>
+    <button data-k="0">0</button><button data-k=",">,</button><button data-k="ans">ans</button><button data-k="+">+</button><button data-k="bs" title="Löschen">⌫</button><button data-k="ok" class="ok" title="Ausrechnen (Enter)">=↵</button>
+  </div>
+  <footer class="row"><button class="btn" id="calcClearHist">Verlauf leeren</button><span class="grow"></span><button class="btn primary" id="calcInsert">Ergebnis in PDF einfügen</button></footer>
+</section>
+
+<div class="readbar" id="readbar" hidden>
+  <span class="rp" id="readPage">1 / 1</span>
+  <button class="ibtn" id="readNight" title="Nachtmodus" aria-label="Nachtmodus" aria-pressed="false"><i data-i="moon"></i></button>
+  <button class="ibtn" id="readExit" title="Lesemodus beenden (Esc)" aria-label="Lesemodus beenden"><i data-i="close"></i></button>
+</div>
+
+<div id="drop" hidden>Datei hier ablegen</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div class="modal" id="askModal" hidden>
+  <div class="card small" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+    <h2 id="askTitle">Änderungen verwerfen?</h2>
+    <p id="askText"></p>
+    <div class="row end"><button class="btn" id="askNo">Abbrechen</button><button class="btn danger" id="askYes">Verwerfen</button></div>
+  </div>
+</div>
+
+<div class="modal" id="dlg" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <h2 id="dlgTitle"></h2>
+    <div class="form" id="dlgBody"></div>
+    <div class="row end"><button class="btn" id="dlgCancel">Abbrechen</button><button class="btn primary" id="dlgOk">Übernehmen</button></div>
+  </div>
+</div>
+
+<div class="modal" id="noteModal" hidden>
+  <div class="card small" role="dialog" aria-modal="true" aria-labelledby="noteTitle">
+    <h2 id="noteTitle">Notiz</h2>
+    <textarea class="field area" id="noteText" rows="5" placeholder="Kommentar schreiben …"></textarea>
+    <p class="note" id="noteInfo">Wird als Kommentar in der PDF gespeichert und in Acrobat, Vorschau und Browsern angezeigt.</p>
+    <div class="row end"><button class="btn" id="noteDelete" hidden>Löschen</button><span class="grow"></span><button class="btn" id="noteCancel">Abbrechen</button><button class="btn primary" id="noteOk">Fertig</button></div>
+  </div>
+</div>
+
+<div class="modal" id="sigModal" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="sigTitle">
+    <div class="card-head">
+      <h2 id="sigTitle">Unterschrift</h2>
+      <div class="seg"><button id="sigTabDraw" aria-pressed="true">Zeichnen</button><button id="sigTabType" aria-pressed="false">Tippen</button></div>
+    </div>
+    <div class="sigpad"><canvas id="sigCanvas"></canvas><div class="sigline"><span>×</span></div></div>
+    <input class="field" id="sigText" placeholder="Deinen Namen eingeben" hidden style="height:36px">
+    <div class="row">
+      <div class="prop" id="sigColors"></div>
+      <span class="grow"></span>
+      <label class="chk"><input type="checkbox" id="sigRemember" checked> Für nächstes Mal merken</label>
+    </div>
+    <div class="row end">
+      <button class="btn" id="sigSaved" hidden>Gespeicherte verwenden</button>
+      <span class="grow"></span>
+      <button class="btn" id="sigClear">Leeren</button>
+      <button class="btn" id="sigCancel">Abbrechen</button>
+      <button class="btn primary" id="sigOk">Einfügen</button>
+    </div>
+  </div>
+</div>
+
+<script src="lib/pdf.min.js"></script>
+<script src="lib/pdf.worker.min.js"></script>
+<script src="lib/pdf-lib.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/vendor/supabase.js"></script>
+<script src="js/store.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/content-engine.js"></script>
+<script src="js/calc.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
