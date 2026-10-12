@@ -34,9 +34,8 @@ jobs:
       - run: npm ci
       - run: npm run prepare-web
 
-      # beide Systeme laden in denselben Release-Entwurf „v<version>“; veröffentlicht wird danach
       - name: Installer bauen
-        run: npx electron-builder --publish always
+        run: npx electron-builder --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
@@ -48,21 +47,32 @@ jobs:
             dist/*.exe
             dist/*.dmg
             dist/*.zip
+            dist/*.blockmap
             dist/latest*.yml
           if-no-files-found: error
 
+  # Release „v<version aus package.json>“ mit allen Installern anlegen bzw. ergänzen
   release:
     needs: build
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          path: out
+          merge-multiple: true
       - name: Release veröffentlichen
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          R: ${{ github.repository }}
         run: |
           V="v$(node -p "require('./package.json').version")"
-          if gh release view "$V" --json isDraft -q .isDraft | grep -q true; then
-            gh release edit "$V" --draft=false --latest --notes "PDF Werkbank $V für Windows und macOS. Installation: siehe README."
+          ls -la out
+          # liegengebliebene Entwürfe aufräumen
+          gh api "repos/$R/releases" --jq '.[] | select(.draft) | .id' | xargs -r -I{} gh api -X DELETE "repos/$R/releases/{}"
+          if gh release view "$V" >/dev/null 2>&1; then
+            gh release upload "$V" out/* --clobber
           else
-            echo "$V ist schon veröffentlicht"
+            gh release create "$V" out/* --title "PDF Werkbank $V" --latest --notes "PDF Werkbank $V für Windows und macOS. Download: .exe für Windows, .dmg für Mac (arm64 = Apple-Chip, x64 = Intel). Erster Start: siehe README."
           fi
