@@ -21,7 +21,7 @@
   const S = Object.assign({ enabled: false, email: '', root: 'PDF Werkbank', rootId: '', lastRun: 0 }, JSON.parse(lsGet('pdfwb.gdrive') || '{}'));
   const save = () => lsSet('pdfwb.gdrive', JSON.stringify(S));
   let tok = JSON.parse(lsGet('pdfwb.gdrive.tok') || 'null'); // nur Webseite: { token, exp }
-  const st = { status: S.enabled ? 'idle' : 'off', error: '', running: false, again: false, timer: 0, done: 0, total: 0 };
+  const st = { status: S.enabled ? 'idle' : 'off', error: '', failed: [], running: false, again: false, timer: 0, done: 0, total: 0 };
   const listeners = new Set();
   const info = () => ({ ...st, enabled: S.enabled, email: S.email, root: S.root, rootId: S.rootId, lastRun: S.lastRun, configured: configured(), desktop: !!DESK });
   const emit = () => listeners.forEach(f => { try { f(info()); } catch (e) { console.error(e); } });
@@ -286,16 +286,34 @@
       st.total = todo.length; st.done = 0;
       if (todo.length || gone.length) set('running');
       for (const id of gone) await trashDoc(id);
+      st.failed = [];
       for (const item of todo) {
-        const bytes = await pdfOf(item);
-        const fresh = await global.WBStore.get(item.id);
-        if (!fresh || fresh.deleted) continue;
-        await backupDoc(item, bytes, items);
-        const k = backupInfo(item.id); if (k) { k.path = pathKey(item, byId); lsSet(fileKey(item.id), JSON.stringify(k)); }
+        // ein Dokument, das nicht geht, hält die anderen nicht auf
+        const failKey = 'pdfwb.gd.fail.' + item.id;
+        if (lsGet(failKey) === item.rev + '|' + item.name) { st.failed.push(item.name); st.done++; continue; }
+        try {
+          let bytes;
+          try { bytes = await pdfOf(item); }
+          catch (e) {
+            // PDF mit Markierungen ließ sich nicht erzeugen: wenigstens das Original sichern
+            const s0 = (item.srcIds || [])[0] && await global.WBStore.getBlob(`src:${item.id}:${item.srcIds[0]}`);
+            if (!s0) throw e;
+            bytes = s0.bytes; st.failed.push(item.name + ' (ohne Markierungen)');
+          }
+          const fresh = await global.WBStore.get(item.id);
+          if (!fresh || fresh.deleted) continue;
+          await backupDoc(item, bytes, items);
+          const k = backupInfo(item.id); if (k) { k.path = pathKey(item, byId); lsSet(fileKey(item.id), JSON.stringify(k)); }
+          lsSet(failKey, null);
+        } catch (e) {
+          if (e.needAuth) throw e;
+          console.warn('Drive-Backup', item.name, e);
+          st.failed.push(item.name); lsSet(failKey, item.rev + '|' + item.name);
+        }
         st.done++; emit();
       }
       S.lastRun = Date.now(); save();
-      set('ok');
+      set('ok', st.failed.length ? (st.failed.length === 1 ? '1 Dokument ging nicht: ' : st.failed.length + ' Dokumente gingen nicht: ') + st.failed.slice(0, 3).join(', ') + (st.failed.length > 3 ? ' …' : '') : '');
     } catch (e) {
       if (e.needAuth) set('auth'); else { console.warn('Drive-Backup', e); set('error', e.message || String(e)); }
     } finally {

@@ -123,6 +123,7 @@ const TP = {
 };
 
 const S = {
+  decrypted: new Set(),
   sources: new Map(), proxies: new Map(), images: new Map(), textCache: new Map(),
   pages: [], zoom: 1, tool: 'select', sel: null, cur: 0, selPages: new Set(),
   docName: 'Beispiel-Dokument.pdf', sample: true, dirty: false,
@@ -473,6 +474,11 @@ function updateTitle() {
 /* ---------- Quellen laden ---------- */
 async function addSource(bytes, name, fixedId) {
   const id = fixedId || uid('s');
+  // mit Besitzer-Passwort geschützte PDFs entschlüsseln, sonst lassen sie sich nicht bearbeiten und speichern
+  if (window.WBDecrypt && window.WBDecrypt.isEncrypted(bytes)) {
+    const r = await window.WBDecrypt.plain(bytes);
+    if (r.changed) { bytes = r.bytes; S.decrypted.add(id); setMsg(`„${name}“ war geschützt und wurde zum Bearbeiten entschlüsselt`); }
+  }
   const pdf = await PDFJS.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
   S.sources.set(id, { id, name, bytes, pdf });
   const out = [];
@@ -3906,6 +3912,11 @@ async function openLibDoc(id) {
     }
     S.dirty = false; updateTitle();
     document.title = rec.item.name + ' · PDF Werkbank';
+    const dec = rec.sources.filter(x => S.decrypted.has(x.id) && S.sources.get(x.id));
+    if (dec.length && !S.renderMode) {
+      for (const x of dec) await LIB.putBlob(`src:${id}:${x.id}`, { name: x.name, bytes: S.sources.get(x.id).bytes });
+      await LIB.update(id, { contentDirty: true, upSrc: [] });
+    }
     libState('saved'); libUI();
     busy(false); setMsg('Aus der Bibliothek geöffnet · Änderungen werden automatisch gesichert');
     // Vorschau nachziehen, falls noch keine da ist

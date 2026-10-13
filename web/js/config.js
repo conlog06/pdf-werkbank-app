@@ -11,6 +11,6 @@
 window.WB_CONFIG = {
   supabaseUrl: 'https://yhvvoqqcelkadvfdkblx.supabase.co',
   supabaseKey: 'sb_publishable_rK6cdlgv40IMEr5CUf1HTQ_P0LzRQRX',
-  googleClientId: '',
+  googleClientId: '611827808910-o8l642cfn76ca8e3ft1te2jlrvs42c4a.apps.googleusercontent.com',
   googleDesktopClientId: '611827808910-9cd7cs9ikkf50kv6sil11aesdhath6lp.apps.googleusercontent.com',
 };

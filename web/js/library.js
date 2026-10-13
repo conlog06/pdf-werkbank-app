@@ -351,6 +351,8 @@
     return out;
   }
   async function importBytes(bytes, name, folder) {
+    // geschützte PDFs gleich beim Import entschlüsseln (Bearbeiten, Speichern, Backup)
+    if (window.WBDecrypt) bytes = (await window.WBDecrypt.plain(bytes)).bytes;
     const { thumb, pages } = await makeThumb(bytes);
     return ST.importPdf(bytes, name, folder, { thumb, pages });
   }
@@ -579,7 +581,7 @@
       : I.status === 'auth' ? 'Anmeldung abgelaufen · tippen zum Fortsetzen'
       : I.status === 'error' ? I.error
       : I.status === 'offline' ? 'Offline, wird nachgeholt'
-      : (I.lastRun ? 'Alles gesichert · ' + fmtDate(I.lastRun) : 'Verbunden · ' + (I.email || ''));
+      : I.failed && I.failed.length ? `Gesichert · ${I.failed.length} mit Problem` : (I.lastRun ? 'Alles gesichert · ' + fmtDate(I.lastRun) : 'Verbunden · ' + (I.email || ''));
     $('#driveIco').innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3h7l6 10.5-3.5 6h-12L2.5 13.5zM8.5 3l6.5 10.5h6.5M15.5 3L9 13.5 6 19.5M2.5 13.5H15l3 6"/></svg>`;
   }
   async function driveDialog() {
@@ -599,6 +601,7 @@
     } else {
       html += `<div class="account"><span class="avatar">${esc((I.email || 'G')[0].toUpperCase())}</span><div style="flex:1;min-width:0"><b>${esc(I.email || 'Google-Konto')}</b><div class="note">${esc(st)}${I.lastRun ? ' · zuletzt ' + fmtDate(I.lastRun) : ''}</div></div></div>
         <p class="note">Ziel: <b>Meine Ablage › ${esc(I.root)}</b></p>
+        ${I.failed && I.failed.length ? `<p class="note" style="color:var(--warn)">Nicht (vollständig) gesichert: ${I.failed.map(esc).join(', ')}. Meist ist die PDF mit einem Passwort geschützt; dann liegt das Original ohne Markierungen in Drive.</p>` : ''}
         <div class="acts" style="justify-content:space-between;flex-wrap:wrap"><button class="btn" data-x="off">Trennen</button><span style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="${GD.folderUrl()}" target="_blank" rel="noopener">${ico('open')}In Drive öffnen</a>${I.status === 'auth' ? `<button class="btn primary" data-x="resume">Fortsetzen</button>` : `<button class="btn primary" data-x="now">${ico('refresh')}Jetzt sichern</button>`}</span></div>`;
     }
     await dialog(html, {
