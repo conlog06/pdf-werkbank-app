@@ -3360,10 +3360,24 @@ async function saveBytes(bytes, filename) {
       return false;
     }
   }
-  if (matchMedia('(display-mode: standalone)').matches && navigator.canShare) {
+  // Desktop-App: echter Speichern-Dialog des Systems
+  if (window.wbDesktop && window.wbDesktop.saveFile) {
+    try {
+      const r = await window.wbDesktop.saveFile(filename, new Uint8Array(await blob.arrayBuffer()));
+      if (r && r.path) { toast(`Gespeichert: ${r.path}`); return true; }
+      toast('Speichern abgebrochen'); return false;
+    } catch (e) { toast('Speichern fehlgeschlagen: ' + (e.message || e)); return false; }
+  }
+  // als App auf dem Home-Bildschirm (iPad, iPhone, Android): über das Teilen-Menü in „Dateien“ sichern
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (standalone && navigator.canShare) {
     try {
       const file = new File([blob], filename, { type: blob.type });
-      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: filename }); return true; }
+      if (navigator.canShare({ files: [file] })) {
+        // Teilen braucht eine frische Berührung; nach dem Erzeugen der PDF ist die oft abgelaufen
+        if (navigator.userActivation && !navigator.userActivation.isActive && !await ask('Datei ist bereit', `„${filename}“ über das Teilen-Menü in „Dateien“ sichern oder an eine App senden.`, 'Teilen', 'Abbrechen', false)) return false;
+        await navigator.share({ files: [file], title: filename }); return true;
+      }
     } catch (e) { if (e && e.name === 'AbortError') { toast('Speichern abgebrochen'); return false; } }
   }
   const url = URL.createObjectURL(blob), a = document.createElement('a');
@@ -3753,7 +3767,7 @@ function bindUI() {
       return;
     }
     if (!$('#menu').hidden && e.key === 'Escape') { closeMenu(); return; }
-    if (mod && k === 's') { e.preventDefault(); if (S.lib && !e.shiftKey) { libSave().then(() => setMsg('In der Bibliothek gesichert')); } else savePdf(); return; }
+    if (mod && k === 's') { e.preventDefault(); if (S.lib && !e.shiftKey) { libSave().then(() => { setMsg('In der Bibliothek gesichert'); toast('In der Bibliothek gesichert · Als PDF-Datei: „Exportieren“ oder Strg+Umschalt+S'); }); } else savePdf(); return; }
     if (mod && k === 'o') { e.preventDefault(); $('#fileOpen').click(); return; }
     if (mod && k === 'f') { e.preventDefault(); fi.focus(); fi.select(); return; }
     if (typing) return;

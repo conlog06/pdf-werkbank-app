@@ -171,7 +171,7 @@
     for (const id of [...V.sel]) if (!items.some(i => i.id === id)) V.sel.delete(id);
     if (!items.length) { c.innerHTML = emptyState(); bindEmpty(); renderSelbar(); return; }
     const sortSel = `<select id="sortSel" aria-label="Sortieren">${[['updated', 'Zuletzt geändert'], ['name', 'Name'], ['created', 'Erstellt']].map(([k, l]) => `<option value="${k}"${V.sort === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
-    let html = '';
+    let html = conflictNotice();
     if (V.view.kind === 'trash') html += `<div class="sec-h"><span>Elemente im Papierkorb</span><span class="grow"></span><button class="btn ghost" id="emptyTrash" style="height:30px;text-transform:none;letter-spacing:0">${ico('trash')}Papierkorb leeren</button></div>`;
     if (V.layout === 'list') {
       html += `<div class="list"><div class="lhead"><span></span><span>Name</span><span>Geändert</span><span>Ort</span><span>Größe</span><span></span></div>${fs.concat(ds).map(rowHTML).join('')}</div>`;
@@ -180,12 +180,26 @@
       if (ds.length) html += `<section class="sec"><div class="sec-h"><span>${V.view.kind === 'recent' ? 'Zuletzt geöffnet' : 'Dokumente'}</span><span class="grow"></span>${keepSort ? sortSel : ''}</div><div class="grid">${ds.map(docTile).join('')}</div></section>`;
     }
     c.innerHTML = html;
+    const cn = $('#cnTrash'); if (cn) cn.onclick = trashConflicts;
+    const ck = $('#cnKeep'); if (ck) ck.onclick = () => { lsSet('pdfwb.lib.cnKeep', String(conflicts().length)); renderContent(); };
     const ss = $('#sortSel'); if (ss) ss.onchange = () => { V.sort = ss.value; lsSet('pdfwb.lib.sort', V.sort); renderContent(); };
     const et = $('#emptyTrash'); if (et) et.onclick = emptyTrash;
     loadThumbs();
     renderSelbar();
   }
   const countIn = id => childrenOf(id).length;
+  /* Kopien „(Konflikt …)“, die ein Fehler im Abgleich (vor Version 1.1.1) massenhaft angelegt hat */
+  const conflicts = () => V.items.filter(i => i.kind === 'doc' && alive(i) && /\(Konflikt \d/.test(i.name));
+  function conflictNotice() {
+    const n = conflicts().length;
+    if (!n || V.view.kind === 'trash' || String(n) === lsGet('pdfwb.lib.cnKeep')) return '';
+    return `<div class="notice" role="status">${ico('copy')}<p><b>${n} Konflikt-Kopie${n === 1 ? '' : 'n'} gefunden.</b> Sie sind durch einen inzwischen behobenen Fehler beim Speichern entstanden. Das Original behält deine neuesten Änderungen.</p><button class="btn" id="cnKeep">Behalten</button><button class="btn primary" id="cnTrash">${ico('trash')}In den Papierkorb</button></div>`;
+  }
+  async function trashConflicts() {
+    const ids = conflicts().map(i => i.id);
+    await ST.trash(ids); await refresh();
+    toast(`${ids.length} Kopie${ids.length === 1 ? '' : 'n'} in den Papierkorb gelegt`, ids);
+  }
   function folderTile(f) {
     const n = countIn(f.id);
     return `<div class="tile${V.sel.has(f.id) ? ' sel' : ''}" role="button" tabindex="0" data-id="${f.id}" data-drop="${f.id}" draggable="true" aria-label="Ordner ${esc(f.name)}">
@@ -603,6 +617,28 @@
     });
   }
 
+  /* ---------- Als App installieren ---------- */
+  const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  let installEvt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; renderInstall(); });
+  window.addEventListener('appinstalled', () => { installEvt = null; renderInstall(); toast('PDF Werkbank ist installiert'); });
+  function renderInstall() {
+    const b = $('#installBtn'); if (!b) return;
+    b.hidden = DESK || standalone() || !(installEvt || isIOS());
+    $('#installIco').innerHTML = ico('download');
+    $('#installSub').textContent = isIOS() ? (/iPad|Macintosh/.test(navigator.userAgent) ? 'Auf den Home-Bildschirm des iPad' : 'Auf den Home-Bildschirm') : 'Eigenes Fenster, offline nutzbar';
+  }
+  async function installDialog() {
+    if (installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch (e) { /* egal */ } installEvt = null; renderInstall(); return; }
+    const share = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4M6 11H5v10h14V11h-1"/></svg>';
+    const safari = /CriOS|FxiOS|EdgiOS/.test(navigator.userAgent) ? '<p class="note" style="color:var(--warn)">Das klappt nur in <b>Safari</b>. Öffne diese Seite bitte in Safari.</p>' : '';
+    await dialog(`<h2>Als App auf dem ${/iPhone/.test(navigator.userAgent) ? 'iPhone' : 'iPad'}</h2><p class="lead">Danach startet die Werkbank wie eine App: im Vollbild, mit eigenem Symbol, auch offline. Bibliothek, Sync und Pencil funktionieren wie gewohnt.</p>${safari}
+      <ol class="steps"><li>Oben bzw. unten in Safari auf <span class="k">${share} Teilen</span> tippen.</li><li>Runterscrollen und <span class="k">＋ Zum Home-Bildschirm</span> wählen.</li><li>Oben rechts auf <span class="k">Hinzufügen</span> tippen.</li><li>Die Werkbank über das neue Symbol auf dem Home-Bildschirm öffnen.</li></ol>
+      <p class="note">Hinweis: Die App auf dem Home-Bildschirm hat einen eigenen Speicher. Melde dich dort einmal unter <b>Sync</b> an, dann ist deine Bibliothek sofort da.</p>
+      <div class="acts"><button class="btn primary" data-x="0">Verstanden</button></div>`, { onOpen: (d, close) => d.querySelector('[data-x]').onclick = () => close() });
+  }
+
   /* ---------- Kontextmenü ---------- */
   let menuEl = null;
   function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
@@ -696,6 +732,7 @@
     let qT = 0;
     $('#search').addEventListener('input', e => { clearTimeout(qT); qT = setTimeout(() => { V.q = e.target.value.trim(); render(); }, 120); });
     $('#syncBtn').onclick = syncDialog;
+    $('#installBtn').onclick = installDialog; renderInstall();
     if (GD) { $('#driveBtn').onclick = driveDialog; GD.onStatus(renderDrive); GD.watch(); } else $('#driveBtn').hidden = true;
 
     $('#nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (b) go({ kind: b.dataset.nav, id: null }); };
@@ -801,6 +838,8 @@
 
   async function boot() {
     bind();
+    // Browser soll die Bibliothek nicht bei Speicherknappheit löschen
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* egal */ }
     await refresh();
     if (SY) SY.init();
     // erster Start: Willkommensordner nicht nötig, leerer Zustand erklärt alles

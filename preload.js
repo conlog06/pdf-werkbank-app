@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('wbDesktop', {
   googleConnect: cfg => ipcRenderer.invoke('google-connect', cfg).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
   googleToken: cfg => ipcRenderer.invoke('google-token', cfg).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
   googleDisconnect: () => ipcRenderer.invoke('google-disconnect'),
+  // Datei über den Speichern-Dialog des Systems sichern
+  saveFile: (name, bytes) => ipcRenderer.invoke('save-file', { name, bytes }).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
   // Oberfläche bereit: wartende Dateien schicken
   ready: () => ipcRenderer.send('renderer-ready'),
 });

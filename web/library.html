@@ -9,7 +9,8 @@
 <meta name="apple-mobile-web-app-title" content="Werkbank">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Bibliothek · PDF Werkbank</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -235,11 +236,24 @@ svg.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;st
 .tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--line)}
 .tabs button{border:0;background:transparent;padding:8px 12px;cursor:pointer;color:var(--muted);font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px}
 .tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.notice{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;margin-bottom:20px;border:1px solid color-mix(in srgb,var(--warn) 45%,var(--line));background:color-mix(in srgb,var(--warn) 10%,var(--raise));border-radius:12px}
+.notice p{margin:0;flex:1;min-width:220px}
+.steps{margin:6px 0 4px;padding-left:22px;display:flex;flex-direction:column;gap:10px}
+.steps li{padding-left:4px}
+.steps .k{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;background:var(--desk);font-weight:600;white-space:nowrap}
 .toasts{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:90;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
 .toast{background:var(--ink);color:var(--desk);padding:10px 16px;border-radius:10px;box-shadow:var(--shadow-2);font-weight:500;animation:fade .15s;max-width:min(560px,calc(100vw - 32px))}
 .busy{position:fixed;inset:0;z-index:95;display:grid;place-items:center;background:rgb(10 13 20 / .25)}
 .busy div{background:var(--raise);padding:16px 22px;border-radius:12px;box-shadow:var(--shadow-2);font-weight:500}
 
+/* Tablet hochkant: Kopfzeile kompakter */
+@media (max-width: 1100px){
+  :root{--side:236px}
+  .top{padding:12px 16px;gap:8px}
+  .search{width:min(200px,22vw)}
+  .top .btn .lbl{display:none}
+  .top .btn{padding:0 10px}
+}
 /* Handy und Tablet hochkant */
 .menuBtn{display:none}
 @media (max-width: 820px){
@@ -278,6 +292,7 @@ body{padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area
       <div class="tree" id="tree" role="tree"></div>
     </div>
     <div class="side-foot">
+      <button class="sync" id="installBtn" hidden style="margin-bottom:8px"><span class="dot" style="background:var(--accent)"></span><span class="st"><b>Als App installieren</b><small id="installSub">Vollbild, Home-Bildschirm, offline</small></span><span id="installIco"></span></button>
       <button class="sync" id="driveBtn" data-s="off" style="margin-bottom:8px"><span class="dot"></span><span class="st"><b id="driveTitle">Google Drive</b><small id="driveSub">Automatisches Backup</small></span><span id="driveIco"></span></button>
       <button class="sync" id="syncBtn" data-s="off"><span class="dot"></span><span class="st"><b id="syncTitle">Sync aus</b><small id="syncSub">Geräte verbinden</small></span><span id="syncIco"></span></button>
     </div>

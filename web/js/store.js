@@ -67,11 +67,24 @@
     if (!opts.local) scheduleSync();
     return item;
   }
-  async function update(id, patch, opts) {
-    const it = await get(id); if (!it || it.deleted) return null;
-    Object.assign(it, patch);
-    return put(it, opts);
+  /* Lesen und Schreiben in einem Schritt (eine IndexedDB-Transaktion): Editor, Bibliothek und Abgleich
+     überschreiben sich so nicht gegenseitig. fn bekommt den aktuellen Eintrag und gibt den neuen zurück (oder null). */
+  function mutate(id, fn) {
+    return run('items', 'readwrite', (tx, done) => new Promise((res, rej) => {
+      const os = tx.objectStore('items'), r = os.get(id);
+      r.onsuccess = () => { const next = fn(r.result ? { ...r.result } : null); if (next) os.put(next); done(next || null); res(); };
+      r.onerror = () => rej(r.error);
+    }));
   }
+  /* lokale Änderung an einzelnen Feldern */
+  async function update(id, patch, opts = {}) {
+    const it = await mutate(id, cur => (cur && !cur.deleted ? { ...cur, ...patch, updatedAt: Date.now(), dirty: opts.local ? cur.dirty : true } : null));
+    if (!it) return null;
+    emit({ type: 'item', id });
+    if (!opts.local) scheduleSync();
+    return it;
+  }
+  async function mutateSynced(id, fn) { const it = await mutate(id, fn); if (it) emit({ type: 'item', id, remote: true }); return it; }
   async function createFolder({ name, parent = null, color = '#3b6cf6', icon = 'folder' }) {
     return put({ id: uuid(), kind: 'folder', name: name || 'Neuer Ordner', parent, color, icon, createdAt: Date.now(), trashed: false });
   }
@@ -90,7 +103,7 @@
     const banned = new Set();
     for (const id of ids) { const it = list.find(i => i.id === id); if (it && it.kind === 'folder') { banned.add(id); (await descendants(id, list)).forEach(d => banned.add(d.id)); } }
     if (folderId && banned.has(folderId)) throw new Error('Ein Ordner kann nicht in sich selbst verschoben werden.');
-    for (const id of ids) { const it = list.find(i => i.id === id); if (!it) continue; if (it.kind === 'folder') it.parent = folderId; else it.folder = folderId; it.trashed = false; await put(it); }
+    for (const id of ids) { const it = list.find(i => i.id === id); if (!it) continue; await update(id, it.kind === 'folder' ? { parent: folderId, trashed: false } : { folder: folderId, trashed: false }); }
   }
   const trash = async ids => { for (const id of ids) await update(id, { trashed: true, trashedAt: Date.now() }); };
   const restore = async ids => { for (const id of ids) await update(id, { trashed: false }); };
@@ -181,10 +194,10 @@
     for (const old of it.srcIds || []) if (!keep.has(old)) await delBlob(`src:${id}:${old}`);
     await putBlob('state:' + id, state);
     if (thumb) await putBlob('thumb:' + id, thumb);
-    Object.assign(it, { srcIds: sources.map(s => s.id), rev: newRev(), contentDirty: true, missing: false, size: size || it.size });
-    if (pages) it.pages = pages;
-    if (name) it.name = name;
-    return put(it);
+    const patch = { srcIds: sources.map(s => s.id), rev: newRev(), contentDirty: true, missing: false, size: size || it.size };
+    if (pages) patch.pages = pages;
+    if (name) patch.name = name;
+    return update(id, patch);
   }
   async function duplicate(id, suffix = ' (Kopie)') {
     const src = await get(id); if (!src) return null;
@@ -199,7 +212,7 @@
     copy.contentDirty = true;
     return put(copy);
   }
-  async function markOpened(id) { const it = await get(id); if (it && !it.deleted) { it.openedAt = Date.now(); await put(it); } }
+  const markOpened = id => update(id, { openedAt: Date.now() });
 
   /* Hilfen für den Abgleich (ohne „dirty“) */
   async function putSynced(item) { await rawPut(item); emit({ type: 'item', id: item.id, remote: true }); }
@@ -209,7 +222,7 @@
     all, get, put, update, createFolder, descendants, move, trash, restore, destroy, emptyTrash, purge,
     getBlob, putBlob, delBlob, dropBlobs, kvGet, kvSet,
     importPdf, loadDoc, saveDoc, duplicate, markOpened,
-    putSynced, rawPut, publicFields, uuid, newRev,
+    putSynced, rawPut, mutate, mutateSynced, publicFields, uuid, newRev,
     onChange: fn => { listeners.add(fn); return () => listeners.delete(fn); },
   };
 })(window);

@@ -1,7 +1,7 @@
 {
   "name": "pdf-werkbank-app",
   "productName": "PDF Werkbank",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "PDF Werkbank als Desktop-App für Windows und macOS: Bibliothek mit Ordnern, PDF-Editor und Abgleich mit der Webseite.",
   "main": "main.js",
   "author": "Constantin Loggen <scrabby8@gmail.com>",

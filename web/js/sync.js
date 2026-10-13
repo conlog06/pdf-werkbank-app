@@ -163,35 +163,39 @@
     }
     if (max) await S().kvSet('lastPull', max);
   }
+  const CONTENT = ['rev', 'srcIds', 'pages', 'size'];
+  const without = (o, keys) => { const r = { ...o }; keys.forEach(k => delete r[k]); return r; };
   async function apply(row) {
-    const local = await S().get(row.id);
-    if (row.deleted) { if (local) await S().purge(row.id); return; }
+    const local0 = await S().get(row.id);
+    if (row.deleted) { if (local0) await S().purge(row.id); return; }
     const remote = { ...(row.data || {}), id: row.id, kind: row.kind };
-    if (!local) {
-      await S().putSynced({ ...remote, dirty: false, contentDirty: false, baseRev: remote.rev, missing: row.kind === 'doc', upSrc: remote.srcIds || [] });
-      return;
+    const synced = extra => ({ dirty: false, contentDirty: false, baseRev: remote.rev, upSrc: remote.srcIds || [], ...extra });
+    if (!local0) { await S().putSynced({ ...remote, ...synced({ missing: row.kind === 'doc' }) }); return; }
+    if (local0.deleted) return; // lokales Löschen wird gleich hochgeladen
+    // echter Konflikt: hier ungespeicherter Inhalt, dort ein anderer neuer Inhalt
+    const isConflict = l => row.kind === 'doc' && l.dirty && l.contentDirty && remote.rev !== l.baseRev && remote.rev !== l.rev;
+    if (isConflict(local0) && !/\(Konflikt /.test(local0.name || '')) {
+      await S().duplicate(local0.id, ' (Konflikt ' + new Date().toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) + ')');
     }
-    if (local.deleted) return; // lokales Löschen wird gleich hochgeladen
-    if (!local.dirty && local.rev === remote.rev && local.updatedAt === remote.updatedAt) return; // eigenes Echo
-    const contentChanged = row.kind === 'doc' && remote.rev !== local.baseRev && remote.rev !== local.rev;
-    if (local.dirty) {
-      if (row.kind === 'doc' && local.contentDirty && contentChanged) {
-        // gleichzeitig auf zwei Geräten bearbeitet: eigene Fassung als Kopie behalten
-        await S().duplicate(local.id, ' (Konflikt ' + new Date().toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) + ')');
-        await S().dropBlobs(local.id);
-        await S().putSynced({ ...remote, dirty: false, contentDirty: false, baseRev: remote.rev, missing: true, upSrc: remote.srcIds || [] });
-        return;
+    await S().mutateSynced(row.id, local => {
+      if (!local || local.deleted) return null;
+      const contentChanged = row.kind === 'doc' && remote.rev !== local.baseRev && remote.rev !== local.rev;
+      if (isConflict(local)) return { ...remote, ...synced({ missing: true }) };
+      if (!local.dirty) {
+        if (local.rev === remote.rev && local.updatedAt === remote.updatedAt) return null; // eigenes Echo
+        return { ...local, ...remote, ...synced({ missing: !!local.missing || contentChanged }) };
       }
       if ((remote.updatedAt || 0) > (local.updatedAt || 0)) {
-        // fremde Metadaten sind neuer
-        await S().putSynced({ ...local, ...remote, dirty: false, contentDirty: false, baseRev: remote.rev, missing: local.missing || contentChanged, upSrc: remote.srcIds || [] });
-      } else if (contentChanged) {
-        // eigene Metadaten neuer, aber Inhalt kam von woanders: Inhalt holen, Metadaten behalten
-        await S().putSynced({ ...local, rev: remote.rev, baseRev: remote.rev, srcIds: remote.srcIds, pages: remote.pages, size: remote.size, missing: true, contentDirty: false, upSrc: remote.srcIds || [] });
+        // fremde Metadaten sind neuer; eigener, noch nicht hochgeladener Inhalt bleibt erhalten
+        if (local.contentDirty && !contentChanged) return { ...local, ...without(remote, CONTENT), baseRev: remote.rev, dirty: true };
+        return { ...local, ...remote, ...synced({ missing: !!local.missing || contentChanged }) };
       }
-      return;
-    }
-    await S().putSynced({ ...local, ...remote, dirty: false, contentDirty: false, baseRev: remote.rev, missing: local.missing || contentChanged, upSrc: remote.srcIds || [] });
+      if (contentChanged) {
+        // eigene Metadaten neuer, Inhalt kam von woanders: Inhalt holen, Metadaten behalten
+        return { ...local, rev: remote.rev, baseRev: remote.rev, srcIds: remote.srcIds, pages: remote.pages, size: remote.size, missing: true, contentDirty: false, upSrc: remote.srcIds || [] };
+      }
+      return null;
+    });
   }
 
   /* ---------- hochladen ---------- */
@@ -204,12 +208,16 @@
       if (it.kind === 'doc' && it.contentDirty && !it.missing) await pushContent(it);
       const snap = { ...it };
       check(await T().upsert({ id: it.id, kind: it.kind, data: S().publicFields(it), deleted: false }));
-      const now = await S().get(it.id);
-      if (!now) continue;
-      const untouched = now.updatedAt === snap.updatedAt;
-      if (untouched) now.dirty = false;
-      if (snap.kind === 'doc' && !snap.missing && snap.contentDirty && now.rev === snap.rev) { now.contentDirty = false; now.baseRev = snap.rev; now.upSrc = snap.srcIds; }
-      await S().rawPut(now);
+      // der Server hat jetzt genau diesen Stand – auch wenn hier inzwischen weiter bearbeitet wurde
+      await S().mutate(it.id, now => {
+        if (!now || now.deleted) return null;
+        if (now.updatedAt === snap.updatedAt) now.dirty = false;
+        if (snap.kind === 'doc') {
+          now.baseRev = snap.rev;
+          if (snap.contentDirty && !snap.missing) { now.upSrc = snap.srcIds; if (now.rev === snap.rev) now.contentDirty = false; }
+        }
+        return now;
+      });
     }
   }
   async function pushContent(it) {
@@ -265,8 +273,7 @@
     }
     if (state) await S().putBlob('state:' + id, state); else await S().delBlob('state:' + id);
     try { await S().putBlob('thumb:' + id, await dl(`${d}/thumb-${it.rev}.jpg`)); } catch (e) { /* keine Vorschau */ }
-    const now = await S().get(id);
-    if (now && now.rev === it.rev) { now.missing = false; now.upSrc = ids; await S().putSynced(now); }
+    await S().mutateSynced(id, now => (now && now.rev === it.rev ? { ...now, missing: false, upSrc: ids } : null));
   }
   async function downloadMissing() {
     const docs = (await S().all()).filter(i => i.kind === 'doc' && i.missing);

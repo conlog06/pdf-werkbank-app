@@ -123,6 +123,16 @@ ipcMain.handle('google-connect', wrap(googleConnect));
 ipcMain.handle('google-token', wrap(googleToken));
 ipcMain.handle('google-disconnect', wrap(googleDisconnect));
 
+/* Speichern-Dialog des Systems für exportierte PDFs, Bilder und Texte */
+const FILTERS = { pdf: [{ name: 'PDF-Dokument', extensions: ['pdf'] }], png: [{ name: 'PNG-Bild', extensions: ['png'] }], txt: [{ name: 'Text', extensions: ['txt'] }] };
+ipcMain.handle('save-file', wrap(async ({ name, bytes }) => {
+  const ext = (String(name).split('.').pop() || '').toLowerCase();
+  const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('downloads'), String(name).replace(/[\\/:*?"<>|]/g, '-')), filters: FILTERS[ext] || [] });
+  if (r.canceled || !r.filePath) return { path: null };
+  await fs.promises.writeFile(r.filePath, Buffer.from(bytes));
+  return { path: r.filePath };
+}));
+
 /* ---------- Fenster ---------- */
 const stateFile = () => path.join(app.getPath('userData'), 'fenster.json');
 function loadState() { try { return JSON.parse(fs.readFileSync(stateFile(), 'utf8')); } catch (e) { return { width: 1360, height: 880 }; } }
@@ -163,6 +173,7 @@ function createWindow() {
     if (input.type !== 'keyDown') return;
     if (input.key === 'F12' || ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'i')) { win.webContents.toggleDevTools(); e.preventDefault(); }
   });
+  win.webContents.session.on('will-download', (e, item) => { item.setSaveDialogOptions({ defaultPath: path.join(app.getPath('downloads'), item.getFilename()) }); });
   win.loadURL(HOME);
 }
 nativeTheme.on('updated', () => { if (win && !isMac) try { win.setTitleBarOverlay(overlay()); } catch (e) { /* egal */ } });
