@@ -193,7 +193,7 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu', label: 'PDF Werkbank', submenu: [
       { role: 'about', label: 'Über PDF Werkbank' }, { type: 'separator' },
-      { label: 'Nach Updates suchen …', click: checkUpdates }, { type: 'separator' },
+      { label: 'Nach Updates suchen …', click: () => checkUpdates(true) }, { type: 'separator' },
       { role: 'services', label: 'Dienste' }, { type: 'separator' },
       { role: 'hide', label: 'PDF Werkbank ausblenden' }, { role: 'hideOthers', label: 'Andere ausblenden' }, { role: 'unhide', label: 'Alle einblenden' },
       { type: 'separator' }, { role: 'quit', label: 'PDF Werkbank beenden' }] },
@@ -215,28 +215,106 @@ function buildMenu() {
   ]));
 }
 
-/* ---------- Updates (über GitHub-Releases) ---------- */
-let updater = null;
+/* ---------- Automatische Updates (GitHub-Releases) ----------
+   Windows: electron-updater lädt im Hintergrund, die Oberfläche bietet „Jetzt neu starten“ an.
+   macOS:   ohne Apple-Signatur geht Squirrel nicht – eigener Updater: ZIP laden, Prüfsumme prüfen,
+            entpacken, beim Neustart das App-Paket austauschen. */
+const { spawn, execFile } = require('child_process');
+const os = require('os');
+let updater = null, upd = { state: 'idle' };
+function sendUpdate(patch) {
+  upd = { ...upd, ...patch };
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send('update-status', upd);
+}
+ipcMain.handle('update-status', () => upd);
+ipcMain.handle('app-version', () => app.getVersion());
+ipcMain.handle('update-check', () => checkUpdates(true));
+ipcMain.handle('update-install', () => installUpdate());
 function getUpdater() {
   if (updater || !app.isPackaged) return updater;
-  try { updater = require('electron-updater').autoUpdater; updater.autoDownload = true; } catch (e) { updater = null; }
+  try {
+    updater = require('electron-updater').autoUpdater;
+    updater.autoDownload = !isMac;
+    updater.autoInstallOnAppQuit = true;
+    updater.on('update-available', i => sendUpdate({ state: 'downloading', version: i.version, percent: 0 }));
+    updater.on('download-progress', p => sendUpdate({ state: 'downloading', percent: Math.round(p.percent || 0) }));
+    updater.on('update-downloaded', i => sendUpdate({ state: 'ready', version: i.version }));
+    updater.on('error', e => { if (upd.state === 'downloading') sendUpdate({ state: 'error', error: String(e.message || e) }); });
+  } catch (e) { updater = null; }
   return updater;
+}
+const execP = (cmd, args) => new Promise((res, rej) => execFile(cmd, args, (e, so, se) => (e ? rej(new Error(se || e.message)) : res(so))));
+async function macDownload(info) {
+  const files = info.files || [];
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+  const f = files.find(x => x.url.endsWith('.zip') && x.url.includes(arch)) || files.find(x => x.url.endsWith('.zip'));
+  if (!f) throw new Error('Kein Update-Paket für diesen Mac gefunden.');
+  const bundle = path.resolve(app.getPath('exe'), '..', '..', '..');
+  fs.accessSync(path.dirname(bundle), fs.constants.W_OK); // Ordner muss beschreibbar sein (Programme-Ordner)
+  sendUpdate({ state: 'downloading', version: info.version, percent: 0 });
+  const url = `https://github.com/conlog06/pdf-werkbank-app/releases/download/v${info.version}/${encodeURIComponent(f.url)}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Download fehlgeschlagen (' + r.status + ')');
+  const total = +r.headers.get('content-length') || f.size || 0, chunks = [], hash = crypto.createHash('sha512');
+  let got = 0, last = 0;
+  for await (const c of r.body) {
+    chunks.push(c); hash.update(c); got += c.length;
+    const pct = total ? Math.round(got / total * 100) : 0;
+    if (pct !== last) { last = pct; sendUpdate({ percent: pct }); }
+  }
+  if (f.sha512 && hash.digest('base64') !== f.sha512) throw new Error('Prüfsumme des Updates stimmt nicht.');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdfwb-update-'));
+  const zip = path.join(dir, 'update.zip');
+  fs.writeFileSync(zip, Buffer.concat(chunks));
+  await execP('/usr/bin/ditto', ['-x', '-k', zip, dir]);
+  const appDir = fs.readdirSync(dir).find(n => n.endsWith('.app'));
+  if (!appDir) throw new Error('Update-Paket ist unvollständig.');
+  const fresh = path.join(dir, appDir);
+  try { await execP('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', fresh]); } catch (e) { /* egal */ }
+  upd.mac = { fresh, bundle, dir };
+  sendUpdate({ state: 'ready', version: info.version });
 }
 async function checkUpdates(manual) {
   const u = getUpdater();
-  if (!u) { if (manual === true || manual) dialog.showMessageBox({ message: 'Updates gibt es nur in der installierten App.' }); return; }
+  if (!u) { if (manual) dialog.showMessageBox({ message: 'Updates gibt es nur in der installierten App.' }); return upd; }
+  if (upd.state === 'downloading' || upd.state === 'ready') return upd;
   try {
+    const r = await u.checkForUpdates();
+    const info = r && r.updateInfo;
+    const newer = info && info.version !== app.getVersion() && require('semver').gt(info.version, app.getVersion());
+    if (!newer) { sendUpdate({ state: 'current' }); if (manual) dialog.showMessageBox({ message: `PDF Werkbank ${app.getVersion()} ist aktuell.` }); return upd; }
     if (isMac) {
-      // ohne Apple-Signatur kein automatisches Einspielen: auf neue Version hinweisen
-      const r = await u.checkForUpdates();
-      if (r && r.updateInfo && r.updateInfo.version !== app.getVersion()) {
-        const { response } = await dialog.showMessageBox({ type: 'info', buttons: ['Herunterladen', 'Später'], message: `PDF Werkbank ${r.updateInfo.version} ist verfügbar.`, detail: 'Die neue Version auf der Download-Seite laden und installieren.' });
-        if (response === 0) shell.openExternal('https://github.com/conlog06/pdf-werkbank-app/releases/latest');
-      } else if (manual) dialog.showMessageBox({ message: 'PDF Werkbank ist aktuell.' });
-    } else {
-      await u.checkForUpdatesAndNotify({ title: 'Update für PDF Werkbank', body: 'Wird beim nächsten Beenden installiert.' });
+      try { await macDownload(info); }
+      catch (e) {
+        sendUpdate({ state: 'error', error: String(e.message || e) });
+        if (manual) {
+          const { response } = await dialog.showMessageBox({ type: 'info', buttons: ['Download-Seite öffnen', 'Später'], message: `PDF Werkbank ${info.version} ist verfügbar.`, detail: 'Automatisch einspielen ging nicht: ' + (e.message || e) });
+          if (response === 0) shell.openExternal('https://github.com/conlog06/pdf-werkbank-app/releases/latest');
+        }
+      }
     }
-  } catch (e) { if (manual) dialog.showMessageBox({ type: 'warning', message: 'Nach Updates suchen hat nicht geklappt.', detail: String(e.message || e) }); }
+    // Windows: electron-updater lädt selbst und meldet „update-downloaded“
+  } catch (e) {
+    if (manual) dialog.showMessageBox({ type: 'warning', message: 'Nach Updates suchen hat nicht geklappt.', detail: String(e.message || e) });
+  }
+  return upd;
+}
+function installUpdate() {
+  if (upd.state !== 'ready') return false;
+  if (!isMac) { setImmediate(() => getUpdater().quitAndInstall(false, true)); return true; }
+  const { fresh, bundle } = upd.mac || {};
+  if (!fresh) return false;
+  // nach dem Beenden das alte App-Paket ersetzen und die neue Version starten
+  const script = path.join(path.dirname(fresh), 'install.sh');
+  fs.writeFileSync(script, `#!/bin/sh
+while kill -0 ${process.pid} 2>/dev/null; do sleep 0.3; done
+rm -rf "${bundle}.old"
+mv "${bundle}" "${bundle}.old" && mv "${fresh}" "${bundle}" && rm -rf "${bundle}.old"
+open "${bundle}"
+`);
+  spawn('/bin/sh', [script], { detached: true, stdio: 'ignore' }).unref();
+  setImmediate(() => app.quit());
+  return true;
 }
 
 /* ---------- Start ---------- */
@@ -254,6 +332,7 @@ app.whenReady().then(() => {
   createWindow();
   queueFiles(pdfArgs(process.argv));
   setTimeout(() => checkUpdates(false), 8000);
+  setInterval(() => checkUpdates(false), 4 * 3600 * 1000); // alle 4 Stunden nachsehen
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
 app.on('window-all-closed', () => { if (!isMac) app.quit(); });

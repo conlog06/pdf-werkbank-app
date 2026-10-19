@@ -1,7 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#1f4fd8"/>
-  <path d="M164 112h134l78 78v210H164z" fill="#ffffff"/>
-  <path d="M298 112v78h78" fill="#c9d6fb"/>
-  <path d="M214 344l12-38 86-86 26 26-86 86z" fill="#1f4fd8"/>
-  <path d="M322 210l12-12a12 12 0 0 1 17 0l9 9a12 12 0 0 1 0 17l-12 12z" fill="#1f4fd8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a6cf2"/><stop offset="1" stop-color="#1a3fb8"/></linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#0b1a4d" flood-opacity=".35"/></filter>
+    <filter id="sh2" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0b1a4d" flood-opacity=".35"/></filter>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)" filter="url(#sh)"/>
+  <g filter="url(#sh2)">
+    <path d="M330 232h268l136 136v424a32 32 0 0 1-32 32H330a32 32 0 0 1-32-32V264a32 32 0 0 1 32-32z" fill="#ffffff"/>
+    <path d="M598 232v104a32 32 0 0 0 32 32h104z" fill="#c9d6fb"/>
+  </g>
+  <path d="M370 470h250M370 540h250M370 610h150" stroke="#c4cfe8" stroke-width="26" stroke-linecap="round"/>
+  <g transform="rotate(-45 620 640)">
+    <rect x="570" y="370" width="100" height="360" rx="20" fill="#ffd400" stroke="#14171d" stroke-width="18"/>
+    <path d="M570 730l50 86 50-86z" fill="#f4d9a8" stroke="#14171d" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M603 788l17 28 17-28z" fill="#14171d"/>
+    <rect x="570" y="370" width="100" height="60" rx="20" fill="#e5484d" stroke="#14171d" stroke-width="18"/>
+  </g>
 </svg>

@@ -24,12 +24,16 @@
   }
   function setConfig(url, key) {
     try { localStorage.setItem('pdfwb.sync', JSON.stringify({ url: url.trim().replace(/\/+$/, ''), key: key.trim() })); } catch (e) { /* egal */ }
-    st.client = null; st.inited = false;
+    st.client = null; st.inited = false; st.initP = null;
     return init();
   }
 
-  async function init() {
-    if (st.inited) return info();
+  /* nur einmal einrichten; gleichzeitige Aufrufe warten auf dieselbe Einrichtung */
+  function init() {
+    if (!st.initP) st.initP = initOnce();
+    return st.initP;
+  }
+  async function initOnce() {
     st.inited = true;
     const c = config();
     if (!c) { set('unconfigured'); return info(); }
@@ -288,8 +292,18 @@
   global.addEventListener('focus', () => schedule(800));
   document.addEventListener('visibilitychange', () => { if (!document.hidden) schedule(800); });
 
+  /* Download-Link (7 Tage) für eine fertige PDF */
+  async function share(bytes, docId, name) {
+    if (!st.client || !st.user) throw new Error('Nicht angemeldet.');
+    const path = `${st.user.id}/shared/${docId}.pdf`;
+    check(await B().upload(path, new Blob([bytes], { type: 'application/pdf' }), { upsert: true, contentType: 'application/pdf' }));
+    const r = await B().createSignedUrl(path, 7 * 24 * 3600, { download: (name || 'Dokument').replace(/[\\/:*?"<>|]/g, '-') + '.pdf' });
+    if (r.error) throw r.error;
+    return r.data.signedUrl;
+  }
+
   global.WBSync = {
-    init, config, setConfig, signIn, signUp, signOut, syncNow, schedule, fetchDoc, info,
+    init, config, setConfig, signIn, signUp, signOut, syncNow, schedule, fetchDoc, info, share,
     ready: () => !!(st.client && st.user),
     onStatus: fn => { listeners.add(fn); fn(info()); return () => listeners.delete(fn); },
   };

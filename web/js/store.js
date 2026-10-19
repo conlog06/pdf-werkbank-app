@@ -141,7 +141,7 @@
   const delBlob = k => run('blobs', 'readwrite', tx => { tx.objectStore('blobs').delete(k); });
   async function dropBlobs(docId) {
     const keys = await run('blobs', 'readonly', (tx, done) => req(tx.objectStore('blobs').getAllKeys()).then(done));
-    const mine = keys.filter(k => k === 'state:' + docId || k === 'thumb:' + docId || String(k).startsWith('src:' + docId + ':'));
+    const mine = keys.filter(k => k === 'state:' + docId || k === 'thumb:' + docId || k === 'text:' + docId || String(k).startsWith('src:' + docId + ':') || String(k).startsWith('textsrc:' + docId + ':'));
     if (mine.length) await run('blobs', 'readwrite', tx => { const s = tx.objectStore('blobs'); mine.forEach(k => s.delete(k)); });
   }
   const kvGet = k => run('kv', 'readonly', (tx, done) => req(tx.objectStore('kv').get(k)).then(done));

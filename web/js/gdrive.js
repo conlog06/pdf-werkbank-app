@@ -348,7 +348,7 @@
   }
 
   global.WBDrive = {
-    info, connect, resume, disconnect, run, schedule, watch, backupNow, backupInfo, pending,
+    info, connect, resume, disconnect, run, schedule, watch, backupNow, backupInfo, pending, pdfOf,
     enabled: () => S.enabled, configured,
     folderUrl: () => (S.rootId ? 'https://drive.google.com/drive/folders/' + S.rootId : 'https://drive.google.com/drive/my-drive'),
     setRenderer: fn => { renderer = fn; },

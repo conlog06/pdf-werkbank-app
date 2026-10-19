@@ -16,7 +16,7 @@ Unter **[Releases](https://github.com/conlog06/pdf-werkbank-app/releases/latest)
 - *Windows:* Bei „Der Computer wurde durch Windows geschützt“ auf **Weitere Informationen → Trotzdem ausführen**.
 - *macOS:* App in den Programme-Ordner ziehen, dann **Rechtsklick → Öffnen → Öffnen**. Bei neueren macOS-Versionen: *Systemeinstellungen → Datenschutz & Sicherheit → Dennoch öffnen*.
 
-Unter Windows kommen Updates automatisch, auf dem Mac weist die App auf neue Versionen hin.
+**Updates kommen automatisch:** Die App sucht beim Start und alle 4 Stunden nach neuen Versionen, lädt sie im Hintergrund und bietet dann „Jetzt neu starten“ an. Das gilt für Windows und macOS (auf dem Mac muss die App im Programme-Ordner liegen).
 
 ## Was die App kann
 

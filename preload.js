@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld('wbDesktop', {
   googleDisconnect: () => ipcRenderer.invoke('google-disconnect'),
   // Datei über den Speichern-Dialog des Systems sichern
   saveFile: (name, bytes) => ipcRenderer.invoke('save-file', { name, bytes }).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
+  // automatische Updates
+  version: () => ipcRenderer.invoke('app-version'),
+  onUpdate: cb => { ipcRenderer.on('update-status', (_e, s) => cb(s)); ipcRenderer.invoke('update-status').then(cb); },
+  checkUpdate: () => ipcRenderer.invoke('update-check'),
+  installUpdate: () => ipcRenderer.invoke('update-install'),
   // Oberfläche bereit: wartende Dateien schicken
   ready: () => ipcRenderer.send('renderer-ready'),
 });

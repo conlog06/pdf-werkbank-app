@@ -69,17 +69,18 @@ const ICONS = {
   measure: 'M3 15l12-12 6 6-12 12zM7 11l2 2M10 8l2 2M13 5l2 2',
   book: 'M4 5c3-1 6-1 8 1v14c-2-2-5-2-8-1zM20 5c-3-1-6-1-8 1v14c2-2 5-2 8-1z',
   library: 'M4 4h4v16H4zM10 4h4v16h-4zM16.5 4.5l3.8 1-3.9 14.5-3.8-1z',
+  laser: 'M4 20l8.5-8.5M14.5 9.5a2 2 0 1 0 0-.01M14.5 3v2M20.5 9.5h-2M18.7 5.3l-1.4 1.4M18.7 13.7l-1.4-1.4M10.3 5.3l1.4 1.4',
   moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
   pages: 'M7 3h10v7H7zM7 14h10v7H7z',
   bookmark: 'M7 3h10v18l-5-4-5 4z',
   pencil: 'M4 20l3-1 12-12-2-2L5 17zM15 5l2-2 2 2-2 2',
 };
 
-const TOOL_NAMES = { mark: 'Textmarkierung', select: 'Auswählen', objects: 'Inhalte', text: 'Text', edittext: 'Text ändern', pen: 'Stift', eraser: 'Radierer', hl: 'Markieren', ul: 'Unterstreichen', so: 'Durchstreichen', rect: 'Rechteck', ellipse: 'Ellipse', line: 'Linie', arrow: 'Pfeil', measure: 'Messen', white: 'Abdecken', redact: 'Schwärzen', check: 'Haken', cross: 'Kreuz', img: 'Bild', stamp: 'Stempel', note: 'Notiz', wm: 'Wasserzeichen' };
+const TOOL_NAMES = { laser: 'Laserpointer', mark: 'Textmarkierung', select: 'Auswählen', objects: 'Inhalte', text: 'Text', edittext: 'Text ändern', pen: 'Stift', eraser: 'Radierer', hl: 'Markieren', ul: 'Unterstreichen', so: 'Durchstreichen', rect: 'Rechteck', ellipse: 'Ellipse', line: 'Linie', arrow: 'Pfeil', measure: 'Messen', white: 'Abdecken', redact: 'Schwärzen', check: 'Haken', cross: 'Kreuz', img: 'Bild', stamp: 'Stempel', note: 'Notiz', wm: 'Wasserzeichen' };
 const PROPS_OF = { multi: ['color'], mark: ['color', 'opacity'], text: ['color', 'font'], pen: ['penkind', 'color', 'stroke', 'opacity'], eraser: ['esize'], hl: ['color', 'opacity'], ul: ['color'], so: ['color'], rect: ['color', 'stroke'], ellipse: ['color', 'stroke'], line: ['color', 'stroke'], arrow: ['color', 'stroke'], measure: ['color', 'scale'], check: ['color', 'stroke'], cross: ['color', 'stroke'], white: [], redact: [], img: [], stamp: ['color', 'stamp'], note: ['color'], wm: ['color', 'opacity'] };
-const DRAW_TOOLS = new Set(['pen', 'eraser', 'hl', 'ul', 'so', 'rect', 'ellipse', 'line', 'arrow', 'measure', 'white', 'redact', 'check', 'cross', 'objects']);
+const DRAW_TOOLS = new Set(['laser', 'pen', 'eraser', 'hl', 'ul', 'so', 'rect', 'ellipse', 'line', 'arrow', 'measure', 'white', 'redact', 'check', 'cross', 'objects']);
 const SNAP_TOOLS = new Set(['hl', 'ul', 'so']);
-const KEYS = { v: 'select', m: 'objects', t: 'text', e: 'edittext', p: 'pen', g: 'eraser', h: 'hl', n: 'ul', d: 'so', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', q: 'measure', w: 'white', b: 'redact', k: 'check', x: 'cross', s: 'stamp', c: 'note' };
+const KEYS = { j: 'laser', v: 'select', m: 'objects', t: 'text', e: 'edittext', p: 'pen', g: 'eraser', h: 'hl', n: 'ul', d: 'so', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', q: 'measure', w: 'white', b: 'redact', k: 'check', x: 'cross', s: 'stamp', c: 'note' };
 const STAMPS = [['GENEHMIGT', '#1e8a4c'], ['ERLEDIGT', '#1e8a4c'], ['BEZAHLT', '#1e8a4c'], ['ENTWURF', '#1f4fd8'], ['KOPIE', '#1f4fd8'], ['VERTRAULICH', '#d0342c'], ['ABGELEHNT', '#d0342c'], ['DRINGEND', '#e07b00'], ['{datum}', '#1b2130']];
 const COARSE = matchMedia('(pointer: coarse)').matches || matchMedia('(any-pointer: coarse)').matches;
 /* Stiftarten: jede Art merkt sich eigene Stärke, Deckkraft und Farbe */
@@ -1486,7 +1487,7 @@ function insertTextAnnot(text, p = S.pages[S.cur]) {
 function ptIn(e, el) { const r = el.svg.getBoundingClientRect(); return [(e.clientX - r.left) / S.zoom, (e.clientY - r.top) / S.zoom]; }
 let drag = null;
 /* Werkzeuge, die im Modus „Nur Pencil zeichnet“ nicht auf Finger reagieren */
-const PENCIL_TOOLS = new Set(['pen', 'eraser', 'hl', 'ul', 'so', 'rect', 'ellipse', 'line', 'arrow', 'measure', 'white', 'redact', 'check', 'cross', 'text', 'note', 'stamp']);
+const PENCIL_TOOLS = new Set(['laser', 'pen', 'eraser', 'hl', 'ul', 'so', 'rect', 'ellipse', 'line', 'arrow', 'measure', 'white', 'redact', 'check', 'cross', 'text', 'note', 'stamp']);
 const pressureOf = e => (e.pointerType === 'pen' ? clamp(e.pressure || 0.5, 0.05, 1) : 0.5);
 function notePencil() {
   if (S.pencil.seen) return;
@@ -1511,7 +1512,53 @@ function hoverRing(p, pt, r) {
   const e = els.get(p.id); if (!e) return;
   $('.draft', e.svg).innerHTML = `<circle class="hov" cx="${r2(pt[0])}" cy="${r2(pt[1])}" r="${r2(Math.max(r, 1.5))}"/>`;
 }
+/* ---------- Laserpointer: leuchtende Spur, die nach einer knappen Sekunde verblasst (nichts wird gespeichert) ---------- */
+const laser = { cv: null, pts: [], dot: null, raf: 0, down: false };
+function laserCanvas() {
+  if (!laser.cv) {
+    laser.cv = document.createElement('canvas');
+    laser.cv.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:60';
+    document.body.appendChild(laser.cv);
+  }
+  const dpr = Math.min(devicePixelRatio || 1, 2), w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
+  if (laser.cv.width !== w || laser.cv.height !== h) { laser.cv.width = w; laser.cv.height = h; }
+  return laser.cv;
+}
+function laserAdd(e, pressed) {
+  const now = performance.now();
+  const evs = pressed && e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  for (const ce of evs.length ? evs : [e]) { const q = [ce.clientX, ce.clientY, now]; if (pressed) laser.pts.push(q); laser.dot = q; }
+  if (!laser.raf) laser.raf = requestAnimationFrame(laserDraw);
+}
+function laserDraw() {
+  laser.raf = 0;
+  const cv = laserCanvas(), ctx = cv.getContext('2d'), dpr = cv.width / innerWidth, now = performance.now(), LIFE = 850;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  laser.pts = laser.pts.filter(q => now - q[2] < LIFE);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (let i = 1; i < laser.pts.length; i++) {
+    const a = laser.pts[i - 1], b = laser.pts[i];
+    if (b[2] - a[2] > 120) continue; // neue Spur
+    const k = 1 - (now - b[2]) / LIFE;
+    ctx.strokeStyle = `rgba(255,40,60,${(k * 0.9).toFixed(3)})`; ctx.shadowColor = 'rgba(255,30,50,.9)'; ctx.shadowBlur = 14 * k;
+    ctx.lineWidth = 2 + 4 * k;
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+  const d = laser.dot;
+  if (d && (laser.down || now - d[2] < 1200)) {
+    ctx.shadowColor = 'rgba(255,30,50,.95)'; ctx.shadowBlur = 18;
+    ctx.fillStyle = '#ff2b44'; ctx.beginPath(); ctx.arc(d[0], d[1], laser.down ? 7 : 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(d[0], d[1], 2.2, 0, Math.PI * 2); ctx.fill();
+  }
+  if (laser.pts.length || (d && now - d[2] < 1200) || laser.down) laser.raf = requestAnimationFrame(laserDraw);
+  else ctx.clearRect(0, 0, innerWidth, innerHeight);
+}
 pagesEl.addEventListener('pointerdown', e => {
+  if (S.tool === 'laser' && e.button === 0 && !S.pinch && !(e.pointerType === 'touch' && (!e.isPrimary || S.pencil.only))) {
+    e.preventDefault(); if (drag) endDrag();
+    drag = { mode: 'laser', pointerId: e.pointerId }; laser.down = true; laserAdd(e, true);
+    return;
+  }
   const stylusErase = e.pointerType === 'pen' && (e.button === 5 || (e.buttons & 32));
   if ((e.button !== 0 && !stylusErase) || e.target.closest('textarea') || e.target.closest('.forml .ff')) return;
   if (e.pointerType === 'pen') notePencil();
@@ -1705,6 +1752,7 @@ window.addEventListener('pointermove', e => {
   // verlorenes pointerup (Stift oder Maus schon abgehoben): Ziehen sauber beenden
   if (drag && e.buttons === 0 && (e.pointerType === 'mouse' || (e.pointerType === 'pen' && !e.pressure))) { S.touchDrag = false; endDrag(); return; }
   if (!drag) {
+    if (S.tool === 'laser' && (e.pointerType === 'mouse' || (e.pointerType === 'pen' && !e.buttons)) && e.target.closest && e.target.closest('#pages')) laserAdd(e, false);
     const w = e.target && e.target.closest ? e.target.closest('.page') : null;
     let hov = null;
     if (w) {
@@ -1725,6 +1773,7 @@ window.addEventListener('pointermove', e => {
     }
     return;
   }
+  if (drag.mode === 'laser') { laserAdd(e, true); return; }
   const el = els.get(drag.p.id); if (!el) return;
   const pt = ptIn(e, el), a = drag.a;
   if (drag.mode === 'erase') {
@@ -1847,6 +1896,7 @@ function endDrag() {
   if (!drag) return;
   const d = drag; drag = null;
   clearTimeout(d.hold);
+  if (d.mode === 'laser') { laser.down = false; if (!laser.raf) laser.raf = requestAnimationFrame(laserDraw); return; }
   if (d.mode === 'amarq') {
     drawDraft(d.p, null);
     if (!d.moved) { setMulti(null, []); return; }
@@ -1927,6 +1977,7 @@ function cancelDrag(e) {
   if (!drag) return;
   const d = drag; drag = null;
   clearTimeout(d.hold);
+  if (d.mode === 'laser') { laser.down = false; return; }
   if (d.mode === 'erase') { drawDraft(d.p, null); return; }
   // ein Pencil-Strich, den Safari abbricht, bleibt erhalten
   if (d.mode === 'draw' && d.ptype === 'pen' && d.a.t === 'pen' && d.a.pts.length > 2) { drag = d; endDrag(); return; }
@@ -3974,6 +4025,39 @@ function libUI() {
   if (S.lib) { sv.title = 'Als PDF-Datei exportieren'; const l = sv.querySelector('.lbl'); if (l) l.textContent = 'Exportieren'; }
 }
 if (window.wbDesktop) document.documentElement.classList.add('desktop', window.wbDesktop.platform === 'darwin' ? 'mac' : 'win');
+// vor einem Update offene Änderungen sichern
+window.wbFlush = async () => { if (S.lib && S.dirty) await libSave(); };
+
+/* Befehlspalette (Strg/⌘+K): Werkzeuge, Menüpunkte, Seiten */
+function paletteProvider(q) {
+  const out = [];
+  const keyOf = t => Object.keys(KEYS).find(k => KEYS[k] === t);
+  for (const [t, label] of Object.entries(TOOL_NAMES)) {
+    if (!$(`[data-tool="${t}"]`)) continue;
+    const k = keyOf(t);
+    out.push({ group: 'Werkzeug', label, hint: k ? k.toUpperCase() : '', run: () => setTool(t) });
+  }
+  for (const b of $$('#menu [data-act]')) {
+    if (b.hidden || b.closest('[hidden]')) continue;
+    out.push({ group: 'Aktion', label: b.textContent.replace(/…/g, '').trim(), run: () => b.click() });
+  }
+  const A = (label, run, hint, keys) => out.push({ group: 'Aktion', label, run, hint, keys });
+  A(S.lib ? 'Als PDF-Datei exportieren' : 'PDF speichern', savePdf, S.lib ? 'Strg+Umschalt+S' : 'Strg+S', 'download speichern export');
+  if (S.lib) A('In der Bibliothek sichern', () => libSave(), 'Strg+S');
+  if (LIB) A('Zur Bibliothek', () => goLibrary(), '', 'start ordner home');
+  A('PDF öffnen', () => $('#fileOpen').click(), 'Strg+O');
+  A('Im Dokument suchen', () => { const fi = $('#findInput'); fi.focus(); fi.select(); }, 'Strg+F', 'finden');
+  A('Präsentieren mit Laserpointer', () => { setReading(true); setTool('laser'); }, 'F, J', 'vollbild präsentation laser');
+  A('Rückgängig', undo, 'Strg+Z'); A('Wiederholen', redo, 'Strg+Y');
+  A('Vergrößern', () => $('#btnZoomIn').click(), 'Strg +'); A('Verkleinern', () => $('#btnZoomOut').click(), 'Strg −');
+  A('Seitenbreite', () => setZoom(fitZoom()), 'Strg+0', 'zoom anpassen');
+  A('Nach Updates suchen', () => { if (window.WBUpdate) window.WBUpdate.check(true); }, '', 'update version aktualisieren');
+  const n = parseInt(String(q || '').replace(/\D/g, ''), 10);
+  if (n >= 1 && n <= S.pages.length) out.push({ group: 'Seite', label: 'Gehe zu Seite ' + n, hint: 'von ' + S.pages.length, run: () => scrollToPage(n - 1), keys: String(n) });
+  for (const b of S.bookmarks || []) { const i = S.pages.findIndex(p => p.id === b.pid); if (i >= 0) out.push({ group: 'Lesezeichen', label: b.title || b.name || 'Lesezeichen', hint: 'S. ' + (i + 1), run: () => scrollToPage(i) }); }
+  return out;
+}
+if (window.WBPalette) window.WBPalette.add(paletteProvider);
 
 /* ---------- Start ---------- */
 async function boot() {
@@ -4003,7 +4087,18 @@ async function boot() {
   }
   if (LIB && window.WBSync) window.WBSync.init();
   if (LIB && qp.get('doc')) {
-    if (await openLibDoc(qp.get('doc'))) { if (qp.get('export') === '1') { history.replaceState(null, '', 'index.html?doc=' + encodeURIComponent(qp.get('doc'))); savePdf(); } return; }
+    if (await openLibDoc(qp.get('doc'))) {
+      const pg = +qp.get('page') || 0, fq = qp.get('q');
+      if (pg || fq) setTimeout(async () => {
+        if (pg) scrollToPage(pg - 1);
+        if (fq) {
+          $('#findInput').value = fq; await runFind(fq);
+          const pid = pg && S.pages[pg - 1] && S.pages[pg - 1].id, k = S.find && pid ? S.find.hits.findIndex(h => h.pid === pid) : -1;
+          if (k >= 0) goHit(k);
+        }
+        history.replaceState(null, '', 'index.html?doc=' + encodeURIComponent(qp.get('doc')));
+      }, 350);
+      if (qp.get('export') === '1') { history.replaceState(null, '', 'index.html?doc=' + encodeURIComponent(qp.get('doc'))); savePdf(); } return; }
   }
   if (await restoreSession()) return;
   busy(true, 'Beispiel wird geladen …');

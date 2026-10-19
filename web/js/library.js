@@ -56,6 +56,7 @@
     download: 'M12 4v11M7 10l5 5 5-5M5 20h14', open: 'M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5',
     select: 'M5 12.5l4.5 4.5L19 7M3 3h18v18H3z', menu: 'M4 6h16M4 12h16M4 18h16', refresh: 'M20 12a8 8 0 1 1-2.4-5.7L20 9M20 4v5h-5',
     notebook: 'M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6zM9 3v18M12 8h4M12 12h4', starf: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z',
+    link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
     gear: 'M12 9a3 3 0 1 0 0 6a3 3 0 0 0 0-6zM12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1',
   };
   const FOLDER_ICONS = ['folder', 'book', 'school', 'work', 'star', 'heart', 'music', 'flask', 'calc', 'code', 'globe', 'home', 'camera', 'palette', 'fitness', 'receipt', 'file', 'pen', 'bulb', 'flag', 'calendar', 'chart', 'leaf', 'plane', 'car', 'cart', 'gift', 'lock', 'user', 'chat', 'tooth', 'game'];
@@ -169,7 +170,7 @@
     $('#lib').classList.toggle('selecting', V.selecting);
     c.classList.toggle('selecting', V.selecting);
     for (const id of [...V.sel]) if (!items.some(i => i.id === id)) V.sel.delete(id);
-    if (!items.length) { c.innerHTML = emptyState(); bindEmpty(); renderSelbar(); return; }
+    if (!items.length && !V.q) { c.innerHTML = emptyState(); bindEmpty(); renderSelbar(); return; }
     const sortSel = `<select id="sortSel" aria-label="Sortieren">${[['updated', 'Zuletzt geändert'], ['name', 'Name'], ['created', 'Erstellt']].map(([k, l]) => `<option value="${k}"${V.sort === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
     let html = conflictNotice();
     if (V.view.kind === 'trash') html += `<div class="sec-h"><span>Elemente im Papierkorb</span><span class="grow"></span><button class="btn ghost" id="emptyTrash" style="height:30px;text-transform:none;letter-spacing:0">${ico('trash')}Papierkorb leeren</button></div>`;
@@ -179,7 +180,9 @@
       if (fs.length) html += `<section class="sec"><div class="sec-h"><span>Ordner</span><span class="grow"></span></div><div class="grid">${fs.map(folderTile).join('')}</div></section>`;
       if (ds.length) html += `<section class="sec"><div class="sec-h"><span>${V.view.kind === 'recent' ? 'Zuletzt geöffnet' : 'Dokumente'}</span><span class="grow"></span>${keepSort ? sortSel : ''}</div><div class="grid">${ds.map(docTile).join('')}</div></section>`;
     }
+    if (V.q) html += `<section class="sec" id="ftSec"></section>`;
     c.innerHTML = html;
+    if (V.q) fulltext();
     const cn = $('#cnTrash'); if (cn) cn.onclick = trashConflicts;
     const ck = $('#cnKeep'); if (ck) ck.onclick = () => { lsSet('pdfwb.lib.cnKeep', String(conflicts().length)); renderContent(); };
     const ss = $('#sortSel'); if (ss) ss.onchange = () => { V.sort = ss.value; lsSet('pdfwb.lib.sort', V.sort); renderContent(); };
@@ -188,6 +191,30 @@
     renderSelbar();
   }
   const countIn = id => childrenOf(id).length;
+  /* Volltextsuche: Treffer im Text aller PDFs, mit Seite und Ausschnitt */
+  let ftTok = 0;
+  async function fulltext() {
+    const sec = $('#ftSec'); if (!sec || !window.WBSearch) return;
+    const tok = ++ftTok, q = V.q;
+    const res = await WBSearch.search(q, V.items.filter(i => i.kind === 'doc' && alive(i)));
+    if (tok !== ftTok || !$('#ftSec')) return;
+    const pr = WBSearch.progress();
+    const prog = pr.running && pr.total ? `Durchsuche Dokumente … ${pr.done}/${pr.total}` : '';
+    const nameHits = $$('.tile, .row', $('#content')).length;
+    if (!res.length) {
+      sec.innerHTML = nameHits ? (prog ? `<div class="sec-h"><span>Im Text</span><span class="grow"></span><span class="ftprog">${prog}</span></div>` : '') : `<div class="empty"><h2>Nichts gefunden</h2><p>Weder ein Name noch ein Text enthält „${esc(q)}“.${prog ? '<br>' + prog : ''}</p></div>`;
+      return;
+    }
+    const total = res.reduce((n, r) => n + r.total, 0);
+    sec.innerHTML = `<div class="sec-h"><span>Im Text gefunden · ${total} Treffer</span><span class="grow"></span><span class="ftprog">${prog}</span></div>
+      <div class="ft">${res.slice(0, 40).map(r => `<div class="fthit"><button class="fth" data-ft="${r.doc.id}" data-page="${r.hits[0] ? r.hits[0].n : 1}"><span class="ri" data-cover="${r.doc.id}">${V.thumbs.get(r.doc.id) ? `<img src="${V.thumbs.get(r.doc.id)}" alt="">` : ico('file')}</span><span class="ftn"><b>${esc(r.doc.name)}</b><small>${r.total} Treffer${r.doc.folder && V.byId.get(r.doc.folder) ? ' · ' + esc(V.byId.get(r.doc.folder).name) : ''}</small></span></button>
+        ${r.hits.map(h => `<button class="ftline" data-ft="${r.doc.id}" data-page="${h.n}"><span class="ftp">S. ${h.n}${h.k ? ' · ' + esc(h.k) : ''}</span><span>${esc(h.pre)}<mark>${esc(h.hit)}</mark>${esc(h.post)}</span></button>`).join('')}</div>`).join('')}</div>`;
+    loadThumbs();
+  }
+  function openAt(id, page, q) {
+    ST.markOpened(id);
+    location.href = 'index.html?doc=' + encodeURIComponent(id) + (page ? '&page=' + page : '') + (q ? '&q=' + encodeURIComponent(q) : '');
+  }
   /* Kopien „(Konflikt …)“, die ein Fehler im Abgleich (vor Version 1.1.1) massenhaft angelegt hat */
   const conflicts = () => V.items.filter(i => i.kind === 'doc' && alive(i) && /\(Konflikt \d/.test(i.name));
   function conflictNotice() {
@@ -358,14 +385,19 @@
   }
 
   /* Notizbuch: Deckblatt + Papier, als echte PDF erzeugt */
-  const PAPERS = [['blank', 'Blanko'], ['lined', 'Liniert'], ['grid', 'Kariert'], ['dots', 'Punktiert']];
+  const PAPERS = [['blank', 'Blanko'], ['lined', 'Liniert'], ['grid', 'Kariert'], ['dots', 'Punktiert'], ['cornell', 'Cornell'], ['todo', 'To-do'], ['week', 'Woche'], ['mm', 'Millimeter'], ['music', 'Noten']];
   const FORMATS = { A4: [595.28, 841.89], A5: [419.53, 595.28], Letter: [612, 792] };
   function paperPreview(k) {
     let d = '';
     if (k === 'lined') for (let y = 14; y < 76; y += 6) d += `M8 ${y}h44`;
     if (k === 'grid') { for (let y = 8; y < 80; y += 5) d += `M4 ${y}h52`; for (let x = 6; x < 58; x += 5) d += `M${x} 4v72`; }
+    if (k === 'cornell') { for (let y = 18; y < 62; y += 5) d += `M20 ${y}h34`; d += 'M18 8v56M6 64h48M6 12h48'; }
+    if (k === 'todo') for (let y = 12; y < 76; y += 7) d += `M9 ${y - 2.5}h4v4h-4zM16 ${y + 1.5}h36`;
+    if (k === 'week') { d += 'M6 6h48v68H6zM30 6v68'; for (let y = 6 + 68 / 4; y < 74; y += 68 / 4) d += `M6 ${y}h48`; }
+    if (k === 'mm') { for (let y = 6; y <= 74; y += 2) d += `M6 ${y}h48`; for (let x = 6; x <= 54; x += 2) d += `M${x} 6v68`; }
+    if (k === 'music') for (let s0 = 12; s0 < 70; s0 += 12) for (let l = 0; l < 5; l++) d += `M6 ${s0 + l * 1.5}h48`;
     const dots = k === 'dots' ? Array.from({ length: 13 * 9 }, (_, i) => `<circle cx="${8 + (i % 9) * 5.5}" cy="${8 + Math.floor(i / 9) * 5.5}" r=".7" fill="#9aa4b5"/>`).join('') : '';
-    return `<svg viewBox="0 0 60 80"><path d="${d}" stroke="${k === 'grid' ? '#cdd7e6' : '#b9c6dc'}" stroke-width=".6" fill="none"/>${dots}</svg>`;
+    return `<svg viewBox="0 0 60 80"><path d="${d}" stroke="${k === 'grid' || k === 'mm' ? '#cdd7e6' : '#b9c6dc'}" stroke-width="${k === 'mm' ? '.3' : '.6'}" fill="none"/>${dots}</svg>`;
   }
   async function makeNotebook({ name, paper, format, land, pages, cover, color }) {
     const { PDFDocument, rgb, StandardFonts } = PL;
@@ -383,12 +415,54 @@
       while (size > 10 && f.widthOfTextAtSize(txt, size) > bw - 30) size -= 1;
       p.drawText(txt, { x: bx + (bw - f.widthOfTextAtSize(txt, size)) / 2, y: by + bh / 2 - size * 0.35, size, font: f, color: rgb(0.12, 0.14, 0.2) });
     }
-    const line = rgb(0.72, 0.78, 0.87), grid = rgb(0.82, 0.86, 0.92), dot = rgb(0.6, 0.65, 0.73), m = 36;
+    const line = rgb(0.72, 0.78, 0.87), grid = rgb(0.82, 0.86, 0.92), dot = rgb(0.6, 0.65, 0.73), muted = rgb(0.55, 0.6, 0.68), m = 36;
+    const fReg = await d.embedFont(StandardFonts.Helvetica), fBold = await d.embedFont(StandardFonts.HelveticaBold);
     for (let i = 0; i < pages; i++) {
       const p = d.addPage([W, H]);
       if (paper === 'lined') { for (let y = H - 72; y > m; y -= 22.7) p.drawLine({ start: { x: m, y }, end: { x: W - m, y }, thickness: 0.5, color: line }); p.drawLine({ start: { x: m + 50, y: H - 30 }, end: { x: m + 50, y: m }, thickness: 0.6, color: rgb(0.93, 0.55, 0.55) }); }
       if (paper === 'grid') { const s = 14.17; for (let y = H - m; y >= m - 0.1; y -= s) p.drawLine({ start: { x: m, y }, end: { x: W - m, y }, thickness: 0.4, color: grid }); for (let x = m; x <= W - m + 0.1; x += s) p.drawLine({ start: { x, y: m }, end: { x, y: H - m }, thickness: 0.4, color: grid }); }
       if (paper === 'dots') { const s = 14.17; for (let y = H - m; y >= m; y -= s) for (let x = m; x <= W - m; x += s) p.drawCircle({ x, y, size: 0.7, color: dot }); }
+      if (paper === 'cornell') {
+        // Stichwortspalte links, Notizen rechts, Zusammenfassung unten
+        const cue = W * 0.3, sum = H * 0.2, top = H - 70;
+        p.drawLine({ start: { x: m, y: top }, end: { x: W - m, y: top }, thickness: 1, color: line });
+        p.drawLine({ start: { x: m + cue, y: top }, end: { x: m + cue, y: sum }, thickness: 1, color: line });
+        p.drawLine({ start: { x: m, y: sum }, end: { x: W - m, y: sum }, thickness: 1, color: line });
+        for (let y = top - 22.7; y > sum + 6; y -= 22.7) p.drawLine({ start: { x: m + cue + 8, y }, end: { x: W - m, y }, thickness: 0.4, color: grid });
+        p.drawText('Stichworte', { x: m + 4, y: top - 14, size: 8, font: fReg, color: muted });
+        p.drawText('Notizen', { x: m + cue + 8, y: top - 14, size: 8, font: fReg, color: muted });
+        p.drawText('Zusammenfassung', { x: m + 4, y: sum - 14, size: 8, font: fReg, color: muted });
+        p.drawText('Thema', { x: m, y: H - 46, size: 8, font: fReg, color: muted });
+        p.drawLine({ start: { x: m + 34, y: H - 48 }, end: { x: W - m - 90, y: H - 48 }, thickness: 0.5, color: line });
+        p.drawText('Datum', { x: W - m - 80, y: H - 46, size: 8, font: fReg, color: muted });
+        p.drawLine({ start: { x: W - m - 50, y: H - 48 }, end: { x: W - m, y: H - 48 }, thickness: 0.5, color: line });
+      }
+      if (paper === 'todo') {
+        p.drawText('To-do', { x: m, y: H - 58, size: 20, font: fBold, color: rgb(0.2, 0.24, 0.32) });
+        for (let y = H - 92; y > m + 4; y -= 26) {
+          p.drawRectangle({ x: m + 2, y: y - 1, width: 11, height: 11, borderColor: dot, borderWidth: 0.9 });
+          p.drawLine({ start: { x: m + 22, y: y - 3 }, end: { x: W - m, y: y - 3 }, thickness: 0.5, color: grid });
+        }
+      }
+      if (paper === 'week') {
+        const days = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag', 'Notizen'];
+        const top = H - 64, cols = 2, rows = 4, cw = (W - 2 * m) / cols, rh = (top - m) / rows;
+        p.drawText('Woche vom ____________', { x: m, y: H - 50, size: 13, font: fBold, color: rgb(0.2, 0.24, 0.32) });
+        days.forEach((dn, k) => {
+          const cx = m + (k % cols) * cw, cy = top - Math.floor(k / cols) * rh;
+          p.drawRectangle({ x: cx + 3, y: cy - rh + 3, width: cw - 6, height: rh - 6, borderColor: line, borderWidth: 0.8 });
+          p.drawText(dn, { x: cx + 10, y: cy - 18, size: 9, font: fBold, color: rgb(0.35, 0.39, 0.47) });
+          for (let y = cy - 36; y > cy - rh + 12; y -= 18) p.drawLine({ start: { x: cx + 10, y }, end: { x: cx + cw - 10, y }, thickness: 0.35, color: grid });
+        });
+      }
+      if (paper === 'mm') {
+        const mm = 2.8346;
+        for (let k = 0, y = H - m; y >= m - 0.01; k++, y -= mm) p.drawLine({ start: { x: m, y }, end: { x: W - m, y }, thickness: k % 10 ? 0.15 : k % 5 ? 0.3 : 0.6, color: k % 10 ? rgb(0.95, 0.78, 0.68) : rgb(0.9, 0.6, 0.48) });
+        for (let k = 0, x = m; x <= W - m + 0.01; k++, x += mm) p.drawLine({ start: { x, y: m }, end: { x, y: H - m }, thickness: k % 10 ? 0.15 : 0.6, color: k % 10 ? rgb(0.95, 0.78, 0.68) : rgb(0.9, 0.6, 0.48) });
+      }
+      if (paper === 'music') {
+        for (let s0 = H - 80; s0 > m + 30; s0 -= 62) for (let l = 0; l < 5; l++) p.drawLine({ start: { x: m, y: s0 - l * 7 }, end: { x: W - m, y: s0 - l * 7 }, thickness: 0.6, color: rgb(0.45, 0.48, 0.55) });
+      }
     }
     return new Uint8Array(await d.save());
   }
@@ -671,7 +745,7 @@
         isF ? { k: 'edit', i: 'palette', l: 'Name, Farbe und Symbol' } : { k: 'rename', i: 'edit', l: 'Umbenennen' },
         { k: 'fav', i: 'star', l: it.fav ? 'Aus Favoriten entfernen' : 'Zu Favoriten' },
         { k: 'move', i: 'move', l: 'Verschieben …' },
-        ...(isF ? [{ k: 'sub', i: 'plus', l: 'Unterordner erstellen' }] : [{ k: 'dup', i: 'copy', l: 'Duplizieren' }, { k: 'export', i: 'download', l: 'Als PDF exportieren' }]),
+        ...(isF ? [{ k: 'sub', i: 'plus', l: 'Unterordner erstellen' }] : [{ k: 'dup', i: 'copy', l: 'Duplizieren' }, { k: 'export', i: 'download', l: 'Als PDF exportieren' }, { k: 'share', i: 'link', l: 'Link teilen …' }]),
         '-', { k: 'trash', i: 'trash', l: 'Löschen', danger: true }];
     const k = await showMenu(entries, x, y);
     if (!k) return;
@@ -683,11 +757,35 @@
       case 'move': moveDialog([it.id]); break;
       case 'sub': folderDialog(null, it.id); break;
       case 'dup': await ST.duplicate(it.id); await refresh(); toast('Dupliziert'); break;
+      case 'share': shareLink(it); break;
       case 'export': await ST.markOpened(it.id); location.href = 'index.html?doc=' + encodeURIComponent(it.id) + '&export=1'; break;
       case 'trash': await ST.trash([it.id]); await refresh(); toast(`„${it.name}“ in den Papierkorb gelegt`, [it.id]); break;
       case 'restore': await ST.restore([it.id]); await refresh(); toast('Wiederhergestellt'); break;
       case 'destroy': if (await confirmDlg('Endgültig löschen?', `„${it.name}“ wird auf allen Geräten gelöscht.`, 'Löschen', true)) { await ST.destroy([it.id]); await refresh(); } break;
     }
+  }
+  /* Download-Link für ein Dokument (7 Tage gültig), über den Cloud-Speicher */
+  async function shareLink(it) {
+    if (!SY || !SY.ready()) { toast('Zum Teilen bitte unten links unter „Sync“ anmelden.'); return; }
+    busy('Link wird erstellt …');
+    let url;
+    try {
+      if (it.missing) await SY.fetchDoc(it.id);
+      const bytes = GD && GD.pdfOf ? await GD.pdfOf(await ST.get(it.id)) : null;
+      if (!bytes) throw new Error('PDF konnte nicht erzeugt werden.');
+      url = await SY.share(bytes, it.id, it.name);
+    } catch (e) { busy(false); toast('Teilen fehlgeschlagen: ' + (e.message || e)); return; }
+    busy(false);
+    await dialog(`<h2>Link teilen</h2><p class="lead">Jeder mit diesem Link kann „${esc(it.name)}“ als PDF mit allen Markierungen herunterladen. Der Link gilt <b>7 Tage</b>.</p>
+      <label class="fld"><span>Link</span><input class="field" id="shUrl" readonly value="${esc(url)}"></label>
+      <div class="acts">${navigator.share ? '<button class="btn" data-x="native">Teilen …</button>' : ''}<button class="btn" data-x="0">Schließen</button><button class="btn primary" data-x="copy" autofocus>${ico('copy')}Kopieren</button></div>`, {
+      onOpen: (d, close) => d.addEventListener('click', async e => {
+        const b = e.target.closest('[data-x]'); if (!b) return;
+        if (b.dataset.x === 'copy') { try { await navigator.clipboard.writeText(url); toast('Link kopiert'); } catch (x) { d.querySelector('#shUrl').select(); document.execCommand('copy'); toast('Link kopiert'); } close(); }
+        else if (b.dataset.x === 'native') { try { await navigator.share({ title: it.name, url }); } catch (x) { /* abgebrochen */ } close(); }
+        else close();
+      }),
+    });
   }
   async function emptyTrash() {
     if (!await confirmDlg('Papierkorb leeren?', 'Alle Elemente im Papierkorb werden auf allen Geräten endgültig gelöscht.', 'Leeren', true)) return;
@@ -749,6 +847,8 @@
 
     const content = $('#content');
     content.addEventListener('click', e => {
+      const ft = e.target.closest('[data-ft]');
+      if (ft) { const it = V.byId.get(ft.dataset.ft); if (it && it.missing) openDoc(it.id); else openAt(ft.dataset.ft, ft.dataset.page, V.q); return; }
       const more = e.target.closest('[data-more]');
       if (more) { e.stopPropagation(); itemMenu(V.byId.get(more.dataset.more), null, more); return; }
       const t = e.target.closest('[data-id]'); if (!t) return;
@@ -839,8 +939,67 @@
     }
   }
 
+  /* Befehlspalette: Aktionen, Ordner und Dokumente */
+  function paletteProvider(q) {
+    const A = (label, run, hint, keys) => ({ group: 'Aktion', label, run, hint, keys });
+    const out = [
+      A('Neues Notizbuch', () => newAction('notebook'), DESK ? '' : 'Strg+N', 'erstellen leer papier'),
+      A('PDF importieren', () => newAction('import'), 'Strg+O', 'öffnen hochladen datei'),
+      A('Neuer Ordner', () => newAction('folder'), 'Strg+Umschalt+N', 'erstellen'),
+      A('Dokumente (oberste Ebene)', () => go({ kind: 'folder', id: null }), '', 'start home bibliothek'),
+      A('Zuletzt geöffnet', () => go({ kind: 'recent', id: null })),
+      A('Favoriten', () => go({ kind: 'fav', id: null })),
+      A('Papierkorb', () => go({ kind: 'trash', id: null })),
+      A('Geräte synchronisieren', syncDialog, '', 'sync konto anmelden cloud'),
+      A('Backup in Google Drive', driveDialog, '', 'drive sichern'),
+      A('Alle auswählen', () => { V.selecting = true; currentItems().forEach(i => V.sel.add(i.id)); renderContent(); }, 'Strg+A'),
+      A(V.layout === 'grid' ? 'Als Liste anzeigen' : 'Als Kacheln anzeigen', () => (V.layout === 'grid' ? $('#vList') : $('#vGrid')).click(), '', 'ansicht'),
+      A('In allen Dokumenten suchen', () => $('#search').focus(), 'Strg+F', 'volltext suche'),
+      A('Nach Updates suchen', () => { if (window.WBUpdate) WBUpdate.check(true); }, '', 'update version aktualisieren'),
+    ];
+    if (!DESK && !standalone()) out.push(A('Als App installieren', installDialog, '', 'home-bildschirm pwa'));
+    if (q && q.trim().length >= 1) {
+      for (const i of V.items) {
+        if (!alive(i)) continue;
+        if (i.kind === 'folder') out.push({ group: 'Ordner', label: i.name, hint: pathOf(i.parent).map(f => f.name).join(' › '), run: () => go({ kind: 'folder', id: i.id }) });
+        else out.push({ group: 'Dokument', label: i.name, hint: i.pages ? i.pages + ' S.' : '', run: () => openDoc(i.id) });
+      }
+    }
+    return out;
+  }
+
+  /* PDFs, die per „Teilen“ (Android) oder „Öffnen mit“ (installierte Web-App) kommen */
+  async function inbox() {
+    const files = [];
+    if ('launchQueue' in window) {
+      window.launchQueue.setConsumer(async params => {
+        const list = [];
+        for (const h of params.files || []) { try { list.push(await h.getFile()); } catch (e) { /* egal */ } }
+        if (!list.length) return;
+        const docs = await importFiles(list);
+        if (docs.length === 1) openDoc(docs[0].id);
+      });
+    }
+    if (new URLSearchParams(location.search).get('shared') && 'caches' in window) {
+      try {
+        const c = await caches.open('pdfwb-share');
+        for (const req of await c.keys()) {
+          const r = await c.match(req);
+          const name = decodeURIComponent(new URL(req.url).searchParams.get('name') || 'Geteilt.pdf');
+          files.push(new File([await r.blob()], name, { type: 'application/pdf' }));
+          await c.delete(req);
+        }
+      } catch (e) { console.warn('Teilen', e); }
+      history.replaceState(null, '', 'library.html');
+      if (files.length) { const docs = await importFiles(files); if (docs.length === 1) openDoc(docs[0].id); }
+      else toast('Es kam keine PDF an.');
+    }
+  }
+
   async function boot() {
     bind();
+    if (window.WBPalette) WBPalette.add(paletteProvider);
+    if (window.WBSearch) { WBSearch.onProgress(() => { if (V.q) { const el = $('.ftprog'); const pr = WBSearch.progress(); if (el) el.textContent = pr.running && pr.total ? `Durchsuche Dokumente … ${pr.done}/${pr.total}` : ''; if (!pr.running) fulltext(); } }); WBSearch.schedule(4000); }
     // Browser soll die Bibliothek nicht bei Speicherknappheit löschen
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* egal */ }
     await refresh();
@@ -850,6 +1009,7 @@
     if (p.get('import') === '1') newAction('import');
     if (p.get('new') === 'notebook') newAction('notebook');
     if (p.get('new') || p.get('import')) history.replaceState(null, '', 'library.html');
+    inbox();
   }
   boot();
 })();
