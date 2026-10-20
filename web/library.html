@@ -228,6 +228,16 @@ svg.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;st
 .papers button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);color:var(--accent)}
 .papers svg{width:100%;height:auto;aspect-ratio:3/4;background:#fff;border-radius:3px;box-shadow:var(--shadow-1)}
 .pick{border:1px solid var(--line);border-radius:10px;max-height:300px;overflow:auto;padding:4px}
+.gdopts{border-top:1px solid var(--line);margin-top:14px;padding-top:14px}
+.cover .prog{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgb(0 0 0 / .14);overflow:hidden}
+.cover .prog i{display:block;height:100%;background:var(--accent)}
+.tsize{width:96px;margin-right:10px;accent-color:var(--accent)}
+@media (max-width:760px){.tsize{display:none}}
+.gdopts details{margin-top:6px}.gdopts summary{cursor:pointer;font-weight:600;padding:6px 0}
+.xlist{border:1px solid var(--line);border-radius:10px;max-height:220px;overflow:auto;padding:4px;margin-top:6px}
+.xrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:0 8px 0 calc(8px + var(--lvl,0) * 18px);border-radius:8px;cursor:pointer}
+.xrow:hover{background:var(--hover,rgb(0 0 0 / .04))}
+.chkrow{display:flex;align-items:center;gap:8px;margin:4px 0 8px;cursor:pointer}
 .err{color:var(--danger);font-size:13px;min-height:1.2em;margin:4px 0 0}
 .note{font-size:12.5px;color:var(--muted)}
 .note code{font:12px var(--f-mono);background:var(--desk);padding:1px 5px;border-radius:4px}
@@ -335,6 +345,7 @@ body{padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area
 <script src="js/sync.js"></script>
 <script src="js/gdrive.js"></script>
 <script src="js/search.js"></script>
+<script src="js/photos.js"></script>
 <script src="js/palette.js"></script>
 <script src="js/library.js"></script>
 <script src="js/update.js"></script>

@@ -142,6 +142,8 @@ output{font:11.5px var(--f-mono);color:var(--ink);min-width:3.6em;font-variant-n
 
 .viewer{position:relative;overflow:auto;min-width:0;min-height:0;touch-action:pan-x pan-y;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .pages{display:flex;flex-direction:column;align-items:center;gap:36px;padding:24px 16px 64px;width:max-content;min-width:100%}
+.pages.live{will-change:transform}
+.pages.live .ov .ui,.pages.live .pnum{opacity:0}
 .page{position:relative;flex:none;background:#fff;box-shadow:var(--paper-shadow);touch-action:pan-x pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .pages[data-draw] .page{touch-action:none}
 .pcv{position:absolute;inset:0;width:100%;height:100%;display:block}
@@ -210,11 +212,40 @@ output{font:11.5px var(--f-mono);color:var(--ink);min-width:3.6em;font-variant-n
 /* Menü und Formulare */
 .pgtools{display:flex;align-items:center;gap:2px}
 .menuwrap{position:relative}
-.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:40;min-width:250px;max-height:min(70vh,560px);overflow-y:auto;background:var(--raise);border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 40px rgb(0 0 0 / .18);padding:6px;display:flex;flex-direction:column}
+.menu{position:absolute;right:0;top:calc(100% + 6px);z-index:40;min-width:270px;max-height:min(70vh,560px);overflow-y:auto;background:var(--raise);border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 40px rgb(0 0 0 / .18);padding:6px;display:flex;flex-direction:column}
 .menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:9px 12px;border-radius:6px;font-size:13.5px;cursor:pointer;color:var(--ink)}
 .menu button:hover,.menu button:focus-visible{background:var(--accent-soft);outline:none}
 .menu button.danger{color:var(--danger)}
 .menu hr{border:0;border-top:1px solid var(--line);margin:5px 4px}
+.menu .mh{font:600 10.5px/1 var(--f-mono,monospace);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:12px 12px 5px}
+.menu .mh:first-child{padding-top:6px}
+.seg button .ico{width:16px;height:16px;display:block}
+#dashSeg .ico{stroke-width:2.4}
+.ibtn.tbcfg{color:var(--muted)}
+.favs{display:flex;align-items:center;gap:5px;flex:none}
+.favs .fav{width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--raise);display:grid;place-items:center;cursor:pointer;padding:0;position:relative}
+.favs .fav i{display:block;border-radius:50%;background:var(--c)}
+.favs .fav[aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent)}
+.favs .fav.add{color:var(--muted);font-size:16px;line-height:1}
+.favs .vsep{margin:0 3px}
+.tbrow{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;user-select:none;-webkit-user-select:none}
+.tbrow:hover{background:var(--accent-soft)}
+.tbrow.dragging{opacity:.4}
+.tbrow .ico{width:18px;height:18px}
+.tbrow .nm{flex:1;min-width:0}
+.tbrow .mv{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px;font-size:14px}
+.tbrow .mv:hover{background:var(--line)}
+.tbrow.sep .nm{color:var(--muted);font-style:italic}
+.tblist{max-height:min(52vh,460px);overflow:auto;border:1px solid var(--line);border-radius:10px;padding:4px;margin:10px 0}
+.keys{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:4px 22px;max-height:min(60vh,520px);overflow:auto;margin-top:8px}
+.keys h3{grid-column:1/-1;margin:12px 0 2px;font:600 11px var(--f-mono,monospace);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.keys div{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:13px}
+.keys kbd{font:11.5px var(--f-mono,monospace);padding:2px 6px;border:1px solid var(--line);border-radius:5px;background:var(--desk);white-space:nowrap}
+.libpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px;max-height:46vh;overflow:auto;padding:4px;margin:8px 0}
+.libpick button{border:1px solid var(--line);border-radius:8px;background:var(--raise);padding:6px;cursor:pointer;display:flex;flex-direction:column;gap:5px;align-items:center;font-size:11.5px;color:var(--ink);text-align:center}
+.libpick button[aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent);border-color:var(--accent)}
+.libpick canvas,.libpick .ph{width:100%;aspect-ratio:3/4;object-fit:contain;background:#fff;border-radius:4px;box-shadow:0 1px 3px rgb(0 0 0 / .15)}
+.libpick .nm{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .menu .m-only{display:none}
 .form{display:flex;flex-direction:column;gap:12px}
 .fld{display:flex;flex-direction:column;gap:5px;min-width:0}
@@ -384,32 +415,37 @@ body.reading .forml .ff{pointer-events:auto}
     <div class="menuwrap">
       <button class="ibtn" id="btnMore" title="Weitere Funktionen" aria-label="Weitere Funktionen" aria-haspopup="menu" aria-expanded="false"><i data-i="more"></i></button>
       <div class="menu" id="menu" role="menu" hidden>
+        <div class="mh">Datei</div>
         <button role="menuitem" data-act="new">Neues Dokument …</button>
         <button role="menuitem" data-act="open" class="m-only">PDF öffnen …</button>
         <button role="menuitem" data-act="merge">Weitere PDF anhängen …</button>
+        <button role="menuitem" data-act="libpages" id="mLibPages" hidden>Seiten aus der Bibliothek einfügen …</button>
+        <button role="menuitem" data-act="photos">Fotos oder Scans als Seiten …</button>
+        <button role="menuitem" data-act="secure">Mit Passwort speichern …</button>
         <button role="menuitem" data-act="share" hidden>Teilen …</button>
+        <button role="menuitem" data-act="tolib" id="mToLib" hidden>In die Bibliothek übernehmen</button>
+        <div class="mh">Ansicht</div>
         <button role="menuitem" data-act="fit" class="m-only">Auf Seitenbreite zoomen</button>
-        <hr>
         <button role="menuitem" data-act="read">Lesemodus</button>
         <button role="menuitem" data-act="night" id="mNight">Nachtmodus für Seiten</button>
         <button role="menuitem" data-act="pencil" id="mPencil">Nur Apple Pencil zeichnet</button>
-        <hr>
-        <button role="menuitem" data-act="wm">Wasserzeichen …</button>
-        <button role="menuitem" data-act="pn">Seitenzahlen …</button>
+        <button role="menuitem" data-act="toolbar">Werkzeugleiste anpassen …</button>
+        <div class="mh">Seite</div>
         <button role="menuitem" data-act="bm">Lesezeichen für diese Seite</button>
-        <hr>
         <button role="menuitem" data-act="dup">Seite duplizieren</button>
         <button role="menuitem" data-act="blank">Neue Seite / Notizpapier …</button>
         <button role="menuitem" data-act="rotl" class="m-only">Seite links drehen</button>
         <button role="menuitem" data-act="rotr" class="m-only">Seite rechts drehen</button>
         <button role="menuitem" data-act="extract">Seite(n) als eigene PDF speichern</button>
         <button role="menuitem" data-act="del" class="m-only danger">Seite löschen</button>
-        <hr>
+        <div class="mh">Bearbeiten und Export</div>
+        <button role="menuitem" data-act="wm">Wasserzeichen …</button>
+        <button role="menuitem" data-act="pn">Seitenzahlen …</button>
         <button role="menuitem" data-act="png">Seite als Bild speichern (PNG)</button>
         <button role="menuitem" data-act="txt">Text exportieren (TXT)</button>
-        <hr>
         <button role="menuitem" data-act="calc">Rechner und Graphen</button>
-        <button role="menuitem" data-act="tolib" id="mToLib" hidden>In die Bibliothek übernehmen</button>
+        <hr>
+        <button role="menuitem" data-act="keys">Tastenkürzel und Gesten</button>
         <button role="menuitem" data-act="meta">Dokumenteinstellungen …</button>
       </div>
     </div>
@@ -445,6 +481,7 @@ body.reading .forml .ff{pointer-events:auto}
     <button class="ibtn" data-tool="note" title="Notiz anheften (C)"><i data-i="note"></i></button>
     <span class="vsep"></span>
     <button class="ibtn" id="btnCalc" title="Rechner mit Graphen (Z)" aria-label="Rechner" aria-pressed="false"><i data-i="calc"></i></button>
+    <button class="ibtn tbcfg" id="btnTbCfg" title="Werkzeugleiste anpassen" aria-label="Werkzeugleiste anpassen"><i data-i="sliders"></i></button>
     <span class="grow"></span>
     <div class="pgtools">
     <span class="tlabel">Seiten</span>
@@ -464,6 +501,7 @@ body.reading .forml .ff{pointer-events:auto}
       <button data-k="ball" aria-pressed="false" title="Kugelschreiber: gleichmäßige Linie">Kuli</button>
       <button data-k="marker" aria-pressed="false" title="Textmarker: breit und durchscheinend">Marker</button>
     </div>
+    <div class="favs" data-for="penkind" id="penFavs" role="group" aria-label="Stift-Favoriten"></div>
     <div class="prop" data-for="color" id="swatches"></div>
     <label class="prop" data-for="color" title="Eigene Farbe"><input type="color" id="colorPick" value="#1f4fd8" aria-label="Eigene Farbe"></label>
     <label class="prop" data-for="stroke">Stärke <input type="range" id="strokeIn" min="0.5" max="12" step="0.5"><output id="strokeOut">2 pt</output></label>
@@ -476,6 +514,22 @@ body.reading .forml .ff{pointer-events:auto}
     <label class="prop" data-for="font">Hintergrund
       <select class="field" id="bgSel"><option value="">Ohne</option><option value="#ffffff">Weiß</option><option value="#fff3a8">Gelb</option><option value="#e3e9fb">Hellblau</option><option value="#fde2e0">Rosa</option></select>
     </label>
+    <div class="seg small" data-for="align" id="alignSeg" role="group" aria-label="Ausrichtung">
+      <button data-v="left" aria-pressed="true" title="Linksbündig" aria-label="Linksbündig"><i data-i="aleft"></i></button>
+      <button data-v="center" aria-pressed="false" title="Zentriert" aria-label="Zentriert"><i data-i="acenter"></i></button>
+      <button data-v="right" aria-pressed="false" title="Rechtsbündig" aria-label="Rechtsbündig"><i data-i="aright"></i></button>
+    </div>
+    <span class="prop" data-for="fill">Füllung</span>
+    <div class="seg small" data-for="fill" id="fillSeg" role="group" aria-label="Füllung">
+      <button data-v="" aria-pressed="true" title="Ohne Füllung">Ohne</button>
+      <button data-v="soft" aria-pressed="false" title="Hell gefüllt">Hell</button>
+      <button data-v="solid" aria-pressed="false" title="Voll gefüllt">Voll</button>
+    </div>
+    <div class="seg small" data-for="dash" id="dashSeg" role="group" aria-label="Linienart">
+      <button data-v="" aria-pressed="true" title="Durchgezogen" aria-label="Durchgezogen"><i data-i="lsolid"></i></button>
+      <button data-v="dash" aria-pressed="false" title="Gestrichelt" aria-label="Gestrichelt"><i data-i="ldash"></i></button>
+      <button data-v="dot" aria-pressed="false" title="Gepunktet" aria-label="Gepunktet"><i data-i="ldot"></i></button>
+    </div>
     <label class="prop" data-for="stamp">Stempel <select class="field" id="stampSel"></select></label>
     <label class="chk" data-for="penkind" title="Strich am Ende kurz halten: wird zu Linie, Rechteck oder Ellipse"><input type="checkbox" id="shapeChk" checked> Formen erkennen</label>
     <label class="prop" data-for="scale">Einheit
@@ -527,6 +581,7 @@ body.reading .forml .ff{pointer-events:auto}
 <input type="file" id="fileOpen" accept="application/pdf,.pdf" hidden>
 <input type="file" id="fileMerge" accept="application/pdf,.pdf" multiple hidden>
 <input type="file" id="fileImg" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+<input type="file" id="filePhotos" accept="image/*" multiple hidden>
 
 <section class="calc" id="calc" hidden aria-label="Rechner">
   <header class="calc-h">
@@ -630,6 +685,7 @@ body.reading .forml .ff{pointer-events:auto}
 <script src="js/content-engine.js"></script>
 <script src="js/calc.js"></script>
 <script src="js/palette.js"></script>
+<script src="js/photos.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

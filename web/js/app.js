@@ -8,11 +8,56 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 const LH = 1.2;
 const A4 = [595.28, 841.89];
 
+/* Schriften: die drei PDF-Standardschriften plus mitgelieferte Google Fonts (fonts/*.ttf, Open Font License),
+   die beim Speichern als Teilmenge in die PDF eingebettet werden. bl = Grundlinie bei Zeilenhöhe 1,2 */
 const FONTS = {
-  Helvetica: { css: 'Helvetica, Arial, "Liberation Sans", sans-serif', bl: 0.947, std: ['Helvetica', 'HelveticaBold'] },
-  Times: { css: '"Times New Roman", Times, "Liberation Serif", serif', bl: 0.937, std: ['TimesRoman', 'TimesRomanBold'] },
-  Courier: { css: '"Courier New", Courier, "Liberation Mono", monospace', bl: 0.866, std: ['Courier', 'CourierBold'] },
+  Helvetica: { css: 'Helvetica, Arial, "Liberation Sans", sans-serif', bl: 0.947, std: ['Helvetica', 'HelveticaBold'], g: 'Standard' },
+  Times: { css: '"Times New Roman", Times, "Liberation Serif", serif', bl: 0.937, std: ['TimesRoman', 'TimesRomanBold'], g: 'Standard' },
+  Courier: { css: '"Courier New", Courier, "Liberation Mono", monospace', bl: 0.866, std: ['Courier', 'CourierBold'], g: 'Standard' },
 };
+[['Roboto', 'Roboto', 0.942, 'Serifenlos'], ['OpenSans', 'Open Sans', 0.988, 'Serifenlos'], ['Inter', 'Inter', 0.964, 'Serifenlos'], ['Montserrat', 'Montserrat', 0.959, 'Serifenlos'], ['Nunito', 'Nunito', 0.929, 'Serifenlos'],
+  ['Merriweather', 'Merriweather', 0.955, 'Serif'], ['Lora', 'Lora', 0.966, 'Serif'], ['PlayfairDisplay', 'Playfair Display', 1.015, 'Serif'],
+  ['JetBrainsMono', 'JetBrains Mono', 0.96, 'Schreibmaschine'],
+  ['Caveat', 'Caveat', 0.93, 'Handschrift'], ['DancingScript', 'Dancing Script', 0.92, 'Handschrift'], ['PatrickHand', 'Patrick Hand', 0.965, 'Handschrift', true], ['PermanentMarker', 'Permanent Marker', 0.996, 'Handschrift', true],
+].forEach(([key, label, bl, g, noBold]) => { FONTS[key] = { css: `"WB ${label}", "${label}", ${g === 'Serif' ? 'serif' : g === 'Handschrift' ? 'cursive' : g === 'Schreibmaschine' ? 'monospace' : 'sans-serif'}`, family: 'WB ' + label, label, bl, file: key, noBold: !!noBold, g }; });
+const FONT = name => FONTS[name] || FONTS.Helvetica;
+const fw = a => (a.bold && !FONT(a.font).noBold ? 700 : 400);
+/* eigene Schrift fürs Anzeigen laden, danach neu messen und zeichnen */
+const fontLoads = new Map();
+function ensureFont(name, bold) {
+  const f = FONTS[name]; if (!f || !f.file || !document.fonts) return Promise.resolve(true);
+  const k = name + (bold && !f.noBold ? 'b' : '');
+  if (!fontLoads.has(k)) fontLoads.set(k, document.fonts.load(`${bold && !f.noBold ? 700 : 400} 16px "${f.family}"`).then(r => r.length > 0).catch(() => false));
+  return fontLoads.get(k);
+}
+async function ensureFontsOf(pages) {
+  const need = new Set();
+  for (const p of pages) for (const a of p.annots) if (a.t === 'text' && FONT(a.font) && FONT(a.font).file) need.add(a.font + '|' + (a.bold ? 1 : 0));
+  if (!need.size) return;
+  await Promise.all([...need].map(k => { const [n, b] = k.split('|'); return ensureFont(n, b === '1'); }));
+  for (const p of pages) if (p.annots.some(a => a.t === 'text' && FONT(a.font) && FONT(a.font).file)) drawAnnots(p);
+}
+/* fontkit (zum Einbetten eigener Schriften) erst laden, wenn er gebraucht wird */
+let fontkitP = null;
+function loadFontkit() {
+  if (window.fontkit) return Promise.resolve(window.fontkit);
+  if (!fontkitP) fontkitP = new Promise((res, rej) => {
+    const urls = ['js/vendor/fontkit.umd.min.js', 'https://cdn.jsdelivr.net/npm/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js'];
+    const next = () => {
+      const u = urls.shift(); if (!u) { fontkitP = null; rej(new Error('Schrift-Modul konnte nicht geladen werden (offline?).')); return; }
+      const sc = document.createElement('script'); sc.src = u; sc.onload = () => (window.fontkit ? res(window.fontkit) : next()); sc.onerror = () => { sc.remove(); next(); };
+      document.head.appendChild(sc);
+    };
+    next();
+  });
+  return fontkitP;
+}
+const fontBytes = new Map();
+function fontFile(name, bold) {
+  const f = FONT(name), file = `fonts/${f.file}-${bold && !f.noBold ? 'Bold' : 'Regular'}.ttf`;
+  if (!fontBytes.has(file)) fontBytes.set(file, fetch(file).then(r => { if (!r.ok) throw new Error('Schrift fehlt: ' + file); return r.arrayBuffer(); }).catch(e => { fontBytes.delete(file); throw e; }));
+  return fontBytes.get(file);
+}
 
 const ICONS = {
   open: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
@@ -74,10 +119,13 @@ const ICONS = {
   pages: 'M7 3h10v7H7zM7 14h10v7H7z',
   bookmark: 'M7 3h10v18l-5-4-5 4z',
   pencil: 'M4 20l3-1 12-12-2-2L5 17zM15 5l2-2 2 2-2 2',
+  sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
+  aleft: 'M4 6h16M4 10h10M4 14h16M4 18h10', acenter: 'M4 6h16M7 10h10M4 14h16M7 18h10', aright: 'M4 6h16M10 10h10M4 14h16M10 18h10',
+  lsolid: 'M3 12h18', ldash: 'M3 12h4M10 12h4M17 12h4', ldot: 'M4 12h.01M8 12h.01M12 12h.01M16 12h.01M20 12h.01',
 };
 
 const TOOL_NAMES = { laser: 'Laserpointer', mark: 'Textmarkierung', select: 'Auswählen', objects: 'Inhalte', text: 'Text', edittext: 'Text ändern', pen: 'Stift', eraser: 'Radierer', hl: 'Markieren', ul: 'Unterstreichen', so: 'Durchstreichen', rect: 'Rechteck', ellipse: 'Ellipse', line: 'Linie', arrow: 'Pfeil', measure: 'Messen', white: 'Abdecken', redact: 'Schwärzen', check: 'Haken', cross: 'Kreuz', img: 'Bild', stamp: 'Stempel', note: 'Notiz', wm: 'Wasserzeichen' };
-const PROPS_OF = { multi: ['color'], mark: ['color', 'opacity'], text: ['color', 'font'], pen: ['penkind', 'color', 'stroke', 'opacity'], eraser: ['esize'], hl: ['color', 'opacity'], ul: ['color'], so: ['color'], rect: ['color', 'stroke'], ellipse: ['color', 'stroke'], line: ['color', 'stroke'], arrow: ['color', 'stroke'], measure: ['color', 'scale'], check: ['color', 'stroke'], cross: ['color', 'stroke'], white: [], redact: [], img: [], stamp: ['color', 'stamp'], note: ['color'], wm: ['color', 'opacity'] };
+const PROPS_OF = { multi: ['color'], mark: ['color', 'opacity'], text: ['color', 'font', 'align'], pen: ['penkind', 'color', 'stroke', 'opacity'], eraser: ['esize'], hl: ['color', 'opacity'], ul: ['color'], so: ['color'], rect: ['color', 'stroke', 'fill', 'dash'], ellipse: ['color', 'stroke', 'fill', 'dash'], line: ['color', 'stroke', 'dash'], arrow: ['color', 'stroke', 'dash'], measure: ['color', 'scale'], check: ['color', 'stroke'], cross: ['color', 'stroke'], white: [], redact: [], img: [], stamp: ['color', 'stamp'], note: ['color'], wm: ['color', 'opacity'] };
 const DRAW_TOOLS = new Set(['laser', 'pen', 'eraser', 'hl', 'ul', 'so', 'rect', 'ellipse', 'line', 'arrow', 'measure', 'white', 'redact', 'check', 'cross', 'objects']);
 const SNAP_TOOLS = new Set(['hl', 'ul', 'so']);
 const KEYS = { j: 'laser', v: 'select', m: 'objects', t: 'text', e: 'edittext', p: 'pen', g: 'eraser', h: 'hl', n: 'ul', d: 'so', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', q: 'measure', w: 'white', b: 'redact', k: 'check', x: 'cross', s: 'stamp', c: 'note' };
@@ -111,13 +159,13 @@ const TOUCH_HINT = 'Zwei Finger scrollen und zoomen · zwei Finger tippen = rüc
 if (COARSE) for (const k of ['pen', 'eraser', 'rect', 'ellipse', 'line', 'arrow', 'measure', 'white', 'redact', 'check', 'cross', 'objects']) HINTS[k] = (HINTS[k] ? HINTS[k] + ' · ' : '') + TOUCH_HINT;
 
 const TP = {
-  text: { color: '#1b2130', size: 12, font: 'Helvetica', bold: false, bg: '' },
+  text: { color: '#1b2130', size: 12, font: 'Helvetica', bold: false, bg: '', align: 'left' },
   pen: { kind: 'fount', color: '#1b2a6b', sw: 2, op: 100, shapes: true },
   eraser: { size: 12 },
   measure: { color: '#d0342c', sw: 1, scale: 1, unit: 'mm' },
   hl: { color: '#ffd400', op: 40 },
-  rect: { color: '#d0342c', sw: 2 }, ellipse: { color: '#d0342c', sw: 2 },
-  line: { color: '#1b2130', sw: 2 }, arrow: { color: '#d0342c', sw: 2 },
+  rect: { color: '#d0342c', sw: 2, fill: '', dash: '' }, ellipse: { color: '#d0342c', sw: 2, fill: '', dash: '' },
+  line: { color: '#1b2130', sw: 2, dash: '' }, arrow: { color: '#d0342c', sw: 2, dash: '' },
   check: { color: '#1b2130', sw: 2 }, cross: { color: '#1b2130', sw: 2 },
   ul: { color: '#1f4fd8' }, so: { color: '#d0342c' },
   stamp: { color: '#1e8a4c', text: 'GENEHMIGT' }, note: { color: '#ffd400' },
@@ -188,8 +236,18 @@ function setMsg(msg, spin) { $('#stMsg').innerHTML = (spin ? '<span class="spin"
 function busy(on, msg) { S.busy = on; $('#btnSave').disabled = on; setMsg(on ? msg : '', on); document.body.style.cursor = on ? 'progress' : ''; }
 
 const mctx = document.createElement('canvas').getContext('2d');
-function measure(str, a) { mctx.font = `${a.bold ? 700 : 400} ${a.size}px ${FONTS[a.font].css}`; return mctx.measureText(str).width; }
+function measure(str, a) { mctx.font = `${fw(a)} ${a.size}px ${FONT(a.font).css}`; return mctx.measureText(str).width; }
 function textWidth(a) { return Math.max(4, ...a.text.split('\n').map(l => measure(l || ' ', a))); }
+/* Textausrichtung: linker Rand je Zeile innerhalb der Textbox */
+function lineX(a, ln, W) {
+  if (!a.align || a.align === 'left') return a.x;
+  const w = measure(ln || ' ', a);
+  W = W == null ? textWidth(a) : W;
+  return a.x + (a.align === 'center' ? (W - w) / 2 : W - w);
+}
+/* Linienstil und Füllung für Formen */
+const dashOf = a => (a.dash === 'dash' ? [a.sw * 3, a.sw * 2] : a.dash === 'dot' ? [0.01, a.sw * 2] : null);
+const FILL_OP = { soft: 0.22, solid: 1 };
 const NOTE = 20;
 function stampGeom(a) {
   const tw = measure(a.text, { bold: true, size: a.size, font: 'Helvetica' });
@@ -339,15 +397,23 @@ function annotSVG(a) {
       : `<path d="${dOf(q.d)}" fill="none" stroke="${c}" stroke-width="${r2(q.w)}" stroke-linecap="butt"/>`).join('');
     case 'hl': return `<path d="${dOf(segs(a))}" fill="${c}" fill-opacity="${a.op / 100}"/>`;
     case 'white': return `<path d="${dOf(segs(a))}" fill="#ffffff"/>`;
-    case 'rect': case 'ellipse': return `<path d="${dOf(segs(a))}" fill="none" stroke="${c}" stroke-width="${a.sw}"/>`;
-    case 'line': case 'arrow': case 'check': case 'cross':
+    case 'rect': case 'ellipse': {
+      const da = dashOf(a), fo = FILL_OP[a.fill];
+      return `<path d="${dOf(segs(a))}" fill="${fo ? c : 'none'}"${fo ? ` fill-opacity="${fo}"` : ''} stroke="${c}" stroke-width="${a.sw}"${da ? ` stroke-dasharray="${da.map(r2).join(' ')}"${a.dash === 'dot' ? ' stroke-linecap="round"' : ''}` : ''}/>`;
+    }
+    case 'line': case 'arrow': {
+      const da = dashOf(a);
+      if (da && a.t === 'arrow') { const sg = segs(a); return `<path d="${dOf(sg.slice(0, 2))}" fill="none" stroke="${c}" stroke-width="${a.sw}" stroke-linecap="round" stroke-dasharray="${da.map(r2).join(' ')}"/><path d="${dOf(sg.slice(2))}" fill="none" stroke="${c}" stroke-width="${a.sw}" stroke-linecap="round" stroke-linejoin="round"/>`; }
+      return `<path d="${dOf(segs(a))}" fill="none" stroke="${c}" stroke-width="${a.sw}" stroke-linecap="round" stroke-linejoin="round"${da ? ` stroke-dasharray="${da.map(r2).join(' ')}"` : ''}/>`;
+    }
+    case 'check': case 'cross':
       return `<path d="${dOf(segs(a))}" fill="none" stroke="${c}" stroke-width="${a.sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
     case 'text': {
-      const f = FONTS[a.font];
-      const lines = a.text.split('\n');
+      const f = FONT(a.font);
+      const lines = a.text.split('\n'), W = a.align && a.align !== 'left' ? textWidth(a) : 0;
       const bgr = a.bg ? (() => { const b = bbox(a), pd = a.size * 0.18; return `<rect x="${r2(b.x - pd)}" y="${r2(b.y - pd * 0.4)}" width="${r2(b.w + 2 * pd)}" height="${r2(b.h + pd * 0.8)}" fill="${a.bg}"/>`; })() : '';
-      return bgr + `<text font-family='${f.css}' font-size="${a.size}" font-weight="${a.bold ? 700 : 400}" fill="${c}" xml:space="preserve">` +
-        lines.map((ln, i) => `<tspan x="${r2(a.x)}" y="${r2(a.y + f.bl * a.size + i * LH * a.size)}">${esc(ln) || ' '}</tspan>`).join('') + '</text>';
+      return bgr + `<text font-family='${f.css}' font-size="${a.size}" font-weight="${fw(a)}" fill="${c}" xml:space="preserve">` +
+        lines.map((ln, i) => `<tspan x="${r2(lineX(a, ln, W))}" y="${r2(a.y + f.bl * a.size + i * LH * a.size)}">${esc(ln) || ' '}</tspan>`).join('') + '</text>';
     }
     case 'stamp': {
       const g = stampGeom(a);
@@ -824,7 +890,7 @@ function editContentText(p, it) {
     const w = Math.max(it.box.w, measure(ta.value || ' ', { bold: fg.bold, size, font: fg.name }) + size);
     ta.style.width = (w + 6) * z + 'px';
   };
-  Object.assign(ta.style, { left: (it.box.x - 3) * z + 'px', top: it.box.y * z + 'px', height: it.box.h * z + 'px', font: `${fg.bold ? 700 : 400} ${size * z}px/${it.box.h / size} ${FONTS[fg.name].css}`, paddingLeft: 3 * z + 'px' });
+  Object.assign(ta.style, { left: (it.box.x - 3) * z + 'px', top: it.box.y * z + 'px', height: it.box.h * z + 'px', font: `${fg.bold ? 700 : 400} ${size * z}px/${it.box.h / size} ${FONT(fg.name).css}`, paddingLeft: 3 * z + 'px' });
   fit();
   el.wrap.append(ta);
   S.cedit = { p, it, ta };
@@ -862,7 +928,7 @@ function commitCEdit() {
     const fg = fontGuess(p, it), vp = proxyOf(p).getViewport({ scale: 1, rotation: rotOf(p) });
     const [bx, by] = vp.convertToViewportPoint(it.base[0], it.base[1]);
     const size = Math.max(4, Math.round(it.fs * 2) / 2);
-    p.annots.push({ id: uid(), t: 'text', x: bx, y: by - FONTS[fg.name].bl * size, text: txt, color: toHex(it.fill), size, font: fg.name, bold: fg.bold });
+    p.annots.push({ id: uid(), t: 'text', x: bx, y: by - FONT(fg.name).bl * size, text: txt, color: toHex(it.fill), size, font: fg.name, bold: fg.bold });
   }
   p.ce = ce;
   applyCE(p).then(() => {
@@ -960,6 +1026,7 @@ function buildViewer() {
   });
   S.cur = clamp(S.cur, 0, S.pages.length - 1);
   buildThumbs(); updateStatus(); renderProps(); updateSideLater();
+  ensureFontsOf(S.pages);
 }
 async function renderPage(p) {
   const e = els.get(p.id); if (!e) return;
@@ -1101,6 +1168,7 @@ function setCurrent(i, fromScroll) {
   S.cur = i;
   if (fromScroll && S.selPages.size <= 1) S.selPages.clear();
   markThumbSel(); updateStatus();
+  if (changed) rememberPos();
   if (changed && fromScroll) { const e = tels.get(S.pages[i].id); if (e && !work.classList.contains('nothumbs')) e.t.scrollIntoView({ block: 'nearest' }); }
 }
 function scrollToPage(i) {
@@ -1139,13 +1207,22 @@ function updateStatus() {
 }
 function fitZoom() {
   const maxW = Math.max(...S.pages.map(p => dims(p)[0]), 100);
-  return clamp((viewer.clientWidth - (innerWidth <= 760 ? 24 : 48)) / maxW, 0.25, 5);
+  return clamp((viewer.clientWidth - (innerWidth <= 760 ? 24 : 48)) / maxW, 0.25, ZMAX);
 }
-function initialZoom() { return clamp(Math.min(fitZoom(), 1.25), 0.3, 1.25); }
+/* Startzoom: auf Tablets und Handys immer Seitenbreite, am Rechner höchstens 125 % */
+function initialZoom() {
+  const f = fitZoom();
+  if (COARSE) { S.fitMode = true; return clamp(f, 0.3, 3); }
+  S.fitMode = f <= 1.25;
+  return clamp(Math.min(f, 1.25), 0.3, 1.25);
+}
+const ZMAX = 6;
 let zoomT;
-function setZoom(z, anchor) {
+function setZoom(z, anchor, fit) {
   commitEdit();
-  z = clamp(z, 0.25, 5);
+  if (S.live) { S.live = null; pagesEl.style.transform = ''; pagesEl.style.transformOrigin = ''; pagesEl.classList.remove('live'); }
+  S.fitMode = !!fit;
+  z = clamp(z, 0.25, ZMAX);
   if (Math.abs(z - S.zoom) < 0.001) return;
   const vr = viewer.getBoundingClientRect();
   const cx = vr.left + (anchor ? anchor.x : vr.width / 2), cy = vr.top + (anchor ? anchor.y : vr.height * 0.35);
@@ -1161,25 +1238,73 @@ function setZoom(z, anchor) {
     viewer.scrollTop += (r.top + ry * r.height) - cy;
     viewer.scrollLeft += (r.left + rx * r.width) - cx;
   }
-  if (S.sel) drawAnnots(pageById(S.sel.pid));
+  if (S.sel || S.msel) drawAnnots(pageById((S.sel || S.msel).pid));
   updateStatus();
   clearTimeout(zoomT); zoomT = setTimeout(renderVisible, 140);
 }
-const ZSTEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
-const zoomStep = d => setZoom(d > 0 ? (ZSTEPS.find(s => s > S.zoom + 0.01) || 5) : ([...ZSTEPS].reverse().find(s => s < S.zoom - 0.01) || 0.25));
+const fitWidth = () => setZoom(fitZoom(), null, true);
+/* Flüssiges Zoomen: während der Geste nur per GPU skalieren (CSS-Transform), erst am Ende neu setzen und rendern */
+function liveStart(cx, cy) {
+  const r = pagesEl.getBoundingClientRect();
+  S.live = { z0: S.zoom, z: S.zoom, ox: cx, oy: cy, cx, cy };
+  pagesEl.style.transformOrigin = `${cx - r.left}px ${cy - r.top}px`;
+  pagesEl.classList.add('live');
+}
+function liveMove(z, cx, cy) {
+  const L = S.live; if (!L) return;
+  L.z = clamp(z, 0.25, ZMAX); L.cx = cx; L.cy = cy;
+  pagesEl.style.transform = `translate(${cx - L.ox}px, ${cy - L.oy}px) scale(${L.z / L.z0})`;
+  $('#zoomLbl').textContent = Math.round(L.z * 100) + ' %';
+}
+function liveEnd() {
+  const L = S.live; if (!L) return;
+  S.live = null;
+  pagesEl.style.transform = ''; pagesEl.style.transformOrigin = ''; pagesEl.classList.remove('live');
+  const vr = viewer.getBoundingClientRect();
+  // auf Seitenbreite einrasten, wenn knapp daneben
+  const f = fitZoom(), snapFit = Math.abs(L.z / f - 1) < 0.06;
+  setZoom(snapFit ? f : L.z, { x: L.ox - vr.left, y: L.oy - vr.top }, snapFit);
+  viewer.scrollLeft -= L.cx - L.ox; viewer.scrollTop -= L.cy - L.oy;
+  updateStatus();
+}
+const ZSTEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5, 6];
+const zoomStep = d => setZoom(d > 0 ? (ZSTEPS.find(s => s > S.zoom + 0.01) || ZMAX) : ([...ZSTEPS].reverse().find(s => s < S.zoom - 0.01) || 0.25));
+/* Strg/⌘ + Mausrad bzw. Trackpad-Pinch: live skalieren, nach kurzer Pause festschreiben */
+let wheelT = 0;
 viewer.addEventListener('wheel', e => {
   if (!(e.ctrlKey || e.metaKey)) return;
   e.preventDefault();
-  const vr = viewer.getBoundingClientRect();
-  setZoom(S.zoom * Math.exp(-e.deltaY * 0.0022), { x: e.clientX - vr.left, y: e.clientY - vr.top });
+  if (!S.live) liveStart(e.clientX, e.clientY);
+  liveMove(S.live.z * Math.exp(-e.deltaY * 0.0022), e.clientX, e.clientY);
+  clearTimeout(wheelT); wheelT = setTimeout(liveEnd, 160);
 }, { passive: false });
+// Safari am Mac: Trackpad-Pinch kommt als Gesture-Event (auf iPad übernehmen das die Touch-Events)
+if (!window.TouchEvent) {
+  let g0 = 1;
+  document.addEventListener('gesturestart', e => { if (!viewer.contains(e.target)) return; e.preventDefault(); liveStart(e.clientX, e.clientY); g0 = S.zoom; }, { passive: false });
+  document.addEventListener('gesturechange', e => { if (!S.live) return; e.preventDefault(); liveMove(g0 * e.scale, e.clientX, e.clientY); }, { passive: false });
+  document.addEventListener('gestureend', e => { if (!S.live) return; e.preventDefault(); liveEnd(); }, { passive: false });
+}
+/* Seitenbreite bleibt beim Drehen des Tablets oder Ändern der Fenstergröße erhalten */
+let fitRO = 0;
+new ResizeObserver(() => { clearTimeout(fitRO); fitRO = setTimeout(() => { if (S.fitMode && S.pages.length && !S.live) setZoom(fitZoom(), null, true); }, 120); }).observe(viewer);
 
 /* Touch: zwei Finger zoomen und verschieben, ein Finger zieht ausgewählte Elemente.
    Der Apple Pencil (touchType „stylus“) zählt nicht als Finger und scrollt nie. */
 const tdist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
 const tmid = (a, b) => ({ x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 });
 const fingers = list => Array.from(list).filter(t => t.touchType !== 'stylus');
-let tap = null;
+let tap = null, lastTap = null;
+/* Doppeltipp mit einem Finger: zwischen Seitenbreite und Vergrößerung wechseln (nur wo der Finger nicht zeichnet) */
+function fingerIsFree(target) {
+  if (target && target.closest && target.closest('.hbl div, .forml, textarea, .cmk')) return false;
+  return S.reading || S.tool === 'select' || S.tool === 'laser' || (S.pencil.only && PENCIL_TOOLS.has(S.tool));
+}
+function doubleTapZoom(x, y) {
+  const vr = viewer.getBoundingClientRect(), f = fitZoom();
+  if (S.zoom > f * 1.15) setZoom(f, { x: x - vr.left, y: y - vr.top }, true);
+  else setZoom(Math.min(ZMAX, Math.max(f * 2, 1.5)), { x: x - vr.left, y: y - vr.top });
+}
 viewer.addEventListener('touchstart', e => {
   const stylus = Array.from(e.changedTouches).some(t => t.touchType === 'stylus');
   if (stylus) {
@@ -1190,15 +1315,16 @@ viewer.addEventListener('touchstart', e => {
   }
   const f = fingers(e.touches), now = performance.now();
   // Mehrfinger-Tippen erkennen: zwei Finger = rückgängig, drei = wiederholen
-  if (!tap || f.length === 1) tap = { t0: now, n: f.length, start: new Map(), moved: false, z0: S.zoom };
+  if (!tap || f.length === 1) tap = { t0: now, n: f.length, start: new Map(), moved: false, z0: S.zoom, target: e.target };
   tap.n = Math.max(tap.n, f.length);
   for (const t of e.changedTouches) tap.start.set(t.identifier, [t.clientX, t.clientY]);
   if (f.length === 2) {
     e.preventDefault();
     if (!(drag && drag.ptype === 'pen')) cancelDrag();
     commitEdit();
-    const [a, b] = f;
-    S.pinch = { d0: Math.max(10, tdist(a, b)), z0: S.zoom, mid: tmid(a, b) };
+    const [a, b] = f, m = tmid(a, b);
+    S.pinch = { d0: Math.max(10, tdist(a, b)) };
+    liveStart(m.x, m.y);
   } else if (f.length > 2) e.preventDefault();
 }, { passive: false });
 viewer.addEventListener('touchmove', e => {
@@ -1207,12 +1333,10 @@ viewer.addEventListener('touchmove', e => {
     if (s && Math.hypot(t.clientX - s[0], t.clientY - s[1]) > 12) tap.moved = true;
   }
   const f = fingers(e.touches);
-  if (S.pinch && f.length === 2) {
+  if (S.pinch && f.length === 2 && S.live) {
     e.preventDefault();
-    const [a, b] = f, m = tmid(a, b), vr = viewer.getBoundingClientRect();
-    setZoom(S.pinch.z0 * tdist(a, b) / S.pinch.d0, { x: m.x - vr.left, y: m.y - vr.top });
-    viewer.scrollLeft -= m.x - S.pinch.mid.x; viewer.scrollTop -= m.y - S.pinch.mid.y;
-    S.pinch.mid = m;
+    const [a, b] = f, m = tmid(a, b);
+    liveMove(S.live.z0 * tdist(a, b) / S.pinch.d0, m.x, m.y);
     return;
   }
   if (Array.from(e.touches).some(t => t.touchType === 'stylus') && e.cancelable) { e.preventDefault(); return; }
@@ -1220,19 +1344,27 @@ viewer.addEventListener('touchmove', e => {
 }, { passive: false });
 const endPinch = e => {
   const f = fingers(e.touches);
-  if (f.length < 2 && S.pinch) { S.pinch = null; clearTimeout(zoomT); zoomT = setTimeout(renderVisible, 60); }
+  if (f.length < 2 && S.pinch) { S.pinch = null; liveEnd(); }
   if (tap && f.length === 0) {
     const t = tap; tap = null;
-    if (e.type === 'touchend' && !t.moved && performance.now() - t.t0 < 350 && Math.abs(S.zoom / t.z0 - 1) < 0.03) {
+    const quick = e.type === 'touchend' && !t.moved && performance.now() - t.t0 < 350 && Math.abs(S.zoom / t.z0 - 1) < 0.03;
+    if (quick) {
       if (t.n === 2) { undo(); setMsg('Rückgängig (zwei Finger)'); }
       else if (t.n === 3) { redo(); setMsg('Wiederholt (drei Finger)'); }
+      else if (t.n === 1) {
+        const pt = [...t.start.values()][0], now = performance.now();
+        if (lastTap && now - lastTap.t < 320 && Math.hypot(pt[0] - lastTap.x, pt[1] - lastTap.y) < 40 && fingerIsFree(t.target)) {
+          lastTap = null; if (e.cancelable) e.preventDefault(); doubleTapZoom(pt[0], pt[1]);
+        } else lastTap = { t: now, x: pt[0], y: pt[1] };
+      }
     }
+    if (!quick || t.n !== 1) lastTap = null;
   }
 };
 viewer.addEventListener('touchend', endPinch);
 viewer.addEventListener('touchcancel', endPinch);
 // Safari: Seiten-Zoom des Browsers unterdrücken, die App zoomt selbst
-for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+if (window.TouchEvent) for (const ev of ['gesturestart', 'gesturechange']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
 
 /* ---------- Auswahl, Werkzeuge, Eigenschaften ---------- */
 function selAnnot() {
@@ -1324,7 +1456,12 @@ function renderProps() {
   if ('op' in o) { $('#opIn').value = o.op; $('#opOut').textContent = o.op + ' %'; }
   if (type === 'stamp') $('#stampSel').value = STAMPS.some(s => s[0] === o.text) ? o.text : (o.text === today() ? '{datum}' : '');
   if ('font' in o) $('#bgSel').value = o.bg || '';
-  if ('font' in o) { $('#fontSel').value = o.font; if (document.activeElement !== $('#sizeIn')) $('#sizeIn').value = o.size; $('#boldBtn').setAttribute('aria-pressed', String(!!o.bold)); }
+  if ('font' in o) { $('#fontSel').value = FONTS[o.font] ? o.font : 'Helvetica'; if (document.activeElement !== $('#sizeIn')) $('#sizeIn').value = o.size; $('#boldBtn').setAttribute('aria-pressed', String(!!o.bold)); $('#boldBtn').disabled = !!FONT(o.font).noBold; }
+  const seg = (sel, v) => $$(sel + ' button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === (v || ''))));
+  if (show.has('align')) seg('#alignSeg', o.align || 'left');
+  if (show.has('fill')) seg('#fillSeg', o.fill);
+  if (show.has('dash')) seg('#dashSeg', o.dash);
+  if (type === 'pen') renderPenFavs(o);
 }
 function setProp(k, v, continuous) {
   const tg = propTarget(); if (!tg) return;
@@ -1674,12 +1811,12 @@ pagesEl.addEventListener('pointerdown', e => {
   const tp = TP[t] || {};
   let a;
   if (t === 'pen') a = { id: uid(), t, kind: tp.kind, pts: [[r2(pt[0]), r2(pt[1]), r2(pressureOf(e))]], color: tp.color, sw: tp.sw, op: tp.op };
-  else if (t === 'line' || t === 'arrow') a = { id: uid(), t, x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], color: tp.color, sw: tp.sw };
+  else if (t === 'line' || t === 'arrow') a = { id: uid(), t, x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], color: tp.color, sw: tp.sw, ...(tp.dash ? { dash: tp.dash } : {}) };
   else if (t === 'measure') a = { id: uid(), t, x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], color: tp.color, sw: tp.sw, scale: tp.scale, unit: tp.unit };
   else if (t === 'ul' || t === 'so') a = { id: uid(), t: 'line', x1: pt[0], y1: pt[1], x2: pt[0], y2: pt[1], color: tp.color, sw: 1.5 };
   else if (t === 'hl') a = { id: uid(), t, x: pt[0], y: pt[1], w: 0, h: 0, color: tp.color, op: tp.op };
   else if (t === 'white' || t === 'redact') a = { id: uid(), t, x: pt[0], y: pt[1], w: 0, h: 0 };
-  else a = { id: uid(), t, x: pt[0], y: pt[1], w: 0, h: 0, color: tp.color, sw: tp.sw };
+  else a = { id: uid(), t, x: pt[0], y: pt[1], w: 0, h: 0, color: tp.color, sw: tp.sw, ...(tp.fill ? { fill: tp.fill } : {}), ...(tp.dash ? { dash: tp.dash } : {}) };
   drag = { mode: 'draw', p, pointerId: e.pointerId, a, start: pt, tool: t, horiz: t === 'ul' || t === 'so', ptype: e.pointerType };
   if (SNAP_TOOLS.has(t)) analysisOf(p).catch(() => {});
   if (t === 'redact') analysisOf(p).catch(() => {});
@@ -2204,11 +2341,11 @@ function editText(p, a, isNew, before, extra) {
 }
 function styleTA() {
   const ed = S.editing; if (!ed) return;
-  const { a, ta } = ed, z = S.zoom, f = FONTS[a.font];
+  const { a, ta } = ed, z = S.zoom, f = FONT(a.font);
   const lines = (ta.value || ' ').split('\n');
   ta.style.left = a.x * z + 'px'; ta.style.top = a.y * z + 'px';
-  ta.style.font = `${a.bold ? 700 : 400} ${a.size * z}px/${LH} ${f.css}`;
-  ta.style.color = a.color;
+  ta.style.font = `${fw(a)} ${a.size * z}px/${LH} ${f.css}`;
+  ta.style.color = a.color; ta.style.textAlign = a.align || 'left';
   ta.style.width = (Math.max(...lines.map(l => measure(l || ' ', a))) + a.size) * z + 'px';
   ta.style.height = lines.length * LH * a.size * z + 'px';
 }
@@ -2269,7 +2406,7 @@ async function replaceTextAt(p, pt) {
   const font = famRaw.includes('mono') ? 'Courier' : famRaw.includes('serif') && !famRaw.includes('sans') ? 'Times' : 'Helvetica';
   const size = Math.max(4, Math.round(g.fh * 2) / 2);
   p.annots.push({ id: uid(), t: 'white', x: g.x - 1, y: g.y - 1, w: g.w + 2, h: g.h + 2 });
-  const a = { id: uid(), t: 'text', x: g.x, y: g.y + 0.92 * g.fh - FONTS[font].bl * size, text: best.it.str, color: '#000000', size, font, bold: /bold|black|heavy/i.test(best.it.fontName + famRaw) };
+  const a = { id: uid(), t: 'text', x: g.x, y: g.y + 0.92 * g.fh - FONT(font).bl * size, text: best.it.str, color: '#000000', size, font, bold: /bold|black|heavy/i.test(best.it.fontName + famRaw) };
   editText(p, a, true, before, true);
   if (S.editing) S.editing.ta.select();
 }
@@ -2551,7 +2688,8 @@ function ask(title, text, yes = 'Verwerfen', no = 'Abbrechen', danger = true) {
 /* ---------- Dialoge und Menü ---------- */
 function dialog(title, html, okLabel, onOk) {
   commitEdit(); closeMenu();
-  $('#dlgTitle').textContent = title; $('#dlgBody').innerHTML = html; $('#dlgOk').textContent = okLabel;
+  $('#dlgTitle').textContent = title; $('#dlgBody').innerHTML = html; $('#dlgOk').textContent = okLabel; $('#dlgCancel').hidden = false;
+  $('#dlgBody').onclick = $('#dlgBody').onchange = null;
   const m = $('#dlg'); m.hidden = false;
   const first = $('input:not([type=checkbox]):not([type=color]),select', $('#dlgBody'));
   if (first && !COARSE) setTimeout(() => first.focus(), 30);
@@ -3060,7 +3198,7 @@ function setReading(on) {
     const el = document.documentElement, r = el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen ? el.webkitRequestFullscreen() : null;
     if (r && r.catch) r.catch(() => {});
   } else if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
-  setTimeout(() => setZoom(fitZoom()), 60);
+  setTimeout(fitWidth, 60);
   updateStatus();
 }
 function setNight(on) {
@@ -3235,17 +3373,31 @@ async function exportAnnot(out, pg, a, T, R, getFont) {
     }
     case 'rect': case 'ellipse':
       subtype = a.t === 'rect' ? 'Square' : 'Circle'; extra.BS = { W: a.sw };
-      ops = `${n(a.sw)} w ` + rgbOp('RG') + ' ' + pathOps(segs(a)) + ' S';
+      {
+        const da = dashOf(a), fo = FILL_OP[a.fill];
+        if (da) { extra.BS = { W: a.sw, S: PDFName.of('D'), D: da.map(n) }; }
+        const dop = da ? `[${da.map(n).join(' ')}] 0 d ${a.dash === 'dot' ? '1 J ' : ''}` : '';
+        if (fo) {
+          extra.IC = C;
+          ops = rgbOp('rg') + ' ' + pathOps(segs(a)) + ' f ';
+          if (fo < 1) { res.ExtGState = { G0: { Type: 'ExtGState', ca: fo }, G1: { Type: 'ExtGState', ca: 1 } }; ops = '/G0 gs ' + ops + '/G1 gs '; }
+        }
+        ops += `${n(a.sw)} w ${dop}` + rgbOp('RG') + ' ' + pathOps(segs(a)) + ' S';
+      }
       break;
     case 'line': case 'arrow':
       subtype = 'Line'; extra.L = [...T(a.x1, a.y1), ...T(a.x2, a.y2)].map(n); extra.BS = { W: a.sw };
       if (a.t === 'arrow') extra.LE = [PDFName.of('None'), PDFName.of('OpenArrow')];
-      ops = `${n(a.sw)} w 1 J 1 j ` + rgbOp('RG') + ' ' + pathOps(segs(a)) + ' S';
+      {
+        const da = dashOf(a), sg = segs(a);
+        if (da) { extra.BS = { W: a.sw, S: PDFName.of('D'), D: da.map(n) }; ops = `${n(a.sw)} w 1 J 1 j [${da.map(n).join(' ')}] 0 d ` + rgbOp('RG') + ' ' + pathOps(sg.slice(0, 2)) + ' S' + (sg.length > 2 ? ' [] 0 d ' + pathOps(sg.slice(2)) + ' S' : ''); }
+        else ops = `${n(a.sw)} w 1 J 1 j ` + rgbOp('RG') + ' ' + pathOps(sg) + ' S';
+      }
       break;
     case 'text': {
       subtype = 'FreeText';
-      const font = await getFont(a.font, a.bold), f = FONTS[a.font];
-      const lines = a.text.split('\n').map((ln, i) => [ln, a.x, a.y + f.bl * a.size + i * LH * a.size]);
+      const font = await getFont(a.font, a.bold), f = FONT(a.font);
+      const W = textWidth(a), lines = a.text.split('\n').map((ln, i) => [ln, lineX(a, ln, W), a.y + f.bl * a.size + i * LH * a.size]);
       if (a.bg) { const bc = hex2rgb(a.bg), b = bbox(a), pd = a.size * 0.18; ops += `${n(bc.red)} ${n(bc.green)} ${n(bc.blue)} rg ` + pathOps([['M', b.x - pd, b.y - pd * 0.4], ['L', b.x + b.w + pd, b.y - pd * 0.4], ['L', b.x + b.w + pd, b.y + b.h + pd * 0.4], ['L', b.x - pd, b.y + b.h + pd * 0.4], ['Z']]) + ' f '; }
       ops += await textOps(font, 'F0', a.size, rgbOp('rg'), lines);
       extra.DA = PDFString.of(`/Helv ${n(a.size)} Tf ${rgbOp('rg')}`);
@@ -3283,10 +3435,23 @@ function sinkStream(pg) {
 }
 async function buildPdf(pageList) {
   const { PDFDocument, StandardFonts, degrees, LineCapStyle, BlendMode, rgb } = PL;
+  await ensureFontsOf(pageList); // Textbreiten (Ausrichtung, Hintergrund) mit der echten Schrift messen
   const out = await PDFDocument.create();
   const libDocs = new Map(), fontCache = new Map(), imgCache = new Map();
+  let fkReady = false;
   const getFont = async (name, bold) => {
-    const key = FONTS[name].std[bold ? 1 : 0];
+    const f = FONT(name);
+    if (f.file) {
+      const key = f.file + (bold && !f.noBold ? 'B' : '');
+      if (!fontCache.has(key)) {
+        try {
+          if (!fkReady) { out.registerFontkit(await loadFontkit()); fkReady = true; }
+          fontCache.set(key, await out.embedFont(await fontFile(name, bold), { subset: true }));
+        } catch (e) { console.warn('Schrift', name, e); toast('Schrift „' + f.label + '“ nicht verfügbar, ersatzweise Helvetica'); fontCache.set(key, await getFont('Helvetica', bold)); }
+      }
+      return fontCache.get(key);
+    }
+    const key = f.std[bold ? 1 : 0];
     if (!fontCache.has(key)) fontCache.set(key, await out.embedFont(StandardFonts[key]));
     return fontCache.get(key);
   };
@@ -3324,14 +3489,15 @@ async function buildPdf(pageList) {
           else pg.drawSvgPath(dOf(q.d, svgMap), { x: 0, y: 0, borderColor: hex2rgb(a.color), borderWidth: q.w });
         }
       } else if (a.t === 'text') {
-        const font = await getFont(a.font, a.bold), f = FONTS[a.font];
+        const font = await getFont(a.font, a.bold), f = FONT(a.font);
         if (a.bg) {
           const b = bbox(a), pd = a.size * 0.18, x = b.x - pd, y = b.y - pd * 0.4, w = b.w + 2 * pd, h = b.h + pd * 0.8;
           pg.drawSvgPath(dOf([['M', x, y], ['L', x + w, y], ['L', x + w, y + h], ['L', x, y + h], ['Z']], svgMap), { x: 0, y: 0, color: hex2rgb(a.bg) });
         }
+        const W = textWidth(a);
         a.text.split('\n').forEach((ln, i) => {
           if (!ln) return;
-          const [x, y] = T(a.x, a.y + f.bl * a.size + i * LH * a.size);
+          const [x, y] = T(lineX(a, ln, W), a.y + f.bl * a.size + i * LH * a.size);
           pg.drawText(clean(font, ln), { x, y, size: a.size, font, color: hex2rgb(a.color), rotate: degrees(R) });
         });
       } else if (a.t === 'img') {
@@ -3382,10 +3548,19 @@ async function buildPdf(pageList) {
         else {
           Object.assign(o, { borderColor: hex2rgb(a.color), borderWidth: a.sw });
           if (a.t !== 'rect' && a.t !== 'ellipse') o.borderLineCap = LineCapStyle.Round;
+          const da = (a.t === 'rect' || a.t === 'ellipse' || a.t === 'line') && dashOf(a);
+          if (da) { o.borderDashArray = da; if (a.dash === 'dot') o.borderLineCap = LineCapStyle.Round; }
+          if ((a.t === 'rect' || a.t === 'ellipse') && FILL_OP[a.fill]) Object.assign(o, { color: hex2rgb(a.color), opacity: FILL_OP[a.fill] });
+          if (a.t === 'arrow' && dashOf(a)) {
+            const sg = segs(a);
+            pg.drawSvgPath(dOf(sg.slice(0, 2), svgMap), { ...o, borderDashArray: dashOf(a) });
+            pg.drawSvgPath(dOf(sg.slice(2), svgMap), o);
+            o.done = true;
+          }
           if (a.t === 'pen' && a.op < 100) o.borderOpacity = a.op / 100;
           if (a.t === 'pen' && penKind(a) === 'marker') o.blendMode = BlendMode.Multiply;
         }
-        pg.drawSvgPath(d, o);
+        if (!o.done) pg.drawSvgPath(d, o);
       }
       // Kommentar eines eingebetteten Elements bleibt als Notiz erhalten
       if (a.comment && a.t !== 'note') { const b = bbox(a); addTextNote(out, pg, T(b.x + b.w, b.y), a.comment, a.color || '#ffd400'); }
@@ -3543,11 +3718,294 @@ async function makeSample() {
   return { bytes: await d.save(), mark: { x: M, y: H - markY, w: hw1 } };
 }
 
+/* ---------- Werkzeugleiste anpassen: Werkzeuge ein- und ausblenden, Reihenfolge ändern ---------- */
+const TB_EXTRA = { btnImg: ['img', 'Bild einfügen', 'image'], btnSig: ['sig', 'Unterschreiben', 'sign'], btnCalc: ['calc', 'Rechner', 'calc'] };
+const TB_PRESETS = {
+  all: ['Alles anzeigen', []],
+  write: ['Schreiben und Lernen', ['objects', 'edittext', 'white', 'redact', 'measure', 'check', 'cross', 'stamp', 'calc']],
+  edit: ['PDF bearbeiten', ['laser', 'measure', 'calc', 'eraser']],
+  forms: ['Formulare und Verträge', ['objects', 'edittext', 'eraser', 'hl', 'ul', 'so', 'rect', 'ellipse', 'line', 'arrow', 'measure', 'laser', 'calc', 'redact']],
+};
+let TB_DEFAULT = null;
+const tbKey = el => el.dataset.tool || (TB_EXTRA[el.id] || [])[0] || (el.classList.contains('vsep') ? 'sep' : null);
+function tbItems() {
+  const out = [];
+  for (const el of $('.toolbar').children) {
+    if (el.id === 'btnThumbs' || el.id === 'btnTbCfg') continue;
+    if (el.classList.contains('grow')) break;
+    const k = tbKey(el); if (k === 'sep' && !out.length) continue; // Trennlinie hinter der Seitenleisten-Taste bleibt fest
+    if (k) out.push({ key: k, el });
+  }
+  return out;
+}
+const tbLabel = k => (k === 'sep' ? 'Trennlinie' : TB_EXTRA['btn' + k[0].toUpperCase() + k.slice(1)] ? TB_EXTRA['btn' + k[0].toUpperCase() + k.slice(1)][1] : TOOL_NAMES[k] || k);
+const tbIcon = k => (k === 'sep' ? '' : icon(k === 'img' ? 'image' : k === 'sig' ? 'sign' : k));
+function tbLoad() { try { const c = JSON.parse(lsGet('pdfwb.toolbar') || 'null'); return c && Array.isArray(c.order) ? c : null; } catch (e) { return null; } }
+/* gespeicherte Reihenfolge plus Werkzeuge, die in einer neueren Version dazugekommen sind */
+function tbOrder(cfg) {
+  if (!cfg) return TB_DEFAULT.slice();
+  const order = cfg.order.filter(k => k === 'sep' || TB_DEFAULT.includes(k));
+  TB_DEFAULT.forEach((k, i) => {
+    if (k === 'sep' || order.includes(k)) return;
+    const prev = TB_DEFAULT.slice(0, i).reverse().find(x => x !== 'sep' && order.includes(x));
+    order.splice(prev ? order.indexOf(prev) + 1 : 0, 0, k);
+  });
+  return order;
+}
+function applyToolbar(cfg = tbLoad()) {
+  const nav = $('.toolbar'), items = tbItems();
+  if (!TB_DEFAULT) TB_DEFAULT = items.map(i => i.key);
+  const byKey = new Map(items.filter(i => i.key !== 'sep').map(i => [i.key, i.el]));
+  const seps = items.filter(i => i.key === 'sep').map(i => i.el);
+  const hidden = new Set((cfg && cfg.hidden) || []), anchor = $('#btnTbCfg');
+  let si = 0;
+  const placed = [];
+  for (const k of tbOrder(cfg)) {
+    let el;
+    if (k === 'sep') { el = seps[si++]; if (!el) { el = document.createElement('span'); el.className = 'vsep'; } }
+    else el = byKey.get(k);
+    if (!el) continue;
+    nav.insertBefore(el, anchor);
+    el.hidden = k !== 'sep' && hidden.has(k);
+    placed.push({ k, el });
+  }
+  seps.slice(si).forEach(el => el.remove());
+  // doppelte und überzählige Trennlinien ausblenden
+  let lastVis = 'sep';
+  placed.forEach(({ k, el }) => { if (k === 'sep') { el.hidden = lastVis === 'sep'; if (!el.hidden) lastVis = 'sep'; } else if (!el.hidden) lastVis = k; });
+  for (let i = placed.length - 1; i >= 0; i--) { const { k, el } = placed[i]; if (el.hidden) continue; if (k === 'sep') el.hidden = true; break; }
+}
+function toolbarDialog() {
+  let order = tbOrder(tbLoad()), hidden = new Set((tbLoad() || {}).hidden || []);
+  const rows = () => order.map((k, i) => `<div class="tbrow${k === 'sep' ? ' sep' : ''}" data-i="${i}">
+      ${k === 'sep' ? '<span style="width:18px"></span>' : `<input type="checkbox" data-vis ${hidden.has(k) ? '' : 'checked'} aria-label="${esc(tbLabel(k))} anzeigen">`}
+      ${tbIcon(k)}<span class="nm">${esc(tbLabel(k))}${k !== 'sep' && Object.entries(KEYS).find(([, t]) => t === k) ? ` <small style="color:var(--muted)">(${Object.entries(KEYS).find(([, t]) => t === k)[0].toUpperCase()})</small>` : ''}</span>
+      ${k === 'sep' ? '<button class="mv" data-del title="Trennlinie entfernen" aria-label="Trennlinie entfernen">✕</button>' : ''}
+      <button class="mv" data-up title="Nach vorne" aria-label="Nach vorne">▲</button><button class="mv" data-down title="Nach hinten" aria-label="Nach hinten">▼</button></div>`).join('');
+  dialog('Werkzeugleiste anpassen', `<p class="note" style="margin:0">Häkchen blendet ein oder aus, Pfeile ändern die Reihenfolge. Ausgeblendete Werkzeuge bleiben über Tastenkürzel und die Befehlssuche (Strg/⌘ K) erreichbar.</p>
+    <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px">${Object.entries(TB_PRESETS).map(([k, [l]]) => `<button class="btn" data-preset="${k}" type="button">${esc(l)}</button>`).join('')}<button class="btn" data-addsep type="button">+ Trennlinie</button></div>
+    <div class="tblist" id="tbList">${rows()}</div>`, 'Übernehmen', () => {
+    lsSet('pdfwb.toolbar', JSON.stringify({ order, hidden: [...hidden] }));
+    applyToolbar(); toast('Werkzeugleiste angepasst');
+  });
+  const b = $('#dlgBody'), list = $('#tbList', b);
+  const redraw = () => { list.innerHTML = rows(); applyToolbar({ order, hidden: [...hidden] }); };
+  b.onclick = e => {
+    const pr = e.target.closest('[data-preset]');
+    if (pr) { order = TB_DEFAULT.slice(); hidden = new Set(TB_PRESETS[pr.dataset.preset][1]); redraw(); return; }
+    if (e.target.closest('[data-addsep]')) { order.push('sep'); redraw(); list.scrollTop = list.scrollHeight; return; }
+    const row = e.target.closest('.tbrow'); if (!row) return;
+    const i = +row.dataset.i;
+    if (e.target.closest('[data-up]') && i > 0) { [order[i - 1], order[i]] = [order[i], order[i - 1]]; redraw(); }
+    else if (e.target.closest('[data-down]') && i < order.length - 1) { [order[i + 1], order[i]] = [order[i], order[i + 1]]; redraw(); }
+    else if (e.target.closest('[data-del]')) { order.splice(i, 1); redraw(); }
+  };
+  b.onchange = e => { const row = e.target.closest('.tbrow'); if (!row || !e.target.matches('[data-vis]')) return; const k = order[+row.dataset.i]; if (e.target.checked) hidden.delete(k); else hidden.add(k); applyToolbar({ order, hidden: [...hidden] }); };
+  $('#dlgCancel').addEventListener('click', () => applyToolbar(), { once: true });
+}
+
+/* ---------- Stift-Favoriten: Stiftart, Farbe, Stärke und Deckkraft mit einem Tipp ---------- */
+const PEN_FAV_DEFAULT = [{ kind: 'fount', color: '#1b2a6b', sw: 2, op: 100 }, { kind: 'ball', color: '#d0342c', sw: 1.25, op: 100 }, { kind: 'ball', color: '#1e8a4c', sw: 1.25, op: 100 }, { kind: 'marker', color: '#ffd400', sw: 12, op: 40 }];
+let penFavs = (() => { try { const v = JSON.parse(lsGet('pdfwb.penfavs') || 'null'); return Array.isArray(v) ? v : PEN_FAV_DEFAULT.slice(); } catch (e) { return PEN_FAV_DEFAULT.slice(); } })();
+const savePenFavs = () => lsSet('pdfwb.penfavs', JSON.stringify(penFavs));
+const sameFav = (f, o) => f.kind === (o.kind || 'ball') && f.color.toLowerCase() === (o.color || '').toLowerCase() && Math.abs(f.sw - o.sw) < 0.01 && f.op === o.op;
+const KIND_LABEL = { fount: 'Füller', ball: 'Kuli', marker: 'Marker' };
+function renderPenFavs(o) {
+  const el = $('#penFavs'); if (!el) return;
+  el.innerHTML = penFavs.map((f, i) => {
+    const d = clamp(f.sw * (f.kind === 'marker' ? 1 : 2.2), 4, 16);
+    return `<button class="fav" data-fav="${i}" style="--c:${f.color}" aria-pressed="${!!o && sameFav(f, o)}" title="${KIND_LABEL[f.kind]} · ${f.sw} pt${f.op < 100 ? ' · ' + f.op + ' %' : ''} (gedrückt halten oder Rechtsklick: entfernen)"><i style="width:${d}px;height:${d}px;opacity:${Math.max(0.35, f.op / 100)}${f.kind === 'marker' ? ';border-radius:2px' : ''}"></i></button>`;
+  }).join('') + (penFavs.length < 10 ? '<button class="fav add" data-favadd title="Aktuellen Stift als Favorit merken" aria-label="Favorit hinzufügen">+</button>' : '') + '<span class="vsep"></span>';
+}
+function applyPenFav(f) {
+  const tg = propTarget();
+  if (tg && tg.isAnnot && tg.type === 'pen') {
+    pushHist(); Object.assign(tg.obj, { kind: f.kind, color: f.color, sw: f.sw, op: f.op });
+    drawAnnots(pageById(S.sel.pid)); markDirty();
+  }
+  PEN_KINDS[TP.pen.kind] = { sw: TP.pen.sw, op: TP.pen.op, color: TP.pen.color };
+  Object.assign(TP.pen, { kind: f.kind, color: f.color, sw: f.sw, op: f.op });
+  PEN_KINDS[f.kind] = { sw: f.sw, op: f.op, color: f.color };
+  if (S.tool !== 'pen' && !(tg && tg.isAnnot)) setTool('pen'); else renderProps();
+}
+function bindPenFavs() {
+  const el = $('#penFavs'); if (!el) return;
+  let lp = 0, lpDone = false;
+  const remove = i => { const f = penFavs[i]; if (!f) return; penFavs.splice(i, 1); savePenFavs(); renderProps(); toast(`Favorit entfernt (${KIND_LABEL[f.kind]})`); };
+  el.addEventListener('pointerdown', e => { const b = e.target.closest('[data-fav]'); lpDone = false; if (!b) return; clearTimeout(lp); lp = setTimeout(() => { lpDone = true; remove(+b.dataset.fav); }, 650); });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) el.addEventListener(ev, () => clearTimeout(lp));
+  el.addEventListener('contextmenu', e => { const b = e.target.closest('[data-fav]'); if (!b) return; e.preventDefault(); clearTimeout(lp); if (!lpDone) remove(+b.dataset.fav); lpDone = true; });
+  el.addEventListener('click', e => {
+    if (lpDone) { lpDone = false; return; }
+    if (e.target.closest('[data-favadd]')) {
+      const tg = propTarget(), o = tg && tg.type === 'pen' ? tg.obj : TP.pen;
+      const f = { kind: o.kind || 'ball', color: o.color, sw: o.sw, op: o.op };
+      if (penFavs.some(x => sameFav(x, f))) { toast('Diesen Stift gibt es schon als Favorit'); return; }
+      penFavs.push(f); savePenFavs(); renderProps(); toast('Stift als Favorit gemerkt');
+      return;
+    }
+    const b = e.target.closest('[data-fav]'); if (b) applyPenFav(penFavs[+b.dataset.fav]);
+  });
+}
+
+/* ---------- Tastenkürzel und Gesten ---------- */
+function shortcutsDialog() {
+  const mac = /Mac|iPad|iPhone/.test(navigator.platform), M = mac ? '⌘' : 'Strg', kb = s => s.split(' ').map(x => `<kbd>${esc(x)}</kbd>`).join(' ');
+  const tools = Object.entries(KEYS).map(([k, t]) => [TOOL_NAMES[t] || t, k.toUpperCase()]);
+  const groups = [
+    ['Werkzeuge', tools.concat([['Bild einfügen', 'I'], ['Unterschreiben', 'U'], ['Rechner', 'Z']])],
+    ['Dokument', [['Befehle und Suche', M + ' K'], ['In Bibliothek sichern / Speichern', M + ' S'], ['Als PDF exportieren', M + ' ⇧ S'], ['Öffnen', M + ' O'], ['Im Dokument suchen', M + ' F'], ['Rückgängig', M + ' Z'], ['Wiederholen', M + ' ⇧ Z']]],
+    ['Bearbeiten', [['Kopieren / Ausschneiden', M + ' C'], ['Einfügen', M + ' V'], ['Duplizieren', M + ' D'], ['Alles auf der Seite auswählen', M + ' A'], ['Löschen', 'Entf'], ['Verschieben (1 pt / 10 pt)', '← → ↑ ↓'], ['Auswahl aufheben', 'Esc']]],
+    ['Ansicht', [['Vergrößern / Verkleinern', M + ' + −'], ['Seitenbreite', M + ' 0'], ['Lesemodus', 'F'], ['Blättern im Lesemodus', '← →'], ['Diese Übersicht', '?']]],
+    ['Tablet und Touch', [['Zoomen', 'zwei Finger spreizen'], ['Seitenbreite / Vergrößern', 'Doppeltipp'], ['Rückgängig', 'zwei Finger tippen'], ['Wiederholen', 'drei Finger tippen'], ['Radieren', 'Pencil-Taste'], ['Form gerade ziehen', 'Strich halten']]],
+  ];
+  dialog('Tastenkürzel und Gesten', `<div class="keys">${groups.map(([h, rows]) => `<h3>${esc(h)}</h3>` + rows.map(([l, k]) => `<div><span>${esc(l)}</span><span>${h === 'Tablet und Touch' ? `<span style="color:var(--muted)">${esc(k)}</span>` : kb(k)}</span></div>`).join('')).join('')}</div>`, 'Schließen', () => true);
+  $('#dlgCancel').hidden = true;
+}
+
+/* ---------- Seiten einfügen: aus PDF-Bytes nach der aktuellen Seite ---------- */
+async function insertPdfBytes(bytes, name, pick) {
+  commitEdit();
+  const pages = await addSource(bytes, name);
+  const list = pick ? pages.filter((p, i) => pick.includes(i)) : pages;
+  if (!list.length) return 0;
+  pushHist();
+  const at = Math.min(S.cur + 1, S.pages.length);
+  S.pages.splice(at, 0, ...list);
+  S.selPages.clear(); markDirty(); buildViewer(); scrollToPage(at);
+  return list.length;
+}
+/* Fotos und Scans: Kamera oder Fotomediathek, je Bild eine Seite */
+let photoMode = lsGet('pdfwb.photomode') || 'scan';
+function photosDialog() {
+  dialog('Fotos oder Scans einfügen', `<p class="note" style="margin:0 0 10px">Jedes Bild wird eine eigene Seite hinter der aktuellen. Auf Tablet und Handy kannst du direkt die Kamera nehmen.</p>
+    <div class="seg" id="phMode" role="group">${[['scan', 'Scan (S/W)'], ['scancolor', 'Scan farbig'], ['photo', 'Foto']].map(([k, l]) => `<button type="button" data-k="${k}" aria-pressed="${k === photoMode}">${l}</button>`).join('')}</div>
+    <p class="note">Scan hellt das Papier auf und verstärkt die Schrift, ideal für Arbeitsblätter und Notizen.</p>`, 'Bilder wählen …', () => { $('#filePhotos').click(); });
+  $('#phMode').onclick = e => { const b = e.target.closest('[data-k]'); if (!b) return; photoMode = b.dataset.k; lsSet('pdfwb.photomode', photoMode); $$('#phMode button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); };
+}
+async function insertPhotos(files) {
+  if (!files.length || !window.WBPhotos) return;
+  busy(true, 'Bilder werden aufbereitet …');
+  try {
+    const bytes = await window.WBPhotos.toPdf(files, { mode: photoMode, onProgress: (n, t) => setMsg(`Bild ${n} von ${t} …`, true) });
+    busy(false);
+    const n = await insertPdfBytes(bytes, files.length === 1 ? files[0].name.replace(/\.\w+$/, '') + '.pdf' : 'Fotos.pdf');
+    toast(n === 1 ? 'Foto als Seite eingefügt' : `${n} Fotos als Seiten eingefügt`);
+  } catch (e) { busy(false); console.error(e); toast(e.message || 'Die Bilder konnten nicht eingefügt werden.'); }
+}
+/* Seitenangabe wie „1-3, 5“ → Indizes (0-basiert) */
+function parseRange(str, n) {
+  const out = new Set();
+  for (const part of String(str || '').split(/[,;\s]+/).filter(Boolean)) {
+    const m = /^(\d+)(?:\s*[-–]\s*(\d+)?)?$/.exec(part); if (!m) continue;
+    const a = +m[1], b = m[2] ? +m[2] : (/[-–]$/.test(part) ? n : a);
+    for (let i = Math.min(a, b); i <= Math.max(a, b); i++) if (i >= 1 && i <= n) out.add(i - 1);
+  }
+  return [...out].sort((x, y) => x - y);
+}
+/* Seiten aus einem anderen Dokument der Bibliothek einfügen */
+async function libPagesDialog() {
+  if (!S.lib || !LIB) return;
+  const docs = (await LIB.all()).filter(i => i.kind === 'doc' && !i.trashed && !i.deleted && !i.missing && i.id !== S.lib.id).sort((a, b) => (b.openedAt || b.updatedAt || 0) - (a.openedAt || a.updatedAt || 0));
+  if (!docs.length) { toast('In der Bibliothek gibt es noch kein anderes Dokument.'); return; }
+  let pick = docs[0].id;
+  dialog('Seiten aus der Bibliothek einfügen', `<input class="field" id="lpQ" placeholder="Dokument suchen …" style="width:100%">
+    <div class="libpick" id="lpList">${docs.slice(0, 120).map((d, i) => `<button type="button" data-id="${d.id}" aria-pressed="${i === 0}" title="${esc(d.name)}"><div class="ph" data-th="${d.id}"></div><span class="nm">${esc(d.name)}</span><small style="color:var(--muted)">${d.pages || '?'} S.</small></button>`).join('')}</div>
+    <label class="fld"><span>Seiten</span><input class="field" id="lpRange" placeholder="alle, oder z. B. 1-3, 5"></label>`, 'Einfügen', b => {
+    const it = docs.find(d => d.id === pick); if (!it) return false;
+    const range = $('#lpRange', b).value.trim();
+    (async () => {
+      busy(true, `„${it.name}“ wird vorbereitet …`);
+      try {
+        const bytes = window.WBDrive && window.WBDrive.pdfOf ? await window.WBDrive.pdfOf(it) : (await LIB.loadDoc(it.id)).sources[0].bytes;
+        let src = bytes;
+        if (window.WBDecrypt && window.WBDecrypt.isEncrypted(src)) src = (await window.WBDecrypt.plain(src)).bytes;
+        const n0 = (await PDFJS.getDocument({ data: src.slice(), isEvalSupported: false }).promise).numPages;
+        let sel = range && !/^alle$/i.test(range) ? parseRange(range, n0) : null;
+        if (sel && !sel.length) { busy(false); toast('Keine gültigen Seiten angegeben.'); return; }
+        // nur die gewählten Seiten übernehmen, damit das Dokument klein bleibt
+        if (sel && sel.length < n0) {
+          try {
+            const from = await PL.PDFDocument.load(src, { updateMetadata: false }), to = await PL.PDFDocument.create();
+            (await to.copyPages(from, sel)).forEach(pg => to.addPage(pg));
+            src = new Uint8Array(await to.save()); sel = null;
+          } catch (e) { console.warn('Seiten kopieren', e); }
+        }
+        busy(false);
+        const n = await insertPdfBytes(src, it.name + '.pdf', sel);
+        toast(`${n} ${n === 1 ? 'Seite' : 'Seiten'} aus „${it.name}“ eingefügt`);
+      } catch (e) { busy(false); console.error(e); toast('Einfügen fehlgeschlagen: ' + (e.message || e)); }
+    })();
+  });
+  const b = $('#dlgBody');
+  $('#lpList', b).onclick = e => { const x = e.target.closest('[data-id]'); if (!x) return; pick = x.dataset.id; $$('#lpList [data-id]', b).forEach(y => y.setAttribute('aria-pressed', String(y === x))); };
+  $('#lpList', b).ondblclick = e => { if (e.target.closest('[data-id]')) $('#dlgOk').click(); };
+  $('#lpQ', b).oninput = e => { const q = e.target.value.toLowerCase(); $$('#lpList [data-id]', b).forEach(x => { x.hidden = q && !x.title.toLowerCase().includes(q); }); };
+  for (const d of docs.slice(0, 120)) LIB.getBlob('thumb:' + d.id).then(t => { const ph = $(`[data-th="${d.id}"]`, b); if (t && ph) { const im = document.createElement('img'); im.className = 'ph'; im.src = URL.createObjectURL(t); ph.replaceWith(im); } }).catch(() => {});
+}
+
+/* ---------- Mit Passwort speichern ---------- */
+function secureDialog() {
+  if (!window.WBDecrypt || !window.WBDecrypt.encrypt) { toast('Verschlüsseln ist hier nicht verfügbar.'); return; }
+  dialog('Mit Passwort speichern', `<p class="note" style="margin:0 0 10px">Die PDF lässt sich danach nur mit diesem Passwort öffnen (AES-256, in Acrobat, Vorschau und Browsern).</p>
+    <label class="fld"><span>Passwort</span><input class="field" id="sPw" type="password" autocomplete="new-password" minlength="4"></label>
+    <label class="fld"><span>Wiederholen</span><input class="field" id="sPw2" type="password" autocomplete="new-password"></label>
+    <label class="chk"><input type="checkbox" id="sPrint" checked> Drucken erlauben</label>
+    <label class="chk"><input type="checkbox" id="sCopy" checked> Text kopieren erlauben</label>
+    <label class="chk"><input type="checkbox" id="sEdit"> Bearbeiten und Kommentieren erlauben</label>
+    <p class="err" id="sErr" style="color:var(--danger)"></p>`, 'Speichern', b => {
+    const pw = $('#sPw', b).value, err = $('#sErr', b);
+    if (pw.length < 4) { err.textContent = 'Bitte mindestens 4 Zeichen.'; return false; }
+    if (pw !== $('#sPw2', b).value) { err.textContent = 'Die Passwörter stimmen nicht überein.'; return false; }
+    const perms = { print: $('#sPrint', b).checked, copy: $('#sCopy', b).checked, edit: $('#sEdit', b).checked };
+    (async () => {
+      busy(true, 'PDF wird verschlüsselt …');
+      try {
+        const enc = await window.WBDecrypt.encrypt(await buildPdf(S.pages), pw, perms);
+        busy(false);
+        await saveBytes(enc, baseName() + '-geschützt.pdf');
+      } catch (e) { busy(false); console.error(e); toast('Verschlüsseln fehlgeschlagen: ' + (e.message || e)); }
+    })();
+  });
+}
+
+/* ---------- Weiterlesen: letzte Seite je Dokument merken ---------- */
+let posT = 0;
+function rememberPos() {
+  if (!S.lib || S.renderMode) return;
+  clearTimeout(posT);
+  posT = setTimeout(() => lsSet('pdfwb.pos.' + S.lib.id, JSON.stringify({ p: S.cur, n: S.pages.length, t: Date.now() })), 400);
+}
+function resumePos() {
+  try {
+    const v = JSON.parse(lsGet('pdfwb.pos.' + S.lib.id) || 'null');
+    if (v && v.p > 0 && v.p < S.pages.length) { setTimeout(() => { viewer.scrollTop = els.get(S.pages[v.p].id).wrap.offsetTop - 16; setCurrent(v.p); toast(`Weiter auf Seite ${v.p + 1} von ${S.pages.length}`); }, 120); }
+  } catch (e) { /* egal */ }
+}
+
+/* ---------- Schriftauswahl ---------- */
+function fontUI() {
+  if (!$('#wbFontCss')) {
+    const st = document.createElement('style'); st.id = 'wbFontCss';
+    st.textContent = Object.values(FONTS).filter(f => f.file).map(f => `@font-face{font-family:"${f.family}";src:url("fonts/${f.file}-Regular.ttf") format("truetype");font-weight:400;font-display:swap}` +
+      (f.noBold ? '' : `@font-face{font-family:"${f.family}";src:url("fonts/${f.file}-Bold.ttf") format("truetype");font-weight:700;font-display:swap}`)).join('\n');
+    document.head.appendChild(st);
+  }
+  const groups = {};
+  for (const [k, f] of Object.entries(FONTS)) (groups[f.g] = groups[f.g] || []).push([k, f]);
+  $('#fontSel').innerHTML = Object.entries(groups).map(([g, list]) => `<optgroup label="${g}">${list.map(([k, f]) => `<option value="${k}" style="font-family:${esc(f.css)}">${esc(f.label || k)}</option>`).join('')}</optgroup>`).join('');
+}
+
 /* ---------- Bedienelemente verbinden ---------- */
 function bindUI() {
   $$('[data-i]').forEach(el => { el.outerHTML = icon(el.dataset.i); });
   $('#swatches').innerHTML = SWATCHES.map(c => `<button class="sw" data-c="${c}" style="background:${c}" title="${c}" aria-label="Farbe ${c}"></button>`).join('');
   $('#sigColors').innerHTML = ['#1b2a6b', '#111318', '#1f4fd8'].map((c, i) => `<button class="sw" data-c="${c}" style="background:${c}" aria-label="Stiftfarbe" aria-pressed="${i === 0}"></button>`).join('');
+  fontUI(); applyToolbar(); bindPenFavs();
+  $('#btnTbCfg').onclick = toolbarDialog;
+  $('#filePhotos').onchange = e => { insertPhotos([...e.target.files]); e.target.value = ''; };
+  const segProp = (sel, k) => $(sel).addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; setProp(k, b.dataset.v); if (S.editing) S.editing.ta.focus(); });
+  segProp('#alignSeg', 'align'); segProp('#fillSeg', 'fill'); segProp('#dashSeg', 'dash');
 
   $('#btnOpen').onclick = () => $('#fileOpen').click();
   $('#btnMerge').onclick = () => $('#fileMerge').click();
@@ -3561,7 +4019,7 @@ function bindUI() {
   $('#fileImg').onchange = e => { insertImages([...e.target.files]); e.target.value = ''; };
   $('#btnUndo').onclick = undo; $('#btnRedo').onclick = redo;
   $('#btnZoomIn').onclick = () => zoomStep(1); $('#btnZoomOut').onclick = () => zoomStep(-1);
-  $('#zoomLbl').onclick = () => setZoom(1); $('#btnFit').onclick = () => setZoom(fitZoom());
+  $('#zoomLbl').onclick = () => setZoom(1); $('#btnFit').onclick = fitWidth;
   $$('[data-tool]').forEach(b => { b.onclick = () => setTool(b.dataset.tool); b.setAttribute('aria-label', b.title); });
   $('#btnImg').onclick = () => { commitEdit(); $('#fileImg').click(); };
   $('#btnSig').onclick = openSig;
@@ -3612,9 +4070,10 @@ function bindUI() {
   document.addEventListener('pointerdown', e => { if (!e.target.closest('#menu, #btnMore')) closeMenu(); });
   const ACTS = { new: async () => { if (S.lib) { goLibrary('?new=notebook'); return; } if (S.dirty && !S.sample && !await ask('Ungespeicherte Änderungen verwerfen?', `Die Änderungen an „${S.docName}“ gehen verloren.`)) return; paperDialog('new'); },
     wm: watermarkDialog, pn: pageNumberDialog, dup: duplicatePage, png: exportPagePng, txt: exportText, meta: metaDialog,
-    open: () => $('#fileOpen').click(), fit: () => setZoom(fitZoom()), merge: () => $('#fileMerge').click(), rotl: () => rotatePages(-90), rotr: () => rotatePages(90), blank: insertBlank, extract: extractPages, del: deletePages,
+    open: () => $('#fileOpen').click(), fit: fitWidth, merge: () => $('#fileMerge').click(), rotl: () => rotatePages(-90), rotr: () => rotatePages(90), blank: insertBlank, extract: extractPages, del: deletePages,
     tolib: toLibrary, lib: () => goLibrary(),
-    read: () => setReading(true), night: () => setNight(!S.night), pencil: () => setPencilOnly(!S.pencil.only), bm: addBookmark, share: sharePdf, calc: () => window.toggleCalc() };
+    read: () => setReading(true), night: () => setNight(!S.night), pencil: () => setPencilOnly(!S.pencil.only), bm: addBookmark, share: sharePdf, calc: () => window.toggleCalc(),
+    toolbar: toolbarDialog, keys: shortcutsDialog, secure: secureDialog, photos: photosDialog, libpages: libPagesDialog };
   $('[data-act="share"]').hidden = !canShareFiles();
   $('#mPencil').hidden = !COARSE;
   setNight(lsGet('pdfwb.night') === '1');
@@ -3719,7 +4178,11 @@ function bindUI() {
   $('#strokeIn').addEventListener('change', () => { S.propEdit = false; });
   $('#opIn').addEventListener('input', e => setProp('op', +e.target.value, true));
   $('#opIn').addEventListener('change', () => { S.propEdit = false; });
-  $('#fontSel').addEventListener('change', e => { setProp('font', e.target.value); if (S.editing) S.editing.ta.focus(); });
+  $('#fontSel').addEventListener('change', e => {
+    const v = e.target.value, tg = propTarget();
+    setProp('font', v); if (S.editing) S.editing.ta.focus();
+    ensureFont(v, tg && tg.obj.bold).then(() => { if (S.editing) styleTA(); const p = S.sel ? pageById(S.sel.pid) : S.msel ? pageById(S.msel.pid) : null; if (p) drawAnnots(p); });
+  });
   $('#sizeIn').addEventListener('change', e => { const v = clamp(+e.target.value || 12, 4, 144); setProp('size', v); S.propEdit = false; if (S.editing) S.editing.ta.focus(); });
   $('#boldBtn').onclick = () => { const tg = propTarget(); if (tg) setProp('bold', !tg.obj.bold); if (S.editing) S.editing.ta.focus(); };
   $('#stampSel').innerHTML = STAMPS.map(([t]) => `<option value="${t}">${t === '{datum}' ? 'Datum (' + today() + ')' : t}</option>`).join('') + '<option value="" hidden>Eigener Text</option>';
@@ -3837,7 +4300,7 @@ function bindUI() {
     if (mod && k === 'a' && S.tool === 'select') { e.preventDefault(); const p = S.pages[S.cur]; if (p) setMulti(p.id, p.annots.map(a => a.id)); return; }
     if (mod && (k === '+' || k === '=')) { e.preventDefault(); zoomStep(1); return; }
     if (mod && k === '-') { e.preventDefault(); zoomStep(-1); return; }
-    if (mod && k === '0') { e.preventDefault(); setZoom(fitZoom()); return; }
+    if (mod && k === '0') { e.preventDefault(); fitWidth(); return; }
     if (mod || e.altKey) return;
     if (e.key === 'Delete' || e.key === 'Backspace') {
       if (S.csel) { e.preventDefault(); deleteContent(); }
@@ -3846,6 +4309,7 @@ function bindUI() {
     }
     if (e.key === 'Escape') { if (S.reading) setReading(false); else if (S.csel) setCsel(null, []); else if (S.sel || S.msel) setMulti(null, []); else setTool('select'); return; }
     if (k === 'f') { setReading(!S.reading); return; }
+    if (e.key === '?') { e.preventDefault(); shortcutsDialog(); return; }
     if (S.reading && (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ')) { e.preventDefault(); scrollToPage(Math.min(S.pages.length - 1, S.cur + 1)); return; }
     if (S.reading && (e.key === 'ArrowLeft' || e.key === 'ArrowUp')) { e.preventDefault(); scrollToPage(Math.max(0, S.cur - 1)); return; }
     if (e.key === 'Enter' && S.csel && S.csel.items.length === 1 && S.csel.items[0].kind === 'text') { e.preventDefault(); editContentText(pageById(S.csel.pid), S.csel.items[0]); return; }
@@ -3928,6 +4392,8 @@ async function libSave() {
 let driveT = 0, driveBusy = false;
 function scheduleDrive(ms = 10000) {
   if (!S.lib || S.renderMode || !window.WBDrive || !window.WBDrive.enabled()) return;
+  // im Modus „beim Schließen“, „täglich“ oder „manuell“ sichert die Bibliothek, nicht jede Speicherung hier
+  if (window.WBDrive.wants && !window.WBDrive.wants('change')) return;
   clearTimeout(driveT); driveT = setTimeout(driveBackup, ms);
 }
 async function driveBackup() {
@@ -3970,6 +4436,8 @@ async function openLibDoc(id) {
     }
     libState('saved'); libUI();
     busy(false); setMsg('Aus der Bibliothek geöffnet · Änderungen werden automatisch gesichert');
+    ensureFontsOf(S.pages);
+    if (!S.renderMode && !/[?&](page|q)=/.test(location.search)) resumePos();
     // Vorschau nachziehen, falls noch keine da ist
     if (!(await LIB.getBlob('thumb:' + id))) { const t = await pageThumb(); if (t) await LIB.putBlob('thumb:' + id, t); }
     return true;
@@ -4021,6 +4489,7 @@ function libUI() {
   const b = $('#btnLib'); if (!b) return;
   b.hidden = !LIB;
   const m = $('#mToLib'); if (m) m.hidden = !LIB || !!S.lib;
+  const lp = $('#mLibPages'); if (lp) lp.hidden = !S.lib;
   const sv = $('#btnSave');
   if (S.lib) { sv.title = 'Als PDF-Datei exportieren'; const l = sv.querySelector('.lbl'); if (l) l.textContent = 'Exportieren'; }
 }
@@ -4050,7 +4519,7 @@ function paletteProvider(q) {
   A('Präsentieren mit Laserpointer', () => { setReading(true); setTool('laser'); }, 'F, J', 'vollbild präsentation laser');
   A('Rückgängig', undo, 'Strg+Z'); A('Wiederholen', redo, 'Strg+Y');
   A('Vergrößern', () => $('#btnZoomIn').click(), 'Strg +'); A('Verkleinern', () => $('#btnZoomOut').click(), 'Strg −');
-  A('Seitenbreite', () => setZoom(fitZoom()), 'Strg+0', 'zoom anpassen');
+  A('Seitenbreite', fitWidth, 'Strg+0', 'zoom anpassen');
   A('Nach Updates suchen', () => { if (window.WBUpdate) window.WBUpdate.check(true); }, '', 'update version aktualisieren');
   const n = parseInt(String(q || '').replace(/\D/g, ''), 10);
   if (n >= 1 && n <= S.pages.length) out.push({ group: 'Seite', label: 'Gehe zu Seite ' + n, hint: 'von ' + S.pages.length, run: () => scrollToPage(n - 1), keys: String(n) });

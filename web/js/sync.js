@@ -11,9 +11,12 @@
   const st = { client: null, user: null, status: 'off', error: '', lastSync: 0, running: false, again: false, timer: 0, chan: null, inited: false };
   const listeners = new Set();
   const emit = () => listeners.forEach(f => { try { f(info()); } catch (e) { console.error(e); } });
-  const info = () => ({ status: st.status, error: st.error, user: st.user ? { id: st.user.id, email: st.user.email } : null, lastSync: st.lastSync, configured: !!config() });
+  const info = () => ({ status: st.status, error: st.error, user: st.user ? { id: st.user.id, email: st.user.email } : null, lastSync: st.lastSync, configured: !!config(), mode: mode(), modes: MODES });
   const set = (status, error = '') => { st.status = status; st.error = error; emit(); };
   const S = () => global.WBStore;
+  /* Wie oft abgeglichen wird: live = sofort (inkl. Echtzeit), 5/15/60 = alle n Minuten, manual = nur per Knopf */
+  const MODES = { live: 'Sofort (empfohlen)', 5: 'Alle 5 Minuten', 15: 'Alle 15 Minuten', 60: 'Stündlich', manual: 'Nur manuell' };
+  const mode = () => { try { const m = localStorage.getItem('pdfwb.sync.mode'); return MODES[m] ? m : 'live'; } catch (e) { return 'live'; } };
 
   /* Zugangsdaten: fest in js/config.js oder in den Einstellungen eingetragen */
   function config() {
@@ -57,14 +60,23 @@
   let iv = 0;
   function start() {
     set('idle');
-    subscribe();
-    clearInterval(iv); iv = setInterval(() => syncNow(), 60000);
+    const m = mode();
+    unsubscribe(); clearInterval(iv); iv = 0;
+    if (m === 'manual') return;
+    if (m === 'live') { subscribe(); iv = setInterval(() => syncNow(), 60000); }
+    else iv = setInterval(() => syncNow(), (+m) * 60000);
     syncNow();
   }
+  function unsubscribe() { if (st.chan) { try { st.client.removeChannel(st.chan); } catch (e) { /* egal */ } st.chan = null; } }
   function stop() {
     clearInterval(iv); iv = 0;
-    if (st.chan) { try { st.client.removeChannel(st.chan); } catch (e) { /* egal */ } st.chan = null; }
+    unsubscribe();
     set(config() ? 'signedout' : 'unconfigured');
+  }
+  function setMode(m) {
+    if (!MODES[m]) return;
+    try { localStorage.setItem('pdfwb.sync.mode', m); } catch (e) { /* egal */ }
+    if (st.user) start(); else emit();
   }
   /* Änderungen anderer Geräte sofort holen */
   function subscribe() {
@@ -81,6 +93,7 @@
     if (!st.client) throw new Error('Sync ist noch nicht eingerichtet.');
     const { error } = await st.client.auth.signInWithPassword({ email, password });
     if (error) throw new Error(authMsg(error));
+    if (mode() === 'manual') setTimeout(syncNow, 600); // erstes Anmelden gleicht immer ab
   }
   async function signUp(email, password) {
     await init();
@@ -101,8 +114,10 @@
     return m || 'Anmeldung fehlgeschlagen.';
   }
 
-  function schedule(ms = 1500) {
+  /* automatischer Anlass (Änderung, Fokus, Echtzeit) – nur im Modus „sofort“ */
+  function schedule(ms = 1500, force) {
     if (!st.user) return;
+    if (!force && mode() !== 'live') return;
     clearTimeout(st.timer);
     st.timer = setTimeout(syncNow, ms);
   }
@@ -123,7 +138,7 @@
       set('error', errMsg(e));
     } finally {
       st.running = false;
-      if (st.again) { st.again = false; schedule(300); }
+      if (st.again) { st.again = false; schedule(300, true); }
     }
   }
   const errMsg = e => {
@@ -303,7 +318,7 @@
   }
 
   global.WBSync = {
-    init, config, setConfig, signIn, signUp, signOut, syncNow, schedule, fetchDoc, info, share,
+    init, config, setConfig, signIn, signUp, signOut, syncNow, schedule, fetchDoc, info, share, setMode, mode, MODES,
     ready: () => !!(st.client && st.user),
     onStatus: fn => { listeners.add(fn); fn(info()); return () => listeners.delete(fn); },
   };

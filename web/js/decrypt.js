@@ -5,16 +5,20 @@
  */
 (function (global) {
   'use strict';
-  const SRC = 'js/vendor/pdf-lib-crypt.min.js';
+  // lokal mitgeliefert (Webseite, Desktop-App), sonst vom CDN (z. B. in der Artifact-Fassung)
+  const SRCS = ['js/vendor/pdf-lib-crypt.min.js', 'https://cdn.jsdelivr.net/npm/@cantoo/pdf-lib@2.11.1/dist/pdf-lib.min.js'];
   let libP = null;
-  function lib() {
-    if (!libP) libP = new Promise((res, rej) => {
+  function load(src) {
+    return new Promise((res, rej) => {
       const prev = global.PDFLib;                 // die normale pdf-lib nicht überschreiben
-      const s = document.createElement('script'); s.src = SRC; s.async = true;
+      const s = document.createElement('script'); s.src = src; s.async = true;
       s.onload = () => { const cp = global.PDFLib; global.PDFLib = prev; cp && cp !== prev ? res(cp) : rej(new Error('Entschlüsselung nicht verfügbar')); };
-      s.onerror = () => { global.PDFLib = prev; libP = null; rej(new Error('Entschlüsselung konnte nicht geladen werden')); };
+      s.onerror = () => { global.PDFLib = prev; s.remove(); rej(new Error('Entschlüsselung konnte nicht geladen werden')); };
       document.head.appendChild(s);
     });
+  }
+  function lib() {
+    if (!libP) libP = (async () => { let err; for (const src of SRCS) { try { return await load(src); } catch (e) { err = e; } } throw err; })().catch(e => { libP = null; throw e; });
     return libP;
   }
   /* prüfen, ob der gültige (letzte) Trailer ein /Encrypt-Wörterbuch nennt */
@@ -49,5 +53,16 @@
     const d = await decrypt(bytes);
     return d ? { bytes: d, changed: true } : { bytes, changed: false, locked: true };
   }
-  global.WBDecrypt = { isEncrypted, decrypt, plain };
+  /* mit Passwort schützen (AES-256); perms: { print, copy, edit } */
+  async function encrypt(bytes, password, perms = {}) {
+    const CP = await lib();
+    const doc = await CP.PDFDocument.load(bytes, { updateMetadata: false });
+    const owner = perms.owner || password + ':' + Math.random().toString(36).slice(2, 10);
+    doc.encrypt({
+      userPassword: password, ownerPassword: owner,
+      permissions: { printing: perms.print === false ? false : 'highResolution', copying: perms.copy !== false, modifying: !!perms.edit, annotating: !!perms.edit, fillingForms: true, contentAccessibility: true, documentAssembly: !!perms.edit },
+    });
+    return new Uint8Array(await doc.save({ useObjectStreams: false }));
+  }
+  global.WBDecrypt = { isEncrypted, decrypt, plain, encrypt };
 })(window);

@@ -178,7 +178,7 @@
       html += `<div class="list"><div class="lhead"><span></span><span>Name</span><span>Geändert</span><span>Ort</span><span>Größe</span><span></span></div>${fs.concat(ds).map(rowHTML).join('')}</div>`;
     } else {
       if (fs.length) html += `<section class="sec"><div class="sec-h"><span>Ordner</span><span class="grow"></span></div><div class="grid">${fs.map(folderTile).join('')}</div></section>`;
-      if (ds.length) html += `<section class="sec"><div class="sec-h"><span>${V.view.kind === 'recent' ? 'Zuletzt geöffnet' : 'Dokumente'}</span><span class="grow"></span>${keepSort ? sortSel : ''}</div><div class="grid">${ds.map(docTile).join('')}</div></section>`;
+      if (ds.length) html += `<section class="sec"><div class="sec-h"><span>${V.view.kind === 'recent' ? 'Zuletzt geöffnet' : 'Dokumente'}</span><span class="grow"></span><input type="range" id="tileSize" class="tsize" min="110" max="280" step="10" value="${tileSize()}" aria-label="Größe der Cover" title="Größe der Cover (auch Pinch oder Strg + Mausrad)">${keepSort ? sortSel : ''}</div><div class="grid">${ds.map(docTile).join('')}</div></section>`;
     }
     if (V.q) html += `<section class="sec" id="ftSec"></section>`;
     c.innerHTML = html;
@@ -187,6 +187,7 @@
     const ck = $('#cnKeep'); if (ck) ck.onclick = () => { lsSet('pdfwb.lib.cnKeep', String(conflicts().length)); renderContent(); };
     const ss = $('#sortSel'); if (ss) ss.onchange = () => { V.sort = ss.value; lsSet('pdfwb.lib.sort', V.sort); renderContent(); };
     const et = $('#emptyTrash'); if (et) et.onclick = emptyTrash;
+    const ts = $('#tileSize'); if (ts) ts.oninput = () => setTile(+ts.value);
     loadThumbs();
     renderSelbar();
   }
@@ -240,13 +241,36 @@
     const badges = [];
     if (d.missing) badges.push(`<span class="badge" title="Liegt in der Cloud, wird geladen">${ico('clouddown')}</span>`);
     else if (d.dirty && SY && SY.ready()) badges.push(`<span class="badge" title="Wird hochgeladen">${ico('upload')}</span>`);
-    if (d.pages) badges.push(`<span class="badge">${d.pages} S.</span>`);
+    const pos = readPos(d.id);
+    if (d.pages) badges.push(`<span class="badge">${pos ? `${pos.p + 1}/` : ''}${d.pages} S.</span>`);
     const where = (V.q || V.view.kind !== 'folder') && d.folder && V.byId.get(d.folder) ? ' · ' + esc(V.byId.get(d.folder).name) : '';
     return `<div class="tile${V.sel.has(d.id) ? ' sel' : ''}" role="button" tabindex="0" data-id="${d.id}" draggable="true" aria-label="Dokument ${esc(d.name)}">
-      <div class="art cover" data-cover="${d.id}">${th ? `<img src="${th}" alt="" onload="this.parentNode.classList.toggle('land',this.naturalWidth>this.naturalHeight)">` : `<span class="ph">${ico('file')}</span>`}<div class="badges">${badges.join('')}</div></div>
+      <div class="art cover" data-cover="${d.id}">${th ? `<img src="${th}" alt="" onload="this.parentNode.classList.toggle('land',this.naturalWidth>this.naturalHeight)">` : `<span class="ph">${ico('file')}</span>`}<div class="badges">${badges.join('')}</div>${pos ? `<div class="prog" title="Gelesen bis Seite ${pos.p + 1}"><i style="width:${Math.round((pos.p + 1) / Math.max(pos.n, d.pages || 1) * 100)}%"></i></div>` : ''}</div>
       <span class="chk">${ico('check')}</span>
       <button class="more" data-more="${d.id}" aria-label="Optionen für ${esc(d.name)}">${ico('more')}</button>
       <div class="meta"><div class="nm">${esc(d.name)}</div><div class="sub">${d.fav ? `<span class="star">${ico('starf')}</span>` : ''}<span>${fmtDate(V.view.kind === 'recent' ? d.openedAt : d.updatedAt)}${where}</span></div></div></div>`;
+  }
+  /* Größe der Cover: Regler, Strg + Mausrad oder zwei Finger */
+  const tileSize = () => +lsGet('pdfwb.lib.tile') || parseInt(getComputedStyle(document.documentElement).getPropertyValue('--tile'), 10) || 168;
+  function setTile(px, save = true) {
+    px = Math.round(Math.min(280, Math.max(110, px)));
+    document.documentElement.style.setProperty('--tile', px + 'px');
+    if (save) lsSet('pdfwb.lib.tile', String(px));
+    const ts = $('#tileSize'); if (ts && +ts.value !== px) ts.value = px;
+  }
+  if (lsGet('pdfwb.lib.tile')) setTile(+lsGet('pdfwb.lib.tile'), false);
+  function bindTileZoom() {
+    const c = $('#content'); if (!c) return;
+    c.addEventListener('wheel', e => { if (!(e.ctrlKey || e.metaKey) || V.layout !== 'grid') return; e.preventDefault(); setTile(tileSize() * Math.exp(-e.deltaY * 0.004)); }, { passive: false });
+    let pz = null;
+    const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    c.addEventListener('touchstart', e => { if (e.touches.length === 2 && V.layout === 'grid') pz = { d0: dist(e.touches), s0: tileSize() }; }, { passive: true });
+    c.addEventListener('touchmove', e => { if (pz && e.touches.length === 2) { e.preventDefault(); setTile(pz.s0 * dist(e.touches) / pz.d0); } }, { passive: false });
+    c.addEventListener('touchend', e => { if (e.touches.length < 2) pz = null; });
+  }
+  /* Lesefortschritt (vom Editor gemerkt, nur auf diesem Gerät) */
+  function readPos(id) {
+    try { const v = JSON.parse(lsGet('pdfwb.pos.' + id) || 'null'); return v && v.p > 0 && v.n > 1 ? v : null; } catch (e) { return null; }
   }
   function rowHTML(i) {
     const isF = i.kind === 'folder', th = !isF && V.thumbs.get(i.id);
@@ -266,7 +290,7 @@
       trash: ['Papierkorb ist leer', 'Gelöschte Dokumente und Ordner landen erst hier und lassen sich wiederherstellen.'],
       folder: [V.view.id ? 'Dieser Ordner ist leer' : 'Willkommen in deiner Bibliothek', 'Importiere PDFs, lege ein Notizbuch an oder ordne alles in Ordnern mit Farben und Symbolen. PDFs kannst du auch einfach ins Fenster ziehen.'],
     }[k];
-    const acts = k === 'folder' ? `<div class="acts"><button class="btn primary" data-act="import">${ico('upload')}PDF importieren</button><button class="btn" data-act="notebook">${ico('notebook')}Neues Notizbuch</button><button class="btn" data-act="folder">${ico('folder')}Neuer Ordner</button></div>` : '';
+    const acts = k === 'folder' ? `<div class="acts"><button class="btn primary" data-act="import">${ico('upload')}PDF importieren</button><button class="btn" data-act="notebook">${ico('notebook')}Neues Notizbuch</button><button class="btn" data-act="photos">${ico('camera')}Aus Fotos</button><button class="btn" data-act="folder">${ico('folder')}Neuer Ordner</button></div>` : '';
     return `<div class="empty"><svg class="illu" viewBox="0 0 120 96" aria-hidden="true"><rect x="10" y="14" width="56" height="70" rx="6" fill="var(--raise)" stroke="var(--line)" stroke-width="2"/><rect x="40" y="6" width="56" height="70" rx="6" fill="var(--raise)" stroke="var(--line)" stroke-width="2"/><path d="M50 22h36M50 32h36M50 42h24" stroke="var(--line)" stroke-width="3" stroke-linecap="round"/><circle cx="92" cy="72" r="16" fill="var(--accent)"/><path d="M92 64v16M84 72h16" stroke="var(--accent-ink)" stroke-width="3" stroke-linecap="round"/></svg><h2>${txt[0]}</h2><p>${txt[1]}</p>${acts}</div>`;
   }
   function bindEmpty() { $$('[data-act]', $('#content')).forEach(b => { b.onclick = () => newAction(b.dataset.act); }); }
@@ -299,7 +323,7 @@
     const n = V.sel.size, trash = V.view.kind === 'trash';
     bar.innerHTML = `<b>${n ? n + ' ausgewählt' : 'Elemente antippen'}</b>` + (trash
       ? `<button class="btn" data-sa="restore"${n ? '' : ' disabled'}>${ico('restore')}Wiederherstellen</button><button class="btn" data-sa="destroy"${n ? '' : ' disabled'}>${ico('trash')}Endgültig löschen</button>`
-      : `<button class="ibtn" data-sa="all" title="Alle auswählen">${ico('select')}</button><button class="ibtn" data-sa="move" title="Verschieben"${n ? '' : ' disabled'}>${ico('move')}</button><button class="ibtn" data-sa="dup" title="Duplizieren"${n ? '' : ' disabled'}>${ico('copy')}</button><button class="ibtn" data-sa="fav" title="Favorit"${n ? '' : ' disabled'}>${ico('star')}</button><button class="ibtn" data-sa="trash" title="Löschen"${n ? '' : ' disabled'}>${ico('trash')}</button>`)
+      : `<button class="ibtn" data-sa="all" title="Alle auswählen">${ico('select')}</button><button class="ibtn" data-sa="move" title="Verschieben"${n ? '' : ' disabled'}>${ico('move')}</button><button class="ibtn" data-sa="dup" title="Duplizieren"${n ? '' : ' disabled'}>${ico('copy')}</button><button class="ibtn" data-sa="fav" title="Favorit"${n ? '' : ' disabled'}>${ico('star')}</button><button class="ibtn" data-sa="zip" title="Als ZIP exportieren"${n ? '' : ' disabled'}>${ico('download')}</button><button class="ibtn" data-sa="trash" title="Löschen"${n ? '' : ' disabled'}>${ico('trash')}</button>`)
       + `<button class="ibtn" data-sa="done" title="Fertig">${ico('close')}</button>`;
     bar.onclick = async e => {
       const b = e.target.closest('[data-sa]'); if (!b || b.disabled) return;
@@ -310,6 +334,7 @@
         case 'dup': for (const id of ids) if (V.byId.get(id).kind === 'doc') await ST.duplicate(id); toast('Dupliziert'); break;
         case 'fav': { const on = !ids.every(id => V.byId.get(id).fav); for (const id of ids) await ST.update(id, { fav: on }); break; }
         case 'trash': await ST.trash(ids); toast(ids.length === 1 ? 'In den Papierkorb gelegt' : `${ids.length} Elemente in den Papierkorb gelegt`, ids); break;
+        case 'zip': await exportZip(ids); return;
         case 'restore': await ST.restore(ids); toast('Wiederhergestellt'); break;
         case 'destroy': if (!await confirmDlg('Endgültig löschen?', `${ids.length} Element(e) werden auf allen Geräten gelöscht. Das lässt sich nicht rückgängig machen.`, 'Löschen', true)) return; await ST.destroy(ids); break;
         case 'done': break;
@@ -344,7 +369,8 @@
   /* ---------- Neu: Import, Notizbuch, Ordner ---------- */
   const targetFolder = () => (V.view.kind === 'folder' && !V.q ? V.view.id : null);
   function newAction(k) {
-    if (k === 'import') $('#fileIn').click();
+    if (k === 'photos') photosDialog();
+    else if (k === 'import') $('#fileIn').click();
     else if (k === 'notebook') notebookDialog();
     else if (k === 'folder') folderDialog(null, targetFolder());
   }
@@ -592,6 +618,8 @@
     let html = `<h2>Geräte synchronisieren</h2><p class="lead">Webseite und Desktop-App teilen dieselbe Bibliothek: Ordner, Dokumente und alle Markierungen.</p>`;
     if (I.user) {
       html += `<div class="account"><span class="avatar">${esc((I.user.email || '?')[0].toUpperCase())}</span><div style="flex:1;min-width:0"><b>${esc(I.user.email)}</b><div class="note">${esc(statusText)}${I.lastSync ? ' · zuletzt ' + new Date(I.lastSync).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : ''}</div></div></div>
+        <label class="fld"><span>Automatisch abgleichen</span><select class="field" name="symode">${Object.entries(I.modes).map(([k, v]) => `<option value="${k}" ${k === I.mode ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>
+        <p class="note">${I.mode === 'live' ? 'Änderungen erscheinen in Sekunden auf deinen anderen Geräten.' : I.mode === 'manual' ? 'Abgeglichen wird nur über „Jetzt synchronisieren“.' : 'Spart Akku und Datenvolumen; Änderungen kommen etwas später an.'}</p>
         <div class="acts" style="justify-content:space-between"><button class="btn" data-x="out">Abmelden</button><span><button class="btn" data-x="0">Schließen</button> <button class="btn primary" data-x="now">${ico('refresh')}Jetzt synchronisieren</button></span></div>`;
     } else if (!cfg) {
       html += `<p class="note">Für den Abgleich braucht die Werkbank ein kostenloses <b>Supabase</b>-Projekt. Einmal anlegen, <code>supabase/schema.sql</code> im SQL-Editor ausführen und hier die Werte aus <i>Project Settings → API</i> eintragen (oder fest in <code>js/config.js</code>).</p>
@@ -608,6 +636,8 @@
     }
     await dialog(html, {
       onOpen: (d, close) => {
+        const sm = d.querySelector('[name=symode]');
+        if (sm) sm.onchange = () => { SY.setMode(sm.value); toast('Sync: ' + I.modes[sm.value]); const n = sm.closest('.fld').nextElementSibling; if (n) n.textContent = sm.value === 'live' ? 'Änderungen erscheinen in Sekunden auf deinen anderen Geräten.' : sm.value === 'manual' ? 'Abgeglichen wird nur über „Jetzt synchronisieren“.' : 'Spart Akku und Datenvolumen; Änderungen kommen etwas später an.'; };
         d.addEventListener('click', async e => {
           const b = e.target.closest('[data-x]'); if (!b) return;
           if (b.dataset.x === 'now') { SY.syncNow(); close(); toast('Synchronisiere …'); }
@@ -640,7 +670,7 @@
     const b = $('#syncBtn'); if (!b) return;
     const s = I.user ? I.status : (I.configured ? 'signedout' : 'off');
     b.dataset.s = s;
-    $('#syncTitle').textContent = I.user ? ({ ok: 'Synchronisiert', syncing: 'Synchronisiere …', error: 'Sync-Fehler', offline: 'Offline', idle: 'Verbunden' }[I.status] || 'Verbunden') : 'Sync aus';
+    $('#syncTitle').textContent = I.user ? ({ ok: 'Synchronisiert', syncing: 'Synchronisiere …', error: 'Sync-Fehler', offline: 'Offline', idle: I.mode === 'manual' ? 'Sync manuell' : 'Verbunden' }[I.status] || 'Verbunden') : 'Sync aus';
     $('#syncSub').textContent = I.user ? (I.status === 'error' ? I.error : I.user.email) : (I.configured ? 'Anmelden, um Geräte zu verbinden' : 'Webseite und App verbinden');
     $('#syncIco').innerHTML = ico(I.user ? 'cloud' : 'gear');
   }
@@ -655,7 +685,8 @@
       : I.status === 'auth' ? 'Anmeldung abgelaufen · tippen zum Fortsetzen'
       : I.status === 'error' ? I.error
       : I.status === 'offline' ? 'Offline, wird nachgeholt'
-      : I.failed && I.failed.length ? `Gesichert · ${I.failed.length} mit Problem` : (I.lastRun ? 'Alles gesichert · ' + fmtDate(I.lastRun) : 'Verbunden · ' + (I.email || ''));
+      : I.status === 'wait' ? 'Wartet auf WLAN'
+      : I.failed && I.failed.length ? `Gesichert · ${I.failed.length} mit Problem` : I.mode === 'manual' ? 'Manuell · ' + (I.lastRun ? 'zuletzt ' + fmtDate(I.lastRun) : 'noch nie gesichert') : (I.lastRun ? (I.mode === 'change' ? 'Alles gesichert · ' : 'Gesichert · ') + fmtDate(I.lastRun) : 'Verbunden · ' + (I.email || ''));
     $('#driveIco').innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 3h7l6 10.5-3.5 6h-12L2.5 13.5zM8.5 3l6.5 10.5h6.5M15.5 3L9 13.5 6 19.5M2.5 13.5H15l3 6"/></svg>`;
   }
   async function driveDialog() {
@@ -665,7 +696,7 @@
       try { await GD.resume(); toast('Google Drive: weiter geht’s'); } catch (e) { toast(e.message || String(e)); }
       return;
     }
-    const st = { ok: 'Alles gesichert', idle: 'Bereit', running: 'Sichert gerade …', auth: 'Anmeldung abgelaufen', error: 'Fehler: ' + I.error, offline: 'Offline, wird nachgeholt' }[I.status] || '';
+    const st = { wait: 'Wartet auf WLAN', ok: I.mode === 'change' ? 'Alles gesichert' : 'Gesichert', idle: 'Bereit', running: 'Sichert gerade …', auth: 'Anmeldung abgelaufen', error: 'Fehler: ' + I.error, offline: 'Offline, wird nachgeholt' }[I.status] || '';
     let html = `<h2>Backup in Google Drive</h2><p class="lead">Wie bei GoodNotes: Jedes Dokument liegt automatisch als PDF mit allen Markierungen in deinem Drive, in derselben Ordnerstruktur wie hier. Änderungen, Umbenennen und Verschieben werden nachgezogen.</p>`;
     if (!I.configured) {
       html += `<p class="note">Für Google Drive braucht die Werkbank eine eigene Google-Cloud-Anmeldung (kostenlos). Die Einrichtung steht im README unter <b>Google Drive</b>; danach die Client-IDs in <code>js/config.js</code> eintragen.</p><div class="acts"><button class="btn primary" data-x="0">OK</button></div>`;
@@ -674,24 +705,47 @@
         <p class="err" id="gdErr"></p><div class="acts"><button class="btn" data-x="0">Abbrechen</button><button class="btn primary" data-x="go">Mit Google verbinden</button></div>`;
     } else {
       html += `<div class="account"><span class="avatar">${esc((I.email || 'G')[0].toUpperCase())}</span><div style="flex:1;min-width:0"><b>${esc(I.email || 'Google-Konto')}</b><div class="note">${esc(st)}${I.lastRun ? ' · zuletzt ' + fmtDate(I.lastRun) : ''}</div></div></div>
-        <p class="note">Ziel: <b>Meine Ablage › ${esc(I.root)}</b></p>
+        <p class="note">Ziel: <b>Meine Ablage › ${esc(I.root)}</b>${I.mode === 'manual' ? ' · nur manuell' : I.next && I.next > Date.now() + 60000 ? ' · nächste Sicherung ' + fmtDate(I.next) : ''}</p>
+        ${driveOptsHtml(I)}
         ${I.failed && I.failed.length ? `<p class="note" style="color:var(--warn)">Nicht (vollständig) gesichert: ${I.failed.map(esc).join(', ')}. Meist ist die PDF mit einem Passwort geschützt; dann liegt das Original ohne Markierungen in Drive.</p>` : ''}
         <div class="acts" style="justify-content:space-between;flex-wrap:wrap"><button class="btn" data-x="off">Trennen</button><span style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="${GD.folderUrl()}" target="_blank" rel="noopener">${ico('open')}In Drive öffnen</a>${I.status === 'auth' ? `<button class="btn primary" data-x="resume">Fortsetzen</button>` : `<button class="btn primary" data-x="now">${ico('refresh')}Jetzt sichern</button>`}</span></div>`;
     }
     await dialog(html, {
-      onOpen: (d, close) => d.addEventListener('click', async e => {
+      wide: I.enabled,
+      onOpen: (d, close) => (d.addEventListener('change', e => { if (e.target.closest('.gdopts')) { saveDriveOpts(d); if (e.target.name === 'gdmode') toast('Backup: ' + I.modes[e.target.value]); } }), d.addEventListener('click', async e => {
+        if (e.target.closest('.gdopts')) return;
         const b = e.target.closest('[data-x]'); if (!b) return;
         const k = b.dataset.x;
         if (k === 'go') {
           b.disabled = true; b.textContent = I.desktop ? 'Im Browser anmelden …' : 'Anmelden …';
           try { await GD.connect(); close(); toast('Google Drive verbunden · Backup läuft'); }
           catch (x) { d.querySelector('#gdErr').textContent = x.message || String(x); b.disabled = false; b.textContent = 'Mit Google verbinden'; }
-        } else if (k === 'now') { GD.run(); close(); toast('Backup gestartet'); }
+        } else if (k === 'now') { GD.run(true); close(); toast('Backup gestartet'); }
         else if (k === 'resume') { try { await GD.resume(); close(); } catch (x) { toast(x.message || String(x)); } }
         else if (k === 'off') { if (await confirmDlg('Google Drive trennen?', 'Das automatische Backup endet. Die PDFs bleiben in deinem Drive.', 'Trennen')) { await GD.disconnect(); close(); } }
         else close();
-      }),
+      })),
     });
+  }
+
+  /* Einstellungen fürs Drive-Backup: wann gesichert wird und welche Ordner ausgenommen sind */
+  function driveOptsHtml(I) {
+    const rows = [];
+    const walk = (pid, lvl) => folders().filter(f => (f.parent || null) === pid && alive(f)).sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true })).forEach(f => {
+      rows.push(`<label class="xrow" style="--lvl:${lvl}"><input type="checkbox" name="ex" value="${f.id}" ${I.exclude.includes(f.id) ? 'checked' : ''}><span class="ficon" style="--fc:${f.color}">${ico(f.icon || 'folder')}</span><span>${esc(f.name)}</span></label>`);
+      walk(f.id, lvl + 1);
+    });
+    walk(null, 0);
+    return `<div class="gdopts">
+      <label class="fld"><span>Automatisch sichern</span><select class="field" name="gdmode">${Object.entries(I.modes).map(([k, v]) => `<option value="${k}" ${k === I.mode ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>
+      ${navigator.connection ? `<label class="chkrow"><input type="checkbox" name="gdcell" ${I.noCellular ? 'checked' : ''}> Nicht über mobile Daten sichern</label>` : ''}
+      ${rows.length ? `<details ${I.exclude.length ? 'open' : ''}><summary>Ordner vom Backup ausnehmen${I.exclude.length ? ` (${I.exclude.length})` : ''}</summary><div class="xlist">${rows.join('')}</div><p class="note">Unterordner sind mit ausgenommen. Bereits gesicherte PDFs bleiben in Drive.</p></details>` : ''}
+    </div>`;
+  }
+  function saveDriveOpts(d) {
+    const sel = d.querySelector('[name=gdmode]'); if (!sel) return;
+    const cell = d.querySelector('[name=gdcell]');
+    GD.setOptions({ mode: sel.value, exclude: $$('[name=ex]:checked', d).map(x => x.value), noCellular: cell ? cell.checked : undefined });
   }
 
   /* ---------- Als App installieren ---------- */
@@ -787,6 +841,96 @@
       }),
     });
   }
+  /* ---------- Fotos und Scans → neues Dokument ---------- */
+  let photoMode = lsGet('pdfwb.photomode') || 'scan';
+  async function photosDialog() {
+    if (!window.WBPhotos) return;
+    const res = await dialog(`<h2>Aus Fotos oder Scan</h2><p class="lead">Jedes Bild wird eine Seite. Auf Tablet und Handy kannst du direkt die Kamera nehmen, z. B. für Arbeitsblätter, Tafelbilder oder Belege.</p>
+      <div class="tabs" role="tablist" id="phMode">${[['scan', 'Scan (S/W)'], ['scancolor', 'Scan farbig'], ['photo', 'Foto']].map(([k, l]) => `<button type="button" role="tab" data-k="${k}" aria-selected="${k === photoMode}">${l}</button>`).join('')}</div>
+      <label class="fld" style="margin-top:12px"><span>Name</span><input class="field" name="name" value="Scan ${new Date().toLocaleDateString('de-DE')}" maxlength="120"></label>
+      <div class="acts"><button class="btn" data-x="0">Abbrechen</button><button class="btn primary" data-x="1" autofocus>${ico('camera')}Bilder wählen …</button></div>`, {
+      onOpen: (d, close) => {
+        d.querySelector('#phMode').onclick = e => { const b = e.target.closest('[data-k]'); if (!b) return; photoMode = b.dataset.k; lsSet('pdfwb.photomode', photoMode); $$('#phMode [data-k]', d).forEach(x => x.setAttribute('aria-selected', String(x === b))); };
+        d.addEventListener('click', e => { const b = e.target.closest('[data-x]'); if (b) close(b.dataset.x === '1' ? { name: d.querySelector('[name=name]').value.trim() || 'Scan' } : null); });
+      },
+    });
+    if (!res) return;
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true; inp.hidden = true;
+    document.body.appendChild(inp);
+    inp.onchange = async () => {
+      const files = [...inp.files]; inp.remove(); if (!files.length) return;
+      busy('Bilder werden aufbereitet …');
+      try {
+        const bytes = await window.WBPhotos.toPdf(files, { mode: photoMode });
+        const doc = await importBytes(bytes, res.name, targetFolder());
+        busy(false); await refresh();
+        toast(`„${doc.name}“ mit ${files.length} ${files.length === 1 ? 'Seite' : 'Seiten'} angelegt`);
+      } catch (e) { busy(false); console.error(e); toast(e.message || 'Die Bilder konnten nicht verarbeitet werden.'); }
+    };
+    inp.click();
+  }
+
+  /* ---------- Mehrere Dokumente als ZIP (Ordner mit Unterordnern bleiben erhalten) ---------- */
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = u8 => { let c = 0xffffffff; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  function makeZip(files) {
+    const enc = new TextEncoder(), parts = [], central = [];
+    let off = 0;
+    const dt = new Date(), dosT = (dt.getHours() << 11) | (dt.getMinutes() << 5) | (dt.getSeconds() >> 1), dosD = ((dt.getFullYear() - 1980) << 9) | ((dt.getMonth() + 1) << 5) | dt.getDate();
+    for (const f of files) {
+      const name = enc.encode(f.name), crc = crc32(f.bytes), n = f.bytes.length;
+      const h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+      h.setUint16(10, dosT, true); h.setUint16(12, dosD, true); h.setUint32(14, crc, true); h.setUint32(18, n, true); h.setUint32(22, n, true); h.setUint16(26, name.length, true);
+      parts.push(new Uint8Array(h.buffer), name, f.bytes);
+      const c = new DataView(new ArrayBuffer(46));
+      c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true);
+      c.setUint16(12, dosT, true); c.setUint16(14, dosD, true); c.setUint32(16, crc, true); c.setUint32(20, n, true); c.setUint32(24, n, true); c.setUint16(28, name.length, true); c.setUint32(42, off, true);
+      central.push(new Uint8Array(c.buffer), name);
+      off += 30 + name.length + n;
+    }
+    const csize = central.reduce((a, b) => a + b.length, 0), e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, csize, true); e.setUint32(16, off, true);
+    return new Blob([...parts, ...central, new Uint8Array(e.buffer)], { type: 'application/zip' });
+  }
+  const zipSafe = s => String(s || 'Ohne Namen').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').trim().slice(0, 120) || 'Ohne Namen';
+  async function exportZip(ids) {
+    const docs = [];
+    for (const id of ids) {
+      const it = V.byId.get(id); if (!it) continue;
+      if (it.kind === 'doc') docs.push({ it, path: '' });
+      else for (const d of await ST.descendants(id, V.items)) if (d.kind === 'doc' && !d.trashed) {
+        const rel = pathOf(d.folder).slice(pathOf(d.folder).findIndex(f => f.id === id)).map(f => zipSafe(f.name)).join('/');
+        docs.push({ it: d, path: rel + '/' });
+      }
+    }
+    if (!docs.length) { toast('Keine Dokumente in der Auswahl.'); return; }
+    const files = [], used = new Set(), failed = [];
+    for (let i = 0; i < docs.length; i++) {
+      const { it, path } = docs[i];
+      busy(`PDF ${i + 1} von ${docs.length}: ${it.name} …`);
+      try {
+        if (it.missing && SY) await SY.fetchDoc(it.id);
+        const bytes = await GD.pdfOf(await ST.get(it.id));
+        let name = path + zipSafe(it.name) + '.pdf', k = 2;
+        while (used.has(name.toLowerCase())) name = path + zipSafe(it.name) + ` (${k++}).pdf`;
+        used.add(name.toLowerCase()); files.push({ name, bytes });
+      } catch (e) { console.warn('ZIP', it.name, e); failed.push(it.name); }
+    }
+    busy(false);
+    if (!files.length) { toast('Die PDFs konnten nicht erzeugt werden.'); return; }
+    const blob = makeZip(files), fname = (docs.length === 1 && !docs[0].path ? zipSafe(docs[0].it.name) : 'PDF Werkbank ' + new Date().toLocaleDateString('de-DE')) + '.zip';
+    if (DESK && DESK.saveFile) {
+      const r = await DESK.saveFile(fname, new Uint8Array(await blob.arrayBuffer()));
+      if (r && r.path) toast('Gespeichert: ' + r.path);
+    } else {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+      toast(`${files.length} ${files.length === 1 ? 'PDF' : 'PDFs'} als ZIP exportiert` + (failed.length ? ` · ${failed.length} ging nicht` : ''));
+    }
+    V.selecting = false; V.sel.clear(); renderContent();
+  }
+
   async function emptyTrash() {
     if (!await confirmDlg('Papierkorb leeren?', 'Alle Elemente im Papierkorb werden auf allen Geräten endgültig gelöscht.', 'Leeren', true)) return;
     const n = await ST.emptyTrash(); await refresh(); toast(n + ' Element(e) gelöscht');
@@ -824,9 +968,10 @@
     document.addEventListener('pointerdown', e => { if ($('#lib').classList.contains('drawer') && !e.target.closest('.side') && !e.target.closest('#menuBtn')) closeDrawer(); });
     $('#addFolderSide').onclick = () => folderDialog(null, V.view.kind === 'folder' ? V.view.id : null);
     $('#selectBtn').onclick = () => { V.selecting = !V.selecting; V.sel.clear(); renderContent(); };
+    bindTileZoom();
     $('#newBtn').onclick = async e => {
       const r = e.currentTarget.getBoundingClientRect();
-      const k = await showMenu([{ k: 'notebook', i: 'notebook', l: 'Neues Notizbuch' }, { k: 'import', i: 'upload', l: 'PDF importieren …' }, { k: 'folder', i: 'folder', l: 'Neuer Ordner' }], r.right - 230, r.bottom + 6);
+      const k = await showMenu([{ k: 'notebook', i: 'notebook', l: 'Neues Notizbuch' }, { k: 'import', i: 'upload', l: 'PDF importieren …' }, { k: 'photos', i: 'camera', l: 'Aus Fotos oder Scan …' }, { k: 'folder', i: 'folder', l: 'Neuer Ordner' }], r.right - 230, r.bottom + 6);
       if (k) newAction(k);
     };
     $('#fileIn').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (f.length) await importFiles(f); };

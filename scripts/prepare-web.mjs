@@ -15,7 +15,7 @@ const OUT = path.join(ROOT, 'web');
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(path.join(OUT, 'lib'), { recursive: true });
 for (const f of ['index.html', 'library.html', 'manifest.webmanifest']) fs.copyFileSync(path.join(SRC, f), path.join(OUT, f));
-for (const d of ['js', 'icons']) fs.cpSync(path.join(SRC, d), path.join(OUT, d), { recursive: true });
+for (const d of ['js', 'icons', 'fonts']) fs.cpSync(path.join(SRC, d), path.join(OUT, d), { recursive: true });
 
 const nm = p => path.join(ROOT, 'node_modules', p);
 fs.copyFileSync(nm('pdfjs-dist/build/pdf.min.js'), path.join(OUT, 'lib/pdf.min.js'));

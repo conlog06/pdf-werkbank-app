@@ -18,12 +18,17 @@
   const lsSet = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* egal */ } };
 
   /* Einstellungen und Zustand (pro Gerät) */
-  const S = Object.assign({ enabled: false, email: '', root: 'PDF Werkbank', rootId: '', lastRun: 0 }, JSON.parse(lsGet('pdfwb.gdrive') || '{}'));
+  const S = Object.assign({ enabled: false, email: '', root: 'PDF Werkbank', rootId: '', lastRun: 0, mode: 'change', exclude: [], noCellular: false }, JSON.parse(lsGet('pdfwb.gdrive') || '{}'));
+  /* Wann gesichert wird: change = kurz nach jeder Änderung, hourly = höchstens stündlich, close = beim Schließen eines Dokuments,
+     daily = einmal am Tag, manual = nur über „Jetzt sichern“ */
+  const MODES = { change: 'Nach jeder Änderung', hourly: 'Höchstens einmal pro Stunde', close: 'Beim Schließen eines Dokuments', daily: 'Einmal am Tag', manual: 'Nur manuell' };
+  const PERIOD = { hourly: 3600e3, daily: 20 * 3600e3 };
   const save = () => lsSet('pdfwb.gdrive', JSON.stringify(S));
   let tok = JSON.parse(lsGet('pdfwb.gdrive.tok') || 'null'); // nur Webseite: { token, exp }
   const st = { status: S.enabled ? 'idle' : 'off', error: '', failed: [], running: false, again: false, timer: 0, done: 0, total: 0 };
   const listeners = new Set();
-  const info = () => ({ ...st, enabled: S.enabled, email: S.email, root: S.root, rootId: S.rootId, lastRun: S.lastRun, configured: configured(), desktop: !!DESK });
+  const info = () => ({ ...st, enabled: S.enabled, email: S.email, root: S.root, rootId: S.rootId, lastRun: S.lastRun, configured: configured(), desktop: !!DESK, mode: S.mode, exclude: S.exclude.slice(), noCellular: !!S.noCellular, modes: MODES, next: nextRun() });
+  const cellular = () => { const c = navigator.connection; return !!(c && (c.type === 'cellular' || c.saveData)); };
   const emit = () => listeners.forEach(f => { try { f(info()); } catch (e) { console.error(e); } });
   const set = (status, error = '') => { st.status = status; st.error = error; emit(); };
 
@@ -224,6 +229,13 @@
     while (cur && n++ < 64) { if (cur.trashed || cur.deleted) return false; const p = cur.kind === 'folder' ? cur.parent : cur.folder; cur = p ? byId.get(p) : null; }
     return true;
   }
+  /* liegt das Dokument in einem vom Backup ausgenommenen Ordner (oder darunter)? */
+  function excluded(i, byId) {
+    if (!S.exclude.length) return false;
+    let f = i.folder ? byId.get(i.folder) : null, n = 0;
+    while (f && n++ < 64) { if (S.exclude.includes(f.id)) return true; f = f.parent ? byId.get(f.parent) : null; }
+    return false;
+  }
   function pathKey(i, byId) {
     const parts = []; let f = i.folder ? byId.get(i.folder) : null, n = 0;
     while (f && n++ < 64) { parts.unshift(f.id + ':' + f.name); f = f.parent ? byId.get(f.parent) : null; }
@@ -237,6 +249,7 @@
       const known = backupInfo(i.id);
       if (i.deleted || !alive(i, byId)) { if (known) gone.push(i.id); continue; }
       if (i.missing) continue; // liegt noch nicht auf diesem Gerät
+      if (excluded(i, byId)) continue; // ausgenommener Ordner: vorhandenes Backup bleibt unangetastet
       if (!known || known.rev !== i.rev || known.path !== pathKey(i, byId)) todo.push(i);
     }
     // gelöschte Dokumente, die das Gerät nicht mehr kennt
@@ -270,16 +283,32 @@
     });
   }
 
-  function schedule(ms = 4000) {
+  /* Zeitpunkt der nächsten automatischen Sicherung (nur stündlich/täglich) */
+  function nextRun() {
+    const per = PERIOD[S.mode];
+    return per && S.enabled ? Math.max(Date.now(), (S.lastRun || 0) + per) : 0;
+  }
+  function schedule(ms = 4000, force) {
     if (!S.enabled) return;
     clearTimeout(st.timer);
-    st.timer = setTimeout(run, ms);
+    st.timer = setTimeout(() => run(force), ms);
   }
-  /* alle fälligen Dokumente sichern */
-  async function run() {
+  /* automatischer Anlass (Änderung, Start, Intervall): nur wenn der gewählte Modus es vorsieht */
+  function trigger(reason, ms) {
+    if (!S.enabled) return;
+    const m = S.mode;
+    if (m === 'manual') return;
+    if (m === 'change') { if (reason !== 'close') schedule(ms == null ? 8000 : ms); return; }
+    if (m === 'close') { if (reason === 'close' || reason === 'start') schedule(ms == null ? 2500 : ms); return; }
+    const per = PERIOD[m];
+    if (per && Date.now() - (S.lastRun || 0) >= per) schedule(ms == null ? 3000 : ms);
+  }
+  /* alle fälligen Dokumente sichern (force: „Jetzt sichern“ – auch über mobile Daten) */
+  async function run(force) {
     if (!S.enabled || !global.WBStore) return;
     if (st.running) { st.again = true; return; }
     if (!navigator.onLine) { set('offline'); return; }
+    if (!force && S.noCellular && cellular()) { set('wait', 'Wartet auf WLAN'); return; }
     st.running = true;
     try {
       const { todo, gone, items, byId } = await pending();
@@ -318,15 +347,18 @@
       if (e.needAuth) set('auth'); else { console.warn('Drive-Backup', e); set('error', e.message || String(e)); }
     } finally {
       st.running = false;
-      if (st.again) { st.again = false; schedule(1500); }
+      if (st.again) { st.again = false; schedule(1500, force); }
     }
   }
   /* vom Editor: dieses Dokument gerade gespeichert, PDF liegt schon vor */
-  async function backupNow(id, bytes) {
-    if (!S.enabled) return false;
+  async function backupNow(id, bytes, reason = 'change') {
+    if (!S.enabled || !wants(reason)) return false;
+    if (S.noCellular && cellular()) return false;
     const item = await global.WBStore.get(id); if (!item || item.deleted) return false;
     const items = await global.WBStore.all(), byId = new Map(items.map(i => [i.id, i]));
-    if (!alive(item, byId)) return false;
+    if (!alive(item, byId) || excluded(item, byId)) return false;
+    const known = backupInfo(id);
+    if (known && known.rev === item.rev && known.path === pathKey(item, byId)) return true; // schon aktuell
     try {
       set('running');
       await backupDoc(item, bytes, items);
@@ -336,19 +368,36 @@
     } catch (e) { if (e.needAuth) set('auth'); else set('error', e.message || String(e)); return false; }
   }
 
+  /* soll der Editor jetzt selbst sichern? (er hat die PDF schon fertig) */
+  function wants(reason) {
+    const m = S.mode;
+    if (reason === 'manual') return true;
+    if (m === 'change') return reason === 'change';
+    if (m === 'close') return reason === 'close';
+    const per = PERIOD[m];
+    return !!per && reason === 'change' && Date.now() - (S.lastRun || 0) >= per;
+  }
   /* nur die Bibliothek überwacht alle Dokumente; der Editor sichert sein eigenes Dokument direkt */
   let watching = false;
   function watch() {
     if (watching || !global.WBStore) return;
     watching = true;
-    global.WBStore.onChange(() => schedule(8000)); // etwas verzögert, damit nicht jede Kleinigkeit hochlädt
-    global.addEventListener('online', () => schedule(1000));
-    setInterval(() => schedule(100), 5 * 60000);
-    schedule(2500);
+    global.WBStore.onChange(() => trigger('change')); // etwas verzögert, damit nicht jede Kleinigkeit hochlädt
+    global.addEventListener('online', () => trigger('change', 1000));
+    setInterval(() => trigger('tick', 100), 5 * 60000);
+    // Bibliothek öffnet sich nach dem Schließen eines Dokuments → im Modus „beim Schließen“ jetzt sichern
+    trigger(/[?&]closed=1/.test(location.search) ? 'close' : 'start', 2500);
+  }
+  function setOptions(o) {
+    if (o.mode && MODES[o.mode]) S.mode = o.mode;
+    if (Array.isArray(o.exclude)) S.exclude = o.exclude.filter(Boolean);
+    if (o.noCellular != null) S.noCellular = !!o.noCellular;
+    save(); emit();
+    if (watching) trigger('start', 1500);
   }
 
   global.WBDrive = {
-    info, connect, resume, disconnect, run, schedule, watch, backupNow, backupInfo, pending, pdfOf,
+    info, connect, resume, disconnect, run, schedule, watch, backupNow, backupInfo, pending, pdfOf, setOptions, wants, MODES,
     enabled: () => S.enabled, configured,
     folderUrl: () => (S.rootId ? 'https://drive.google.com/drive/folders/' + S.rootId : 'https://drive.google.com/drive/my-drive'),
     setRenderer: fn => { renderer = fn; },
