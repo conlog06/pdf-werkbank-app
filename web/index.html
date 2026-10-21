@@ -222,6 +222,26 @@ output{font:11.5px var(--f-mono);color:var(--ink);min-width:3.6em;font-variant-n
 .seg button .ico{width:16px;height:16px;display:block}
 #dashSeg .ico{stroke-width:2.4}
 .ibtn.tbcfg{color:var(--muted)}
+.gh{display:none!important}
+.grep{position:relative}
+.gchev{position:absolute;right:0;bottom:0;width:13px;height:13px;cursor:pointer}
+.gchev::after{content:"";position:absolute;right:3px;bottom:3px;border-left:5px solid transparent;border-bottom:5px solid currentColor;opacity:.5}
+.grep:hover .gchev::after,.grep[aria-pressed="true"] .gchev::after{opacity:.9}
+.tbfly{position:fixed;z-index:60;min-width:220px;background:var(--raise);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgb(0 0 0 / .2);padding:6px;display:flex;flex-direction:column;animation:tbf .1s ease-out}
+@keyframes tbf{from{opacity:0;transform:translateY(-4px)}}
+.tbfly .mh{font:600 10.5px/1 var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:8px 10px 6px}
+.tbfly button{display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--ink);font-size:13.5px;text-align:left}
+.tbfly button:hover{background:var(--accent-soft)}
+.tbfly button[aria-pressed="true"]{color:var(--accent);background:var(--accent-soft)}
+.tbfly button span{flex:1}
+.tbfly kbd{font:11px var(--f-mono);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+@media (any-pointer:coarse){.tbfly button{padding:12px 12px;font-size:15px}.gchev{width:18px;height:18px}}
+/* Bibliotheksmodus: schlanke Kopfzeile mit Dokumentname */
+.libmode .word,.libmode #btnOpen,.libmode #btnMerge{display:none}
+.libmode .menu [data-act="open"]{display:block}
+.libmode .docname{font:600 14px/1.2 var(--f-ui);color:var(--ink);max-width:min(42ch,40vw)}
+.aibtn{color:var(--accent)}
+#app.aiopen .work{margin-right:418px}
 .favs{display:flex;align-items:center;gap:5px;flex:none}
 .favs .fav{width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--raise);display:grid;place-items:center;cursor:pointer;padding:0;position:relative}
 .favs .fav i{display:block;border-radius:50%;background:var(--c)}
@@ -276,6 +296,55 @@ output{font:11.5px var(--f-mono);color:var(--ink);min-width:3.6em;font-variant-n
 .spanel .sitem .tx{-webkit-line-clamp:5}
 
 /* Rechner */
+.aip{position:fixed;z-index:43;right:12px;top:calc(108px + env(safe-area-inset-top,0px));bottom:40px;width:min(400px,calc(100vw - 24px));display:flex;flex-direction:column;background:var(--raise);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 50px rgb(0 0 0 / .22);overflow:hidden}
+.aip-h{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;border-bottom:1px solid var(--line)}
+.aip-h>.ico{color:var(--accent)}
+.aip-h b{white-space:nowrap}
+.aip-who{font:11px var(--f-mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.aip-setup{padding:14px;overflow:auto}
+.aip-main{display:flex;flex-direction:column;min-height:0;flex:1}
+.aip-scope{margin:10px 12px 0;align-self:flex-start}
+.aip-quick{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.aip-quick button{border:1px solid var(--line);background:var(--chrome);border-radius:999px;padding:5px 11px;font-size:12.5px;cursor:pointer;color:var(--ink);display:inline-flex;align-items:center;gap:5px}
+.aip-quick button:hover{border-color:var(--accent);color:var(--accent)}
+.aip-log{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:12px;min-height:0}
+.aip-log .empty{color:var(--muted);font-size:13px;text-align:center;margin:auto 10px}
+.am{max-width:100%;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere}
+.am.u{align-self:flex-end;background:var(--accent-soft);color:var(--ink);padding:7px 11px;border-radius:12px 12px 3px 12px;max-width:88%;white-space:pre-wrap}
+.am.a{align-self:stretch}
+.am.a .tx p{margin:0 0 .55em}.am.a .tx ul,.am.a .tx ol{margin:0 0 .55em;padding-left:1.3em}.am.a .tx h4{margin:.6em 0 .3em;font-size:14px}
+.am.a .tx code{font:12px var(--f-mono);background:var(--chrome);padding:1px 4px;border-radius:4px}
+.am.a .pg{border:0;background:var(--accent-soft);color:var(--accent);font:600 11px var(--f-mono);padding:1px 6px;border-radius:5px;cursor:pointer}
+.am.err .tx{color:var(--danger)}
+.am .acts{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.am .acts button{border:0;background:transparent;color:var(--muted);font-size:12px;padding:3px 7px;border-radius:6px;cursor:pointer;display:inline-flex;gap:4px;align-items:center}
+.am .acts button:hover{background:var(--accent-soft);color:var(--accent)}
+.am .acts .ico{width:14px;height:14px}
+.am .cursor{display:inline-block;width:7px;height:14px;background:var(--accent);vertical-align:-2px;animation:aiblink 1s steps(2) infinite}
+@keyframes aiblink{50%{opacity:0}}
+.aip-in{display:flex;gap:8px;align-items:flex-end;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line)}
+.aip-in textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--raise);color:var(--ink);font:inherit;max-height:140px}
+.aip-in .btn{height:38px;width:42px;padding:0;justify-content:center}
+.ai-acc{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:12px}
+.ai-logo{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font:700 13px var(--f-mono);color:#fff;background:#10a37f;flex:none}
+.ai-logo[data-p="anthropic"]{background:#d97757}.ai-logo[data-p="openai"]{background:#1b2130}
+.ai-sub{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.ai-fld{display:flex;flex-direction:column;gap:5px;margin:0 0 12px;font-size:12.5px;color:var(--muted)}
+.ai-fld>span{font:600 11px var(--f-mono);letter-spacing:.05em;text-transform:uppercase}
+.ai-row{display:flex;gap:6px}.ai-row .field{flex:1;min-width:0}
+.ai-big{width:100%;height:auto!important;padding:10px 14px!important;flex-direction:column;gap:2px!important;font-size:14px!important}
+.ai-big small{font-weight:400;opacity:.85;font-size:12px}
+.ai-or{text-align:center;font-size:12px;color:var(--muted);margin:12px 0}
+.ai-note{font-size:12px;color:var(--muted);line-height:1.45;margin:6px 0 0}
+.ai-err{color:var(--danger);font-size:12.5px;margin:0 0 8px;min-height:0}
+.ai-err:empty{display:none}
+.qbar{position:absolute;z-index:6;display:flex;align-items:center;gap:2px;padding:3px;background:var(--ink);color:var(--desk);border-radius:10px;box-shadow:0 8px 24px rgb(0 0 0 / .25);transform:translate(-50%,calc(-100% - 8px));white-space:nowrap;-webkit-user-select:none;user-select:none}
+.qbar button{border:0;background:transparent;color:inherit;height:30px;min-width:30px;padding:0 8px;border-radius:7px;font:500 12.5px var(--f-ui);cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.qbar button:hover{background:rgb(255 255 255 / .14)}
+.qbar .qc{width:18px;height:18px;min-width:18px;padding:0;border-radius:50%;border:2px solid rgb(255 255 255 / .7);margin:0 3px}
+.qbar .ico{width:15px;height:15px}
+.qbar .qs{width:1px;height:18px;background:rgb(255 255 255 / .25);margin:0 3px}
+.pages.live .qbar{display:none}
 .calc{position:fixed;z-index:44;right:16px;bottom:44px;width:min(380px,calc(100vw - 32px));max-height:calc(100vh - 120px);display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px;background:var(--raise);border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 50px rgb(0 0 0 / .22);overflow:auto}
 .calc>*{flex-shrink:0}
 .calc-h{display:flex;align-items:center;gap:8px;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}
@@ -359,6 +428,8 @@ body.reading .forml .ff{pointer-events:auto}
   .work .side{display:none}
   .work.thumbs-open .side{display:flex;position:absolute;left:0;top:0;bottom:0;width:min(260px,80vw);z-index:20;box-shadow:8px 0 30px rgb(0 0 0 / .2)}
   #btnRead{display:none}
+  .aip{left:0;right:0;top:auto;bottom:0;width:auto;height:78vh;border-radius:14px 14px 0 0}
+  .aip-who{display:none}
   .calc{left:0;right:0;bottom:0;width:auto;max-height:78vh;border-radius:14px 14px 0 0;padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px))}
   .calc-h{cursor:default}
   .btn .lbl{display:none}
@@ -405,6 +476,7 @@ body.reading .forml .ff{pointer-events:auto}
       <button class="ibtn" id="btnFit" title="Seitenbreite (Strg+0)" aria-label="An Breite anpassen"><i data-i="fit"></i></button>
     </div>
     <button class="ibtn" id="btnRead" title="Lesemodus (F)" aria-label="Lesemodus"><i data-i="book"></i></button>
+    <button class="ibtn aibtn" id="btnAI" title="KI-Assistent (Y)" aria-label="KI-Assistent" aria-pressed="false"><i data-i="spark"></i></button>
     <div class="find" role="search">
       <i data-i="search" style="color:var(--muted)"></i>
       <input id="findInput" type="search" placeholder="Suchen" aria-label="Im Dokument suchen" autocomplete="off">
@@ -446,7 +518,7 @@ body.reading .forml .ff{pointer-events:auto}
         <button role="menuitem" data-act="calc">Rechner und Graphen</button>
         <hr>
         <button role="menuitem" data-act="keys">Tastenkürzel und Gesten</button>
-        <button role="menuitem" data-act="meta">Dokumenteinstellungen …</button>
+        <button role="menuitem" data-act="meta">Einstellungen …</button>
       </div>
     </div>
   </header>
@@ -615,6 +687,28 @@ body.reading .forml .ff{pointer-events:auto}
   <footer class="row"><button class="btn" id="calcClearHist">Verlauf leeren</button><span class="grow"></span><button class="btn primary" id="calcInsert">Ergebnis in PDF einfügen</button></footer>
 </section>
 
+<section class="aip" id="aiPanel" hidden aria-label="KI-Assistent">
+  <header class="aip-h">
+    <i data-i="spark"></i><b>KI-Assistent</b><span class="aip-who" id="aiWho"></span>
+    <span class="grow"></span>
+    <button class="ibtn" id="aiNew" title="Neues Gespräch" aria-label="Neues Gespräch"><i data-i="restart"></i></button>
+    <button class="ibtn" id="aiCfg" title="KI einrichten" aria-label="KI einrichten" aria-pressed="false"><i data-i="gear"></i></button>
+    <button class="ibtn" id="aiClose" title="Schließen (Esc)" aria-label="KI-Assistent schließen"><i data-i="close"></i></button>
+  </header>
+  <div class="aip-setup" id="aiSetup" hidden></div>
+  <div class="aip-main" id="aiMain">
+    <div class="seg small aip-scope" id="aiScope" role="group" aria-label="Worauf bezieht sich die KI?">
+      <button data-v="doc" aria-pressed="true">Ganzes Dokument</button><button data-v="page" aria-pressed="false">Diese Seite</button><button data-v="sel" aria-pressed="false" hidden>Auswahl</button>
+    </div>
+    <div class="aip-quick" id="aiQuick"></div>
+    <div class="aip-log" id="aiLog" aria-live="polite"></div>
+    <form class="aip-in" id="aiForm">
+      <textarea id="aiInput" rows="2" placeholder="Frage zum Dokument stellen …" aria-label="Frage an die KI"></textarea>
+      <button class="btn primary" id="aiSend" type="submit" title="Senden (Enter)" aria-label="Senden"><i data-i="send"></i></button>
+    </form>
+  </div>
+</section>
+
 <div class="readbar" id="readbar" hidden>
   <span class="rp" id="readPage">1 / 1</span>
   <button class="ibtn" id="readNight" title="Nachtmodus" aria-label="Nachtmodus" aria-pressed="false"><i data-i="moon"></i></button>
@@ -686,6 +780,7 @@ body.reading .forml .ff{pointer-events:auto}
 <script src="js/calc.js"></script>
 <script src="js/palette.js"></script>
 <script src="js/photos.js"></script>
+<script src="js/ai.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

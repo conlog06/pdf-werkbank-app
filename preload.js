@@ -12,6 +12,12 @@ contextBridge.exposeInMainWorld('wbDesktop', {
   googleConnect: cfg => ipcRenderer.invoke('google-connect', cfg).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
   googleToken: cfg => ipcRenderer.invoke('google-token', cfg).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
   googleDisconnect: () => ipcRenderer.invoke('google-disconnect'),
+  // KI: Mit ChatGPT anmelden (Plus/Pro-Abo) und eigene API-Schlüssel, verschlüsselt gespeichert
+  chatgptConnect: () => ipcRenderer.invoke('chatgpt-connect').then(r => { if (r && r.error) throw new Error(r.error); return r; }),
+  chatgptToken: () => ipcRenderer.invoke('chatgpt-token').then(r => { if (r && r.error) throw new Error(r.error); return r; }),
+  chatgptDisconnect: () => ipcRenderer.invoke('chatgpt-disconnect'),
+  chatgptStatus: () => ipcRenderer.invoke('chatgpt-status'),
+  aiSecret: o => ipcRenderer.invoke('ai-secret', o).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
   // Datei über den Speichern-Dialog des Systems sichern
   saveFile: (name, bytes) => ipcRenderer.invoke('save-file', { name, bytes }).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
   // automatische Updates

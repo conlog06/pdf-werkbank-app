@@ -172,7 +172,7 @@
     for (const id of [...V.sel]) if (!items.some(i => i.id === id)) V.sel.delete(id);
     if (!items.length && !V.q) { c.innerHTML = emptyState(); bindEmpty(); renderSelbar(); return; }
     const sortSel = `<select id="sortSel" aria-label="Sortieren">${[['updated', 'Zuletzt geändert'], ['name', 'Name'], ['created', 'Erstellt']].map(([k, l]) => `<option value="${k}"${V.sort === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
-    let html = conflictNotice();
+    let html = conflictNotice() + continueStrip();
     if (V.view.kind === 'trash') html += `<div class="sec-h"><span>Elemente im Papierkorb</span><span class="grow"></span><button class="btn ghost" id="emptyTrash" style="height:30px;text-transform:none;letter-spacing:0">${ico('trash')}Papierkorb leeren</button></div>`;
     if (V.layout === 'list') {
       html += `<div class="list"><div class="lhead"><span></span><span>Name</span><span>Geändert</span><span>Ort</span><span>Größe</span><span></span></div>${fs.concat(ds).map(rowHTML).join('')}</div>`;
@@ -188,6 +188,7 @@
     const ss = $('#sortSel'); if (ss) ss.onchange = () => { V.sort = ss.value; lsSet('pdfwb.lib.sort', V.sort); renderContent(); };
     const et = $('#emptyTrash'); if (et) et.onclick = emptyTrash;
     const ts = $('#tileSize'); if (ts) ts.oninput = () => setTile(+ts.value);
+    $$('.ccard', c).forEach(b => { b.onclick = () => openDoc(b.dataset.cid); });
     loadThumbs();
     renderSelbar();
   }
@@ -267,6 +268,16 @@
     c.addEventListener('touchstart', e => { if (e.touches.length === 2 && V.layout === 'grid') pz = { d0: dist(e.touches), s0: tileSize() }; }, { passive: true });
     c.addEventListener('touchmove', e => { if (pz && e.touches.length === 2) { e.preventDefault(); setTile(pz.s0 * dist(e.touches) / pz.d0); } }, { passive: false });
     c.addEventListener('touchend', e => { if (e.touches.length < 2) pz = null; });
+  }
+  /* „Weiterlesen“: die zuletzt geöffneten Dokumente oben in „Dokumente“ */
+  function continueStrip() {
+    if (V.view.kind !== 'folder' || V.view.id || V.q || V.selecting) return '';
+    const docs = V.items.filter(i => i.kind === 'doc' && i.openedAt && alive(i)).sort((a, b) => b.openedAt - a.openedAt).slice(0, 6);
+    if (!docs.length) return '';
+    return `<section class="sec cont"><div class="sec-h"><span>Weiterlesen</span><span class="grow"></span></div><div class="cont-row">${docs.map(d => {
+      const pos = readPos(d.id), n = Math.max((pos && pos.n) || 0, d.pages || 0);
+      return `<button class="ccard" data-cid="${d.id}" title="${esc(d.name)} öffnen"><span class="cth" data-cover="${d.id}"><span class="ph">${ico('file')}</span></span><span class="ci"><div class="cn">${esc(d.name)}</div><div class="cs">${pos ? `Seite ${pos.p + 1} von ${n}` : fmtDate(d.openedAt)}</div>${pos ? `<div class="bar"><i style="width:${Math.round((pos.p + 1) / Math.max(1, n) * 100)}%"></i></div>` : ''}</span></button>`;
+    }).join('')}</div></section>`;
   }
   /* Lesefortschritt (vom Editor gemerkt, nur auf diesem Gerät) */
   function readPos(id) {
@@ -672,7 +683,7 @@
     b.dataset.s = s;
     $('#syncTitle').textContent = I.user ? ({ ok: 'Synchronisiert', syncing: 'Synchronisiere …', error: 'Sync-Fehler', offline: 'Offline', idle: I.mode === 'manual' ? 'Sync manuell' : 'Verbunden' }[I.status] || 'Verbunden') : 'Sync aus';
     $('#syncSub').textContent = I.user ? (I.status === 'error' ? I.error : I.user.email) : (I.configured ? 'Anmelden, um Geräte zu verbinden' : 'Webseite und App verbinden');
-    $('#syncIco').innerHTML = ico(I.user ? 'cloud' : 'gear');
+    $('#syncIco').innerHTML = ico('cloud');
   }
 
   /* Google Drive: automatisches Backup aller Dokumente als PDF */
@@ -841,6 +852,59 @@
       }),
     });
   }
+  /* ---------- Einstellungen: Darstellung, KI, Sync und Backup, App ---------- */
+  function setTheme(v) {
+    if (v === 'light' || v === 'dark') { document.documentElement.dataset.theme = v; lsSet('pdfwb.theme', v); }
+    else { delete document.documentElement.dataset.theme; try { localStorage.removeItem('pdfwb.theme'); } catch (e) { /* egal */ } }
+  }
+  setTheme(lsGet('pdfwb.theme'));
+  async function settingsDialog(tab = 'look') {
+    const AI = window.WBAI;
+    const tabs = [['look', 'Darstellung'], ...(AI ? [['ai', 'KI']] : []), ['backup', 'Sync und Backup'], ['app', 'App']];
+    const th = lsGet('pdfwb.theme') || '';
+    const sI = SY ? SY.info() : null, dI = GD ? GD.info() : null;
+    const ver = DESK && DESK.version ? await DESK.version().catch(() => '') : '';
+    await dialog(`<h2>Einstellungen</h2>
+      <div class="stabs2" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" data-t="${k}" aria-selected="${k === tab}">${l}</button>`).join('')}</div>
+      <div data-p="look">
+        <div class="fld"><span>Farbschema</span></div>
+        <div class="thm">${[['', 'Wie das System'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([k, l]) => `<button type="button" data-th="${k}" aria-pressed="${k === th}">${l}</button>`).join('')}</div>
+        <label class="fld"><span>Größe der Cover</span><input type="range" id="stTile" min="110" max="280" step="10" value="${tileSize()}" style="accent-color:var(--accent)"></label>
+        <label class="fld"><span>Ansicht</span><select class="field" id="stLayout"><option value="grid"${V.layout === 'grid' ? ' selected' : ''}>Kacheln</option><option value="list"${V.layout === 'list' ? ' selected' : ''}>Liste</option></select></label>
+      </div>
+      ${AI ? `<div data-p="ai" hidden><p class="lead" style="margin-top:0">Der KI-Assistent im Editor fasst zusammen, beantwortet Fragen zum PDF, erstellt Lernkarten und liest Handschrift.</p><div id="stAI"></div></div>` : ''}
+      <div data-p="backup" hidden>
+        <div class="srow"><span class="t"><b>Geräte synchronisieren</b><small>${sI && sI.user ? esc(sI.user.email) + ' · ' + esc((sI.modes || {})[sI.mode] || '') : 'Nicht angemeldet'}</small></span><button type="button" class="btn" data-go="sync">Öffnen</button></div>
+        <div class="srow"><span class="t"><b>Backup in Google Drive</b><small>${dI && dI.enabled ? esc(dI.email || 'verbunden') + ' · ' + esc((dI.modes || {})[dI.mode] || '') : 'Aus'}</small></span><button type="button" class="btn" data-go="drive">Öffnen</button></div>
+      </div>
+      <div data-p="app" hidden>
+        <div class="srow"><span class="t"><b>PDF Werkbank${ver ? ' ' + esc(ver) : ''}</b><small>${DESK ? 'Desktop-App · aktualisiert sich selbst' : 'Webseite · lädt neue Versionen automatisch'}</small></span><button type="button" class="btn" data-go="update">Nach Updates suchen</button></div>
+        ${!DESK && !standalone() ? `<div class="srow"><span class="t"><b>Als App installieren</b><small>Vollbild, eigenes Symbol, offline</small></span><button type="button" class="btn" data-go="install">Anleitung</button></div>` : ''}
+        <div class="srow"><span class="t"><b>Tastenkürzel</b><small>Strg/⌘ K öffnet die Befehlssuche, im Editor zeigt „?“ alle Kürzel</small></span></div>
+      </div>
+      <div class="acts"><button class="btn primary" data-x="0">Fertig</button></div>`, {
+      wide: true,
+      onOpen: (d, close) => {
+        const show = t => { $$('[data-t]', d).forEach(b => b.setAttribute('aria-selected', String(b.dataset.t === t))); $$('[data-p]', d).forEach(p => { p.hidden = p.dataset.p !== t; }); };
+        show(tab);
+        if (AI) AI.renderSetup(d.querySelector('#stAI'), { onChange: renderAIState });
+        d.addEventListener('click', e => {
+          const t = e.target.closest('[data-t]'); if (t) { show(t.dataset.t); return; }
+          const h = e.target.closest('[data-th]'); if (h) { setTheme(h.dataset.th); $$('[data-th]', d).forEach(x => x.setAttribute('aria-pressed', String(x === h))); return; }
+          const g = e.target.closest('[data-go]');
+          if (g) { const k = g.dataset.go; close(); if (k === 'sync') syncDialog(); else if (k === 'drive') driveDialog(); else if (k === 'install') installDialog(); else if (k === 'update' && window.WBUpdate) WBUpdate.check(true); return; }
+          if (e.target.closest('[data-x]')) close();
+        });
+        d.querySelector('#stTile').oninput = e => setTile(+e.target.value);
+        d.querySelector('#stLayout').onchange = e => { V.layout = e.target.value; lsSet('pdfwb.lib.layout', V.layout); renderContent(); const vg = $('#vGrid'), vl = $('#vList'); if (vg) vg.setAttribute('aria-pressed', String(V.layout === 'grid')); if (vl) vl.setAttribute('aria-pressed', String(V.layout === 'list')); };
+      },
+    });
+  }
+  function renderAIState() {
+    const el = $('#aiState'); if (!el || !window.WBAI) return;
+    const I = window.WBAI.info(); el.textContent = I.ready ? 'KI: ' + I.name : '';
+  }
+
   /* ---------- Fotos und Scans → neues Dokument ---------- */
   let photoMode = lsGet('pdfwb.photomode') || 'scan';
   async function photosDialog() {
@@ -979,6 +1043,7 @@
     $('#search').addEventListener('input', e => { clearTimeout(qT); qT = setTimeout(() => { V.q = e.target.value.trim(); render(); }, 120); });
     $('#syncBtn').onclick = syncDialog;
     $('#installBtn').onclick = installDialog; renderInstall();
+    $('#setIco').innerHTML = ico('gear'); $('#setBtn').onclick = () => settingsDialog(); renderAIState();
     if (GD) { $('#driveBtn').onclick = driveDialog; GD.onStatus(renderDrive); GD.watch(); } else $('#driveBtn').hidden = true;
 
     $('#nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (b) go({ kind: b.dataset.nav, id: null }); };
@@ -1101,6 +1166,9 @@
       A(V.layout === 'grid' ? 'Als Liste anzeigen' : 'Als Kacheln anzeigen', () => (V.layout === 'grid' ? $('#vList') : $('#vGrid')).click(), '', 'ansicht'),
       A('In allen Dokumenten suchen', () => $('#search').focus(), 'Strg+F', 'volltext suche'),
       A('Nach Updates suchen', () => { if (window.WBUpdate) WBUpdate.check(true); }, '', 'update version aktualisieren'),
+      A('Einstellungen', () => settingsDialog(), '', 'optionen darstellung dunkel hell theme'),
+      A('KI einrichten (ChatGPT, Claude)', () => settingsDialog('ai'), '', 'ki ai chatgpt claude openai schlüssel'),
+      A('Dunkles Design', () => setTheme('dark'), '', 'theme nacht dunkel'), A('Helles Design', () => setTheme('light'), '', 'theme hell'),
     ];
     if (!DESK && !standalone()) out.push(A('Als App installieren', installDialog, '', 'home-bildschirm pwa'));
     if (q && q.trim().length >= 1) {

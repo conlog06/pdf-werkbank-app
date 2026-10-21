@@ -119,6 +119,12 @@ const ICONS = {
   pages: 'M7 3h10v7H7zM7 14h10v7H7z',
   bookmark: 'M7 3h10v18l-5-4-5 4z',
   pencil: 'M4 20l3-1 12-12-2-2L5 17zM15 5l2-2 2 2-2 2',
+  spark: 'M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8-1.8-.7 1.8-.7z',
+  restart: 'M4 12a8 8 0 1 0 2.4-5.7L4 9M4 4v5h5', send: 'M4 12l16-8-6 16-2.4-6.6z',
+  list: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01', bulb: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.8.6 1.5 1.6 1.5 2.6V17h4v-.5c0-1 .7-2 1.5-2.6A6 6 0 0 0 12 3z',
+  cards: 'M8 4h12v12H8zM4 8v12h12', quiz: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01',
+  checks: 'M4 7l2 2 4-4M4 17l2 2 4-4M13 7h7M13 17h7', translate: 'M4 5h8M8 3v2M5.5 5c.5 3 2.5 5.5 5.5 7M11 5c-.5 3-3 6.5-6.5 8M13 21l4-10 4 10M14.5 17.5h5',
+  hand: 'M3 17c2.5-3 4-9 6-9s-1 9 1.5 9 3-5 5-5 1 3 3 3 2-1 2.5-1.5',
   sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
   aleft: 'M4 6h16M4 10h10M4 14h16M4 18h10', acenter: 'M4 6h16M7 10h10M4 14h16M7 18h10', aright: 'M4 6h16M10 10h10M4 14h16M10 18h10',
   lsolid: 'M3 12h18', ldash: 'M3 12h4M10 12h4M17 12h4', ldot: 'M4 12h.01M8 12h.01M12 12h.01M16 12h.01M20 12h.01',
@@ -216,6 +222,12 @@ const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return 
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* nicht verfügbar */ } };
 S.prefs = (() => { try { return { ...PREF_DEFAULTS, ...JSON.parse(lsGet('pdfwb.prefs') || '{}') }; } catch (e) { return { ...PREF_DEFAULTS }; } })();
 const savePrefs = () => lsSet('pdfwb.prefs', JSON.stringify(S.prefs));
+/* Hell, dunkel oder wie das System (gilt für Editor und Bibliothek) */
+function setTheme(v) {
+  if (v === 'light' || v === 'dark') { document.documentElement.dataset.theme = v; lsSet('pdfwb.theme', v); }
+  else { delete document.documentElement.dataset.theme; try { localStorage.removeItem('pdfwb.theme'); } catch (e) { /* egal */ } }
+}
+setTheme(lsGet('pdfwb.theme'));
 TP.measure.unit = S.prefs.unit; TP.measure.scale = S.prefs.scale;
 TP.hl.color = S.prefs.hlColor; TP.ul.color = S.prefs.ulColor; TP.so.color = S.prefs.soColor;
 /* Länge in PDF-Punkt in der gewählten Einheit, deutsch formatiert */
@@ -1104,6 +1116,7 @@ function drawAnnots(p) {
   }
   if (e.under) e.under.innerHTML = `<g class="ann">${vis.filter(a => a.under).map(annotSVG).join('')}</g>`;
   e.svg.innerHTML = `<g class="ann">${ann}</g><g class="hits">${hitsSVG(p)}</g><g class="cui">${cuiSVG(p)}</g><g class="draft"></g><g class="ui">${ui}</g>`;
+  drawQbar(p, e);
   queueThumb(p);
   updateSideLater();
 }
@@ -1382,11 +1395,13 @@ function select(pid, aid) {
 }
 function setTool(t) {
   commitEdit();
+  if (S.qbar) { const qp = pageById(S.qbar.pid); S.qbar = null; if (qp) setTimeout(() => drawAnnots(qp), 0); }
   S.tool = t;
   if (t !== 'select' && (S.sel || S.msel)) setMulti(null, []);
   if (t !== 'objects' && (S.csel || S.hover)) { const hp = S.hover && pageById(S.hover.pid); S.hover = null; setCsel(null, []); if (hp) drawCUI(hp); }
   if ((t === 'objects' || t === 'edittext') && S.pages[S.cur]) analysisOf(S.pages[S.cur]).catch(() => toast('Die Inhalte dieser PDF lassen sich nicht auslesen (z. B. verschlüsselt).'));
   if (SNAP_TOOLS.has(t) && S.pages[S.cur]) analysisOf(S.pages[S.cur]).catch(() => {});
+  if (tbCompact && TB_DEFAULT) { const g = groupOf(t), el = g && tbEl(t); if (el && el.classList.contains('gh')) { lsSet('pdfwb.tbrep.' + g, t); applyToolbar(); } }
   $$('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
   pagesEl.dataset.tool = t;
   if (DRAW_TOOLS.has(t)) pagesEl.dataset.draw = ''; else delete pagesEl.dataset.draw;
@@ -2256,7 +2271,7 @@ function createMark(p, ch, i0, i1, tool) {
   const tp = TP[tool], a = { id: uid(), t: 'mark', kind: tool, rects: m.rects, text: m.text, color: tp.color };
   if (tool === 'hl') a.op = tp.op;
   if (rotOf(p) % 180) a.vert = true;
-  pushHist(); p.annots.push(a); markDirty(); drawAnnots(p);
+  pushHist(); p.annots.push(a); markDirty(); S.qbar = { pid: p.id, aid: a.id }; drawAnnots(p); setTimeout(() => { if (S.qbar && S.qbar.aid === a.id) drawAnnots(p); }, 0);
   setMsg(`Markiert: „${m.text.length > 60 ? m.text.slice(0, 59) + '…' : m.text}“`);
   if (S.prefs.askComment) editComment(p, a);
   return a;
@@ -2758,9 +2773,9 @@ function settingsDialog(tab = 'doc') {
   const f = (id, label, v, ph = '') => `<label class="fld"><span>${label}</span><input class="field" id="${id}" value="${esc(v || '')}" placeholder="${esc(ph)}"></label>`;
   const chk = (id, label, on, note = '') => `<label class="chk big"><input type="checkbox" id="${id}"${on ? ' checked' : ''}><span>${label}${note ? `<small>${note}</small>` : ''}</span></label>`;
   const opt = (v, l, cur) => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${l}</option>`;
-  const tabs = [['doc', 'Dokument'], ['cmt', 'Kommentare'], ['meas', 'Messen'], ['view', 'Ansicht']];
+  const tabs = [['doc', 'Dokument'], ['cmt', 'Kommentare'], ['meas', 'Messen'], ['view', 'Ansicht'], ...(AIX ? [['ai', 'KI']] : [])];
   const nMarks = S.pages.reduce((s, p) => s + p.annots.filter(a => !a.pn).length, 0);
-  dialog('Dokumenteinstellungen', `
+  dialog('Einstellungen', `
     <div class="seg stab" role="tablist">${tabs.map(([k, l]) => `<button type="button" role="tab" data-st="${k}" aria-pressed="${k === tab}">${l}</button>`).join('')}</div>
     <div class="spage" data-sp="doc">
       ${f('mTitle', 'Titel', m.title)}${f('mAuthor', 'Autor des Dokuments', m.author)}
@@ -2792,11 +2807,15 @@ function settingsDialog(tab = 'doc') {
       <p class="note">Beispiel: 100 pt entsprechen <b id="pEx">${fmtLen(100, P.unit, P.scale, P.decimals)}</b>.</p>
     </div>
     <div class="spage" data-sp="view" hidden>
+      <label class="fld"><span>Darstellung</span><select class="field" id="pTheme">${opt('', 'Wie das System', lsGet('pdfwb.theme') || '')}${opt('light', 'Hell', lsGet('pdfwb.theme') || '')}${opt('dark', 'Dunkel', lsGet('pdfwb.theme') || '')}</select></label>
+      ${chk('pGroup', 'Werkzeuge gruppieren', tbCompact, 'Ähnliche Werkzeuge (Formen, Markieren, Stempel …) teilen sich einen Knopf mit Ausklapp-Menü.')}
+      <p class="note" style="margin:-4px 0 10px"><button type="button" class="btn" id="pTb">${icon('sliders')}Werkzeugleiste anpassen …</button></p>
       ${chk('pSnap', 'Hilfslinien beim Verschieben', P.snap, 'Elemente rasten an Seitenrand, Mitte und anderen Elementen ein.')}
       ${chk('pShape', 'Formen beim Zeichnen erkennen', TP.pen.shapes, 'Strich am Ende kurz halten: Linie, Rechteck oder Ellipse.')}
       ${chk('pNight', 'Nachtmodus für Seiten', S.night)}
       ${COARSE ? chk('pPencil', 'Nur Apple Pencil zeichnet', S.pencil.only, 'Finger scrollen und zoomen, der Handballen malt nicht mit.') : ''}
-    </div>`, 'Übernehmen', b => {
+    </div>
+    ${AIX ? '<div class="spage" data-sp="ai" hidden><div id="stAI"></div></div>' : ''}`, 'Übernehmen', b => {
     S.meta = { title: $('#mTitle', b).value.trim(), author: $('#mAuthor', b).value.trim(), subject: $('#mSubject', b).value.trim(), keywords: $('#mKeys', b).value.trim(), pageMode: $('#mMode', b).value };
     const unit = $('#pUnit', b).value, dec = +$('#pDec', b).value, scale = +$('#pScale', b).value;
     Object.assign(S.prefs, {
@@ -2809,6 +2828,8 @@ function settingsDialog(tab = 'doc') {
     TP.measure.unit = unit; TP.measure.scale = scale; TP.pen.shapes = $('#pShape', b).checked;
     if ($('#pAll', b).checked) for (const p of S.pages) for (const a of p.annots) if (a.t === 'measure') { a.unit = unit; a.scale = scale; delete a.dec; }
     setNight($('#pNight', b).checked);
+    setTheme($('#pTheme', b).value);
+    if ($('#pGroup', b).checked !== tbCompact) { tbCompact = $('#pGroup', b).checked; lsSet('pdfwb.tbcompact', tbCompact ? '1' : '0'); applyToolbar(); }
     if ($('#pPencil', b)) setPencilOnly($('#pPencil', b).checked, true);
     pagesEl.classList.toggle('hidemarks', !S.prefs.showMarks); updateSideLater();
     S.pages.forEach(drawAnnots); markDirty(); renderProps();
@@ -2821,6 +2842,9 @@ function settingsDialog(tab = 'doc') {
     $$('[data-sp]', body).forEach(x => { x.hidden = x.dataset.sp !== t.dataset.st; });
   });
   $$('[data-sp]', body).forEach(x => { x.hidden = x.dataset.sp !== tab; });
+  $('#pTb', body).onclick = () => { $('#dlgCancel').click(); setTimeout(toolbarDialog, 30); };
+  $('#pTheme', body).onchange = e => setTheme(e.target.value);
+  if (AIX) AIX.renderSetup($('#stAI', body), { onChange: () => aiUpdateHead() });
   const ex = () => { $('#pEx', body).textContent = fmtLen(100, $('#pUnit', body).value, +$('#pScale', body).value, +$('#pDec', body).value); };
   ['#pUnit', '#pDec', '#pScale'].forEach(s => $(s, body).addEventListener('change', ex));
 }
@@ -3727,6 +3751,12 @@ const TB_PRESETS = {
   forms: ['Formulare und Verträge', ['objects', 'edittext', 'eraser', 'hl', 'ul', 'so', 'rect', 'ellipse', 'line', 'arrow', 'measure', 'laser', 'calc', 'redact']],
 };
 let TB_DEFAULT = null;
+/* Gruppen: ein Knopf je Gruppe, die übrigen Werkzeuge im Ausklapp-Menü */
+const TB_GROUPS = { edit: ['objects', 'edittext', 'white', 'redact'], marks: ['hl', 'ul', 'so'], shapes: ['rect', 'ellipse', 'line', 'arrow', 'measure'], stamps: ['check', 'cross', 'stamp', 'note'], insert: ['img', 'sig'] };
+const TB_GROUP_NAMES = { edit: 'PDF bearbeiten', marks: 'Markieren', shapes: 'Formen und Messen', stamps: 'Haken, Stempel, Notiz', insert: 'Bild und Unterschrift' };
+const groupOf = k => Object.keys(TB_GROUPS).find(g => TB_GROUPS[g].includes(k));
+let tbCompact = lsGet('pdfwb.tbcompact') !== '0';
+const tbEl = k => (k === 'img' ? $('#btnImg') : k === 'sig' ? $('#btnSig') : $(`.toolbar [data-tool="${k}"]`));
 const tbKey = el => el.dataset.tool || (TB_EXTRA[el.id] || [])[0] || (el.classList.contains('vsep') ? 'sep' : null);
 function tbItems() {
   const out = [];
@@ -3770,10 +3800,62 @@ function applyToolbar(cfg = tbLoad()) {
     placed.push({ k, el });
   }
   seps.slice(si).forEach(el => el.remove());
+  // Gruppen bilden: nur ein Vertreter je Gruppe bleibt sichtbar
+  for (const [g, list] of Object.entries(TB_GROUPS)) {
+    const vis = list.filter(k => byKey.get(k) && !byKey.get(k).hidden);
+    let rep = vis.includes(S.tool) ? S.tool : vis.includes(lsGet('pdfwb.tbrep.' + g)) ? lsGet('pdfwb.tbrep.' + g) : vis[0];
+    for (const k of list) {
+      const el = byKey.get(k); if (!el) continue;
+      const grouped = tbCompact && vis.length > 1;
+      el.classList.toggle('gh', grouped && k !== rep);
+      el.classList.toggle('grep', grouped && k === rep);
+      if (grouped && k === rep) { el.dataset.group = g; if (!$('.gchev', el)) el.insertAdjacentHTML('beforeend', '<span class="gchev" aria-hidden="true"></span>'); }
+      else { delete el.dataset.group; const c = $('.gchev', el); if (c) c.remove(); }
+    }
+  }
+  const off = el => el.hidden || el.classList.contains('gh');
   // doppelte und überzählige Trennlinien ausblenden
   let lastVis = 'sep';
-  placed.forEach(({ k, el }) => { if (k === 'sep') { el.hidden = lastVis === 'sep'; if (!el.hidden) lastVis = 'sep'; } else if (!el.hidden) lastVis = k; });
-  for (let i = placed.length - 1; i >= 0; i--) { const { k, el } = placed[i]; if (el.hidden) continue; if (k === 'sep') el.hidden = true; break; }
+  placed.forEach(({ k, el }) => { if (k === 'sep') { el.hidden = lastVis === 'sep'; if (!el.hidden) lastVis = 'sep'; } else if (!off(el)) lastVis = k; });
+  for (let i = placed.length - 1; i >= 0; i--) { const { k, el } = placed[i]; if (off(el)) continue; if (k === 'sep') el.hidden = true; break; }
+}
+/* Ausklapp-Menü einer Werkzeuggruppe */
+function openGroupMenu(btn) {
+  closeGroupMenu();
+  const g = btn.dataset.group; if (!g) return;
+  const hidden = new Set((tbLoad() || {}).hidden || []);
+  const items = TB_GROUPS[g].filter(k => tbEl(k) && !hidden.has(k));
+  const keyOf = t => Object.keys(KEYS).find(k => KEYS[k] === t) || (t === 'img' ? 'i' : t === 'sig' ? 'u' : '');
+  const m = document.createElement('div'); m.className = 'tbfly'; m.setAttribute('role', 'menu');
+  m.innerHTML = `<div class="mh">${esc(TB_GROUP_NAMES[g])}</div>` + items.map(k => `<button role="menuitem" data-k="${k}" aria-pressed="${S.tool === k}">${tbIcon(k)}<span>${esc(tbLabel(k))}</span>${keyOf(k) ? `<kbd>${keyOf(k).toUpperCase()}</kbd>` : ''}</button>`).join('');
+  document.body.appendChild(m);
+  const r = btn.getBoundingClientRect(), mh = m.offsetHeight, below = innerHeight - r.bottom > mh + 12;
+  m.style.left = clamp(r.left, 8, innerWidth - m.offsetWidth - 8) + 'px';
+  m.style.top = (below ? r.bottom + 6 : r.top - mh - 6) + 'px';
+  m.onclick = e => {
+    const b = e.target.closest('[data-k]'); if (!b) return;
+    const k = b.dataset.k; closeGroupMenu();
+    lsSet('pdfwb.tbrep.' + g, k);
+    if (k === 'img' || k === 'sig') { applyToolbar(); tbEl(k).click(); } else setTool(k);
+  };
+  setTimeout(() => document.addEventListener('pointerdown', groupMenuAway, true), 0);
+}
+function groupMenuAway(e) { if (!e.target.closest('.tbfly')) closeGroupMenu(); }
+function closeGroupMenu() { const m = $('.tbfly'); if (m) m.remove(); document.removeEventListener('pointerdown', groupMenuAway, true); }
+function bindGroups() {
+  const nav = $('.toolbar');
+  let lp = 0, lpFired = false;
+  nav.addEventListener('pointerdown', e => {
+    const b = e.target.closest('.grep'); lpFired = false; if (!b) return;
+    clearTimeout(lp); lp = setTimeout(() => { lpFired = true; openGroupMenu(b); }, 450);
+  });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) nav.addEventListener(ev, () => clearTimeout(lp));
+  // Ecke antippen, langes Drücken oder erneutes Tippen auf das aktive Werkzeug öffnet die Gruppe
+  nav.addEventListener('click', e => {
+    const b = e.target.closest('.grep'); if (!b) return;
+    if (lpFired || e.target.closest('.gchev') || (b.dataset.tool && b.dataset.tool === S.tool)) { e.preventDefault(); e.stopImmediatePropagation(); if (!lpFired) openGroupMenu(b); lpFired = false; }
+  }, true);
+  nav.addEventListener('contextmenu', e => { const b = e.target.closest('.grep'); if (b) { e.preventDefault(); openGroupMenu(b); } });
 }
 function toolbarDialog() {
   let order = tbOrder(tbLoad()), hidden = new Set((tbLoad() || {}).hidden || []);
@@ -3784,8 +3866,10 @@ function toolbarDialog() {
       <button class="mv" data-up title="Nach vorne" aria-label="Nach vorne">▲</button><button class="mv" data-down title="Nach hinten" aria-label="Nach hinten">▼</button></div>`).join('');
   dialog('Werkzeugleiste anpassen', `<p class="note" style="margin:0">Häkchen blendet ein oder aus, Pfeile ändern die Reihenfolge. Ausgeblendete Werkzeuge bleiben über Tastenkürzel und die Befehlssuche (Strg/⌘ K) erreichbar.</p>
     <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:10px">${Object.entries(TB_PRESETS).map(([k, [l]]) => `<button class="btn" data-preset="${k}" type="button">${esc(l)}</button>`).join('')}<button class="btn" data-addsep type="button">+ Trennlinie</button></div>
+    <label class="chk" style="margin-top:10px"><input type="checkbox" id="tbGroup" ${tbCompact ? 'checked' : ''}> Ähnliche Werkzeuge gruppieren (kompakt)</label>
     <div class="tblist" id="tbList">${rows()}</div>`, 'Übernehmen', () => {
     lsSet('pdfwb.toolbar', JSON.stringify({ order, hidden: [...hidden] }));
+    lsSet('pdfwb.tbcompact', tbCompact ? '1' : '0');
     applyToolbar(); toast('Werkzeugleiste angepasst');
   });
   const b = $('#dlgBody'), list = $('#tbList', b);
@@ -3800,7 +3884,10 @@ function toolbarDialog() {
     else if (e.target.closest('[data-down]') && i < order.length - 1) { [order[i + 1], order[i]] = [order[i], order[i + 1]]; redraw(); }
     else if (e.target.closest('[data-del]')) { order.splice(i, 1); redraw(); }
   };
-  b.onchange = e => { const row = e.target.closest('.tbrow'); if (!row || !e.target.matches('[data-vis]')) return; const k = order[+row.dataset.i]; if (e.target.checked) hidden.delete(k); else hidden.add(k); applyToolbar({ order, hidden: [...hidden] }); };
+  const g0 = tbCompact;
+  $('#tbGroup', b).onchange = e => { tbCompact = e.target.checked; applyToolbar({ order, hidden: [...hidden] }); };
+  $('#dlgCancel').addEventListener('click', () => { tbCompact = g0; }, { once: true });
+  b.onchange = e => { if (e.target.id === 'tbGroup') return; const row = e.target.closest('.tbrow'); if (!row || !e.target.matches('[data-vis]')) return; const k = order[+row.dataset.i]; if (e.target.checked) hidden.delete(k); else hidden.add(k); applyToolbar({ order, hidden: [...hidden] }); };
   $('#dlgCancel').addEventListener('click', () => applyToolbar(), { once: true });
 }
 
@@ -3996,12 +4083,310 @@ function fontUI() {
   $('#fontSel').innerHTML = Object.entries(groups).map(([g, list]) => `<optgroup label="${g}">${list.map(([k, f]) => `<option value="${k}" style="font-family:${esc(f.css)}">${esc(f.label || k)}</option>`).join('')}</optgroup>`).join('');
 }
 
+/* ---------- KI-Assistent: Fragen zum Dokument, Zusammenfassen, Lernkarten, Handschrift erkennen ---------- */
+const AIX = window.WBAI || null;
+const ai = { scope: 'doc', msgs: [], ctxKey: '', busy: null, sel: null, setup: false };
+const AI_INSTR = 'Du bist der KI-Assistent in der PDF Werkbank, einem PDF-Editor. Antworte auf Deutsch (außer wenn ausdrücklich übersetzt werden soll), klar, freundlich und knapp. Nutze einfaches Markdown: #### für Zwischenüberschriften, „- “ für Stichpunkte, **fett** für Schlüsselbegriffe. Stütze dich auf den mitgelieferten Inhalt; steht etwas nicht darin, sag das offen. Verweise auf Seiten im Format [S. 3].';
+const scopeName = s => (s === 'sel' ? 'die markierte Stelle' : s === 'page' ? 'diese Seite' : 'das Dokument');
+const AI_ACTIONS = [
+  { k: 'sum', l: 'Zusammenfassen', i: 'list', p: s => `Fasse ${scopeName(s)} zusammen: ein Satz zum Thema, danach die wichtigsten Punkte als Stichpunkte mit Seitenangabe.` },
+  { k: 'explain', l: 'Einfach erklären', i: 'bulb', p: s => `Erkläre ${scopeName(s)} so, dass man es ohne Vorwissen versteht, mit einem kurzen Beispiel.` },
+  { k: 'cards', l: 'Lernkarten', i: 'cards', p: s => `Erstelle 8 bis 12 Lernkarten zu ${scopeName(s)}. Je Karte: eine Zeile „**F:** Frage“ und darunter „**A:** knappe Antwort [S. n]“.` },
+  { k: 'quiz', l: 'Quiz', i: 'quiz', p: s => `Stelle mir 5 Multiple-Choice-Fragen zu ${scopeName(s)} mit je vier Antworten a) bis d). Die Lösungen mit kurzer Begründung erst ganz am Ende unter „#### Lösungen“.` },
+  { k: 'todo', l: 'Aufgaben & Termine', i: 'checks', p: s => `Liste alle Aufgaben, To-dos, Termine und Fristen aus ${scopeName(s)} auf, mit Datum falls vorhanden und Seitenangabe. Gibt es keine, sag das in einem Satz.` },
+  { k: 'translate', l: 'Übersetzen', i: 'translate', p: s => `Übersetze ${scopeName(s)} ins Deutsche; ist der Text schon Deutsch, dann ins Englische. Gib nur die Übersetzung aus und behalte die Gliederung bei.` },
+  { k: 'ocr', l: 'Handschrift → Text', i: 'hand', img: true, p: s => `Schreibe den gesamten Inhalt ${s === 'doc' ? 'dieser Seiten' : 'dieser Seite'} als sauberen, gegliederten Text ab, auch Handschrift. Formeln in einfacher Schreibweise (z. B. x^2). Nichts hinzuerfinden; Unleserliches als [?].` },
+];
+/* Text einer Seite in Lesereihenfolge, plus eigene Texte und Notizen */
+async function pageText(p) {
+  const tc = await textContent(p), lines = [];
+  let line = '', lastY = null;
+  for (const it of tc.items) {
+    const y = it.transform[5];
+    if (lastY !== null && Math.abs(y - lastY) > 2 && line) { lines.push(line); line = ''; }
+    line += it.str; lastY = y;
+    if (it.hasEOL) { lines.push(line); line = ''; }
+  }
+  if (line) lines.push(line);
+  const own = p.annots.filter(a => (a.t === 'text' || a.t === 'note') && a.text).map(a => (a.t === 'note' ? 'Notiz: ' : '') + a.text)
+    .concat(p.annots.filter(a => a.comment).map(a => 'Kommentar: ' + a.comment));
+  return { text: lines.join('\n').replace(/\n{3,}/g, '\n\n').trim(), own };
+}
+/* Seite mit allen eigenen Elementen als JPEG (für Handschrift und Bilder) */
+async function pageImage(p, maxSide = 1600) {
+  const proxy = proxyOf(p), v1 = proxy.getViewport({ scale: 1, rotation: rotOf(p) });
+  const k = Math.min(2.5, maxSide / Math.max(v1.width, v1.height)), vp = proxy.getViewport({ scale: k, rotation: rotOf(p) });
+  const c = document.createElement('canvas'); c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+  await proxy.render({ canvasContext: ctx, viewport: vp }).promise;
+  if (p.annots.length) {
+    const [W, H] = dims(p), img = new Image();
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}" viewBox="0 0 ${W} ${H}">${p.annots.map(annotSVG).join('')}</svg>`;
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+  }
+  return c.toDataURL('image/jpeg', 0.82);
+}
+const MAX_CTX = 90000, MAX_IMGS = 6;
+async function aiContext(scope, wantImg) {
+  const head = `Dokument: „${S.docName.replace(/\.pdf$/i, '')}“, ${S.pages.length} ${S.pages.length === 1 ? 'Seite' : 'Seiten'}.`;
+  if (scope === 'sel' && ai.sel) return { head: head + ` Markierte Stelle auf Seite ${ai.sel.page}:`, text: ai.sel.text, images: [] };
+  const list = scope === 'page' ? [S.cur] : S.pages.map((p, i) => i);
+  const parts = [], images = [];
+  let total = 0, cut = false, thin = 0;
+  for (const i of list) {
+    const p = S.pages[i], t = await pageText(p);
+    const block = `[Seite ${i + 1}]\n${t.text}${t.own.length ? '\n' + t.own.join('\n') : ''}`;
+    if (t.text.length < 120) thin++;
+    if (total + block.length > MAX_CTX) { cut = true; break; }
+    parts.push(block); total += block.length;
+  }
+  // Seiten ohne Text (Handschrift, Scans): Bilder mitschicken
+  const needImg = wantImg || thin > list.length / 2 || (scope === 'page' && S.pages[S.cur].annots.some(a => a.t === 'pen'));
+  if (needImg) {
+    const order = scope === 'page' ? [S.cur] : [S.cur, ...list.filter(i => i !== S.cur)];
+    for (const i of order.slice(0, MAX_IMGS)) images.push(await pageImage(S.pages[i]));
+  }
+  return { head: head + (cut ? ` (Text nach ${parts.length} Seiten gekürzt)` : '') + (images.length ? ` Dazu ${images.length === 1 ? 'ein Bild der Seite' : images.length + ' Seitenbilder'} (S. ${(scope === 'page' ? [S.cur] : [S.cur, ...list.filter(i => i !== S.cur)]).slice(0, MAX_IMGS).map(i => i + 1).join(', ')}).` : ''), text: parts.join('\n\n'), images };
+}
+/* Markdown light → HTML, Seitenverweise als Knöpfe */
+function aiMd(t) {
+  const inline = s => s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[(?:S\.|Seite)\s*(\d+)(?:\s*[–-]\s*\d+)?\]/g, (m, n) => `<button class="pg" data-pg="${n}" title="Zu Seite ${n}">S. ${n}</button>`);
+  const out = []; let list = null;
+  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of esc(t).split('\n')) {
+    const line = raw.trimEnd(), m = /^\s*(?:[-*•]|(\d+)[.)])\s+(.*)$/.exec(line), h = /^#{1,6}\s+(.*)$/.exec(line);
+    if (h) { close(); out.push(`<h4>${inline(h[1])}</h4>`); }
+    else if (m) { const tag = m[1] ? 'ol' : 'ul'; if (list !== tag) { close(); out.push(`<${tag}>`); list = tag; } out.push(`<li>${inline(m[2])}</li>`); }
+    else if (!line.trim()) close();
+    else { close(); out.push(`<p>${inline(line)}</p>`); }
+  }
+  close();
+  return out.join('');
+}
+const aiPlain = t => t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/^#{1,6}\s+/gm, '').replace(/^\s*[-*]\s+/gm, '• ').replace(/\[(?:S\.|Seite)\s*(\d+)\]/g, '(S. $1)').trim();
+/* lange Zeilen für Textfelder umbrechen */
+function wrapFor(text, a, maxW) {
+  const out = [];
+  for (const para of text.split('\n')) {
+    let line = '';
+    for (const w of para.split(/\s+/)) {
+      const t = line ? line + ' ' + w : w;
+      if (line && measure(t, a) > maxW) { out.push(line); line = w; } else line = t;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+function aiAddMsg(kind, html) {
+  const log = $('#aiLog'), em = $('.empty', log); if (em) em.remove();
+  const d = document.createElement('div'); d.className = 'am ' + kind; d.innerHTML = html;
+  log.appendChild(d); log.scrollTop = log.scrollHeight;
+  return d;
+}
+function aiRender(el, text, streaming) {
+  el.innerHTML = `<div class="tx">${aiMd(text)}${streaming ? '<span class="cursor"></span>' : ''}</div>` + (streaming ? '' : `<div class="acts">
+    <button data-aa="copy">${icon('copy')}Kopieren</button><button data-aa="note">${icon('note')}Als Notiz</button><button data-aa="text">${icon('text')}Als Text</button><button data-aa="page">${icon('blank')}Als Seite</button></div>`);
+  el.dataset.raw = text;
+  const log = $('#aiLog'); if (log.scrollHeight - log.scrollTop - log.clientHeight < 140) log.scrollTop = log.scrollHeight;
+}
+function aiEmpty() {
+  const I = AIX ? AIX.info() : null;
+  $('#aiLog').innerHTML = `<div class="empty">${I && I.ready ? 'Wähle oben eine Aktion oder stell eine Frage zum Dokument, zum Beispiel „Worum geht es auf Seite 3?“' : 'Richte zuerst einen KI-Dienst ein (Zahnrad oben).'}</div>`;
+}
+function aiUpdateHead() {
+  const I = AIX && AIX.info();
+  $('#aiWho').textContent = I && I.ready ? `${I.name}${I.model ? ' · ' + I.model : ''}` : 'nicht eingerichtet';
+  $('#aiSend').disabled = false;
+  $('#aiSend').innerHTML = ai.busy ? icon('close') : icon('send');
+  $('#aiSend').title = ai.busy ? 'Stopp' : 'Senden (Enter)';
+}
+async function aiShowSetup(on) {
+  ai.setup = on;
+  $('#aiSetup').hidden = !on; $('#aiMain').hidden = on;
+  $('#aiCfg').setAttribute('aria-pressed', String(on));
+  if (on) await AIX.renderSetup($('#aiSetup'), { onChange: I => { aiUpdateHead(); if (I.ready && ai.setup && !ai.keepSetup) aiShowSetup(false); aiEmpty(); } });
+}
+function aiSetScope(s) {
+  ai.scope = s;
+  $$('#aiScope button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === s)));
+}
+function toggleAI(on = $('#aiPanel').hidden, opts = {}) {
+  if (!AIX) { toast('Die KI ist in dieser Fassung nicht verfügbar.'); return; }
+  $('#aiPanel').hidden = !on; $('#btnAI').setAttribute('aria-pressed', String(on));
+  $('#app').classList.toggle('aiopen', on && innerWidth > 1100);
+  if (!on) { if (ai.busy) ai.busy.abort(); return; }
+  if (!$('#calc').hidden && window.toggleCalc) window.toggleCalc(false);
+  if (innerWidth > 760) $('#aiPanel').style.top = (propbar.getBoundingClientRect().bottom + 8) + 'px';
+  aiUpdateHead();
+  if (!AIX.info().ready) aiShowSetup(true); else if (ai.setup) aiShowSetup(false);
+  if (!$('#aiLog').children.length) aiEmpty();
+  if (!COARSE && !ai.setup) setTimeout(() => $('#aiInput').focus(), 30);
+}
+async function aiRun(question, opts = {}) {
+  if (!AIX) return;
+  if (!AIX.info().ready) { toggleAI(true); aiShowSetup(true); return; }
+  if (ai.busy) return;
+  if ($('#aiPanel').hidden) toggleAI(true);
+  if (opts.scope) aiSetScope(opts.scope);
+  const scope = ai.scope;
+  if (scope === 'sel' && !ai.sel) aiSetScope('page');
+  const key = scope + ':' + (scope === 'page' ? S.pages[S.cur].id : scope === 'sel' ? ai.sel.id : S.pages.length) + (opts.img ? ':img' : '');
+  const first = ai.ctxKey !== key || !ai.msgs.length;
+  if (first && ai.msgs.length) aiAddMsg('u', `<small>Neuer Bezug: ${esc(scope === 'sel' ? 'Auswahl' : scope === 'page' ? 'Seite ' + (S.cur + 1) : 'ganzes Dokument')}</small>`);
+  if (first) { ai.msgs = []; ai.ctxKey = key; }
+  aiAddMsg('u', esc(opts.label || question));
+  const el = aiAddMsg('a', '<div class="tx"><span class="cursor"></span></div>');
+  const ctrl = new AbortController(); ai.busy = ctrl; aiUpdateHead();
+  const m = { role: 'user', text: question };
+  try {
+    if (first) {
+      const c = await aiContext(scope, opts.img);
+      if (!c.text.trim() && !c.images.length) throw new Error('Auf ' + (scope === 'page' ? 'dieser Seite' : 'den Seiten') + ' ist kein Text zu finden. Versuch „Handschrift → Text“.');
+      m.text = `${c.head}\n\n<inhalt>\n${c.text}\n</inhalt>\n\n${question}`; m.images = c.images;
+    }
+    ai.msgs.push(m);
+    const out = await AIX.ask({ instructions: AI_INSTR, messages: ai.msgs, signal: ctrl.signal, onDelta: (d, all) => aiRender(el, all, true) });
+    ai.msgs.push({ role: 'assistant', text: out });
+    aiRender(el, out || '(keine Antwort)', false);
+  } catch (e) {
+    if (ai.msgs[ai.msgs.length - 1] === m) ai.msgs.pop();
+    if (ctrl.signal.aborted || (e && e.name === 'AbortError')) { const raw = el.querySelector('.tx') ? el.dataset.raw || '' : ''; if (raw) aiRender(el, raw + '\n\n_(abgebrochen)_', false); else el.remove(); }
+    else { el.classList.add('err'); el.innerHTML = `<div class="tx">${esc(e.message || String(e))}</div>${e.auth || e.setup ? '<div class="acts"><button data-aa="setup">' + icon('gear') + 'KI einrichten</button></div>' : ''}`; }
+  } finally { ai.busy = null; aiUpdateHead(); }
+}
+/* Antwort weiterverwenden */
+async function aiAnswerAction(k, raw) {
+  const p = S.pages[S.cur]; if (!p) return;
+  const txt = aiPlain(raw);
+  if (k === 'copy') { toast(await writeSysClip(txt) ? 'Antwort kopiert' : 'Kopieren nicht möglich'); return; }
+  if (k === 'note') {
+    const [W] = dims(p), [, cy] = viewCenter(p);
+    pushHist(); const a = { id: uid(), t: 'note', x: W - NOTE - 18, y: Math.max(18, cy - 40), color: '#ffd400', text: txt.slice(0, 20000) };
+    p.annots.push(a); drawAnnots(p); markDirty(); toast('Als Notiz auf Seite ' + (S.cur + 1) + ' angeheftet'); return;
+  }
+  if (k === 'text') {
+    const [W] = dims(p), tp = TP.text;
+    insertTextAnnot(wrapFor(txt, { size: tp.size, font: tp.font, bold: tp.bold }, W * 0.8), p); toast('Als Text eingefügt'); return;
+  }
+  if (k === 'page') {
+    busy(true, 'Seite wird erstellt …');
+    try { await insertPdfBytes(await aiPagePdf(raw), 'KI-Notiz.pdf'); busy(false); toast('Als neue Seite eingefügt'); }
+    catch (e) { busy(false); console.error(e); toast('Seite konnte nicht erstellt werden.'); }
+  }
+}
+/* Antwort als eigene A4-Seite (Inter, mit Überschriften und Stichpunkten) */
+async function aiPagePdf(raw) {
+  const out = await PL.PDFDocument.create();
+  out.registerFontkit(await loadFontkit());
+  const reg = await out.embedFont(await fontFile('Inter', false), { subset: true }), bold = await out.embedFont(await fontFile('Inter', true), { subset: true });
+  const [W, H] = A4, M = 56, ink = PL.rgb(0.106, 0.129, 0.188), mut = PL.rgb(0.35, 0.39, 0.45);
+  let pg = out.addPage([W, H]), y = H - M;
+  const newPage = () => { pg = out.addPage([W, H]); y = H - M; };
+  const draw = (text, font, size, x, color = ink) => {
+    const words = text.split(/\s+/); let line = '';
+    const flush = () => { if (y < M + size) newPage(); pg.drawText(line, { x, y: y - size, size, font, color }); y -= size * 1.45; line = ''; };
+    for (const w of words) { const t = line ? line + ' ' + w : w; if (line && font.widthOfTextAtSize(t, size) > W - M - x) flush(); line = line ? line + ' ' + w : w; }
+    if (line) flush();
+  };
+  draw('KI-Notiz · ' + S.docName.replace(/\.pdf$/i, ''), reg, 9, M, mut); y -= 6;
+  for (const rawLine of raw.split('\n')) {
+    const l = rawLine.replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/\[(?:S\.|Seite)\s*(\d+)\]/g, '(S. $1)');
+    if (!l.trim()) { y -= 6; continue; }
+    const h = /^#{1,6}\s+(.*)$/.exec(l), li = /^\s*(?:[-*•]|(\d+)[.)])\s+(.*)$/.exec(l);
+    if (h) { y -= 6; draw(h[1], bold, 14, M); }
+    else if (li) { if (y < M + 12) newPage(); pg.drawText(li[1] ? li[1] + '.' : '•', { x: M + 4, y: y - 11, size: 11, font: reg, color: ink }); draw(li[2], reg, 11, M + 20); }
+    else draw(l, reg, 11, M);
+  }
+  return new Uint8Array(await out.save());
+}
+function bindAI() {
+  if (!AIX) { $('#btnAI').hidden = true; return; }
+  $('#aiQuick').innerHTML = AI_ACTIONS.map(a => `<button type="button" data-q="${a.k}">${icon(a.i)}${esc(a.l)}</button>`).join('');
+  $('#btnAI').onclick = () => toggleAI();
+  $('#aiClose').onclick = () => toggleAI(false);
+  $('#aiCfg').onclick = () => { ai.keepSetup = !ai.setup; aiShowSetup(!ai.setup); };
+  $('#aiNew').onclick = () => { if (ai.busy) ai.busy.abort(); ai.msgs = []; ai.ctxKey = ''; $('#aiLog').innerHTML = ''; aiEmpty(); };
+  $('#aiScope').onclick = e => { const b = e.target.closest('[data-v]'); if (b) aiSetScope(b.dataset.v); };
+  $('#aiQuick').onclick = e => { const b = e.target.closest('[data-q]'); if (!b) return; const a = AI_ACTIONS.find(x => x.k === b.dataset.q); aiRun(a.p(ai.scope), { label: a.l + ' · ' + (ai.scope === 'sel' ? 'Auswahl' : ai.scope === 'page' ? 'Seite ' + (S.cur + 1) : 'Dokument'), img: a.img }); };
+  $('#aiForm').onsubmit = e => { e.preventDefault(); if (ai.busy) { ai.busy.abort(); return; } const q = $('#aiInput').value.trim(); if (!q) return; $('#aiInput').value = ''; aiRun(q); };
+  $('#aiInput').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#aiForm').requestSubmit(); } if (e.key === 'Escape') toggleAI(false); });
+  $('#aiLog').onclick = e => {
+    const pgb = e.target.closest('[data-pg]'); if (pgb) { const n = +pgb.dataset.pg; if (n >= 1 && n <= S.pages.length) scrollToPage(n - 1); return; }
+    const b = e.target.closest('[data-aa]'); if (!b) return;
+    if (b.dataset.aa === 'setup') { aiShowSetup(true); return; }
+    aiAnswerAction(b.dataset.aa, b.closest('.am').dataset.raw || '');
+  };
+  AIX.onChange(() => aiUpdateHead());
+}
+/* aus der Schnellleiste: KI zu einer Markierung oder einem eigenen Text */
+function aiForAnnot(p, a, kind) {
+  const text = a.t === 'mark' ? a.text : a.text;
+  if (!text) { toast('Hier ist kein Text zum Auswerten.'); return; }
+  ai.sel = { id: a.id, text, page: S.pages.indexOf(p) + 1 };
+  $('#aiScope [data-v=sel]').hidden = false;
+  const act = AI_ACTIONS.find(x => x.k === kind);
+  aiRun(act.p('sel'), { scope: 'sel', label: act.l + ' · „' + (text.length > 40 ? text.slice(0, 39) + '…' : text) + '“' });
+}
+/* Rechtschreibung eines eigenen Textfelds direkt verbessern */
+async function aiFixText(p, a) {
+  if (!AIX || !AIX.info().ready) { toggleAI(true); return; }
+  setMsg('KI korrigiert den Text …', true);
+  try {
+    const out = (await AIX.ask({ instructions: 'Korrigiere Rechtschreibung, Grammatik und Zeichensetzung des Textes. Behalte Sprache, Inhalt, Zeilenumbrüche und Ton bei. Antworte ausschließlich mit dem korrigierten Text.', messages: [{ role: 'user', text: a.text }], maxTokens: 2000 })).trim();
+    setMsg('');
+    if (!out || out === a.text) { toast('Keine Fehler gefunden'); return; }
+    pushHist(); a.text = out; drawAnnots(p); markDirty(); toast('Text korrigiert · Strg+Z macht es rückgängig');
+  } catch (e) { setMsg(''); toast(e.message || String(e)); }
+}
+
+/* ---------- Schnellleiste an markiertem Text und eigenen Textfeldern ---------- */
+const QCOLORS = ['#ffd400', '#7ee081', '#ff8fb1', '#8ecbff'];
+function qbarFor(p) {
+  if (S.tool !== 'select' && !(S.qbar && S.qbar.pid === p.id)) return null;
+  const a = S.qbar && S.qbar.pid === p.id ? p.annots.find(x => x.id === S.qbar.aid) : (S.sel && S.sel.pid === p.id && !S.editing ? selAnnot() : null);
+  if (!a || !(a.t === 'mark' || (a.t === 'text' && a.text))) return null;
+  return a;
+}
+function drawQbar(p, e) {
+  const old = $('.qbar', e.wrap); if (old) old.remove();
+  const a = qbarFor(p); if (!a || drag) return;
+  const b = bbox(a), z = S.zoom, q = document.createElement('div'); q.className = 'qbar'; q.dataset.aid = a.id;
+  q.style.left = clamp((b.x + b.w / 2) * z, 120, e.wrap.clientWidth - 120) + 'px';
+  q.style.top = Math.max(44, b.y * z) + 'px';
+  const kiBtns = AIX ? `<span class="qs"></span><button data-qa="explain" title="Mit KI erklären">${icon('spark')}Erklären</button><button data-qa="translate" title="Mit KI übersetzen">${icon('translate')}</button>` : '';
+  q.innerHTML = a.t === 'mark'
+    ? QCOLORS.map(c => `<button class="qc" data-qc="${c}" style="background:${c}" title="Farbe" aria-label="Farbe ${c}"></button>`).join('') + `<span class="qs"></span><button data-qa="comment" title="Kommentar">${icon('comment')}</button><button data-qa="copy" title="Text kopieren">${icon('copy')}</button>${kiBtns}<span class="qs"></span><button data-qa="del" title="Entfernen">${icon('trash')}</button>`
+    : `<button data-qa="copy" title="Text kopieren">${icon('copy')}</button>${AIX ? `<button data-qa="fix" title="Rechtschreibung mit KI korrigieren">${icon('spark')}Korrigieren</button><button data-qa="translate" title="Mit KI übersetzen">${icon('translate')}</button>` : ''}<span class="qs"></span><button data-qa="del" title="Löschen">${icon('trash')}</button>`;
+  e.wrap.appendChild(q);
+}
+function bindQbar() {
+  pagesEl.addEventListener('pointerdown', e => {
+    if (e.target.closest('.qbar')) { e.stopPropagation(); return; }
+    if (S.qbar) { const p = pageById(S.qbar.pid); S.qbar = null; if (p) setTimeout(() => drawAnnots(p), 0); }
+  }, true);
+  pagesEl.addEventListener('click', e => {
+    const q = e.target.closest('.qbar'); if (!q) return;
+    const wrap = q.closest('.page'), p = pageById(wrap.dataset.id), a = p && p.annots.find(x => x.id === q.dataset.aid); if (!a) return;
+    const c = e.target.closest('[data-qc]');
+    if (c) { pushHist(); a.color = c.dataset.qc; if (a.kind === 'hl' && !a.op) a.op = 40; drawAnnots(p); markDirty(); return; }
+    const b = e.target.closest('[data-qa]'); if (!b) return;
+    const k = b.dataset.qa;
+    if (k === 'copy') writeSysClip(a.text).then(ok => toast(ok ? 'Text kopiert' : 'Kopieren nicht möglich'));
+    else if (k === 'comment') editComment(p, a);
+    else if (k === 'del') { pushHist(); p.annots = p.annots.filter(x => x.id !== a.id); if (S.sel && S.sel.aid === a.id) S.sel = null; S.qbar = null; drawAnnots(p); markDirty(); renderProps(); }
+    else if (k === 'fix') aiFixText(p, a);
+    else aiForAnnot(p, a, k);
+  });
+}
+
 /* ---------- Bedienelemente verbinden ---------- */
 function bindUI() {
   $$('[data-i]').forEach(el => { el.outerHTML = icon(el.dataset.i); });
   $('#swatches').innerHTML = SWATCHES.map(c => `<button class="sw" data-c="${c}" style="background:${c}" title="${c}" aria-label="Farbe ${c}"></button>`).join('');
   $('#sigColors').innerHTML = ['#1b2a6b', '#111318', '#1f4fd8'].map((c, i) => `<button class="sw" data-c="${c}" style="background:${c}" aria-label="Stiftfarbe" aria-pressed="${i === 0}"></button>`).join('');
-  fontUI(); applyToolbar(); bindPenFavs();
+  fontUI(); applyToolbar(); bindGroups(); bindPenFavs(); bindAI(); bindQbar();
   $('#btnTbCfg').onclick = toolbarDialog;
   $('#filePhotos').onchange = e => { insertPhotos([...e.target.files]); e.target.value = ''; };
   const segProp = (sel, k) => $(sel).addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; setProp(k, b.dataset.v); if (S.editing) S.editing.ta.focus(); });
@@ -4307,9 +4692,11 @@ function bindUI() {
       else if (selAnnot() || S.msel) { e.preventDefault(); deleteSel(); }
       return;
     }
+    if (e.key === 'Escape' && !$('#aiPanel').hidden) { toggleAI(false); return; }
     if (e.key === 'Escape') { if (S.reading) setReading(false); else if (S.csel) setCsel(null, []); else if (S.sel || S.msel) setMulti(null, []); else setTool('select'); return; }
     if (k === 'f') { setReading(!S.reading); return; }
     if (e.key === '?') { e.preventDefault(); shortcutsDialog(); return; }
+    if (k === 'y' && AIX) { e.preventDefault(); toggleAI(); return; }
     if (S.reading && (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ')) { e.preventDefault(); scrollToPage(Math.min(S.pages.length - 1, S.cur + 1)); return; }
     if (S.reading && (e.key === 'ArrowLeft' || e.key === 'ArrowUp')) { e.preventDefault(); scrollToPage(Math.max(0, S.cur - 1)); return; }
     if (e.key === 'Enter' && S.csel && S.csel.items.length === 1 && S.csel.items[0].kind === 'text') { e.preventDefault(); editContentText(pageById(S.csel.pid), S.csel.items[0]); return; }
@@ -4490,6 +4877,7 @@ function libUI() {
   b.hidden = !LIB;
   const m = $('#mToLib'); if (m) m.hidden = !LIB || !!S.lib;
   const lp = $('#mLibPages'); if (lp) lp.hidden = !S.lib;
+  document.body.classList.toggle('libmode', !!S.lib);
   const sv = $('#btnSave');
   if (S.lib) { sv.title = 'Als PDF-Datei exportieren'; const l = sv.querySelector('.lbl'); if (l) l.textContent = 'Exportieren'; }
 }
@@ -4521,6 +4909,10 @@ function paletteProvider(q) {
   A('Vergrößern', () => $('#btnZoomIn').click(), 'Strg +'); A('Verkleinern', () => $('#btnZoomOut').click(), 'Strg −');
   A('Seitenbreite', fitWidth, 'Strg+0', 'zoom anpassen');
   A('Nach Updates suchen', () => { if (window.WBUpdate) window.WBUpdate.check(true); }, '', 'update version aktualisieren');
+  if (AIX) {
+    out.push({ group: 'KI', label: 'KI-Assistent öffnen', hint: 'Y', keys: 'chatgpt claude ai frage', run: () => toggleAI(true) });
+    for (const a of AI_ACTIONS) out.push({ group: 'KI', label: 'KI: ' + a.l, keys: 'chatgpt claude ai', run: () => { toggleAI(true); $(`#aiQuick [data-q="${a.k}"]`).click(); } });
+  }
   const n = parseInt(String(q || '').replace(/\D/g, ''), 10);
   if (n >= 1 && n <= S.pages.length) out.push({ group: 'Seite', label: 'Gehe zu Seite ' + n, hint: 'von ' + S.pages.length, run: () => scrollToPage(n - 1), keys: String(n) });
   for (const b of S.bookmarks || []) { const i = S.pages.findIndex(p => p.id === b.pid); if (i >= 0) out.push({ group: 'Lesezeichen', label: b.title || b.name || 'Lesezeichen', hint: 'S. ' + (i + 1), run: () => scrollToPage(i) }); }

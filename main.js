@@ -123,6 +123,41 @@ ipcMain.handle('google-connect', wrap(googleConnect));
 ipcMain.handle('google-token', wrap(googleToken));
 ipcMain.handle('google-disconnect', wrap(googleDisconnect));
 
+/* ---------- KI: „Mit ChatGPT anmelden“ und eigene API-Schlüssel (verschlüsselt im System-Schlüsselbund) ---------- */
+const { createChatGPTAuth } = require('./chatgpt-auth');
+const secretFile = name => path.join(app.getPath('userData'), name);
+function readSecret(name) {
+  try { const b = fs.readFileSync(secretFile(name)); return JSON.parse(safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(b) : b.toString('utf8')); } catch (e) { return null; }
+}
+function writeSecret(name, obj) {
+  const s = JSON.stringify(obj);
+  fs.writeFileSync(secretFile(name), safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(s) : Buffer.from(s, 'utf8'), { mode: 0o600 });
+}
+/* feste, nicht persönliche Kennung dieses Geräts (von OpenAI verlangt) */
+function hostId() {
+  const f = secretFile('chatgpt-host.json');
+  try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); if (j.id) return j.id; } catch (e) { /* neu anlegen */ }
+  const id = 'urn:uuid:' + crypto.randomUUID();
+  fs.writeFileSync(f, JSON.stringify({ id }), { mode: 0o600 });
+  return id;
+}
+let chatgpt = null;
+const cg = () => chatgpt || (chatgpt = createChatGPTAuth({
+  store: { read: () => readSecret('chatgpt.bin'), write: o => writeSecret('chatgpt.bin', o) },
+  hostId: hostId(), openExternal: u => shell.openExternal(u),
+  focus: () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } },
+}));
+ipcMain.handle('chatgpt-connect', wrap(() => cg().connect()));
+ipcMain.handle('chatgpt-token', wrap(() => cg().token()));
+ipcMain.handle('chatgpt-disconnect', wrap(() => cg().disconnect()));
+ipcMain.handle('chatgpt-status', wrap(() => cg().status()));
+ipcMain.handle('ai-secret', wrap(({ name, value, set }) => {
+  if (!/^(openai|anthropic)$/.test(name || '')) throw new Error('unbekannt');
+  const all = readSecret('ai-keys.bin') || {};
+  if (set) { if (value) all[name] = value; else delete all[name]; writeSecret('ai-keys.bin', all); return {}; }
+  return { value: all[name] || '' };
+}));
+
 /* Speichern-Dialog des Systems für exportierte PDFs, Bilder und Texte */
 const FILTERS = { pdf: [{ name: 'PDF-Dokument', extensions: ['pdf'] }], png: [{ name: 'PNG-Bild', extensions: ['png'] }], txt: [{ name: 'Text', extensions: ['txt'] }] };
 ipcMain.handle('save-file', wrap(async ({ name, bytes }) => {
