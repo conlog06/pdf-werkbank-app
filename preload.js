@@ -2,6 +2,13 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 
+const aiCbs = new Map(), aiBuf = new Map();
+ipcRenderer.on('ai-event', (_e, id, ev) => {
+  const cb = aiCbs.get(id);
+  if (cb) { cb(ev); if (ev.type === 'end' || ev.type === 'error') aiCbs.delete(id); }
+  else { if (!aiBuf.has(id)) aiBuf.set(id, []); aiBuf.get(id).push(ev); }
+});
+
 contextBridge.exposeInMainWorld('wbDesktop', {
   platform: process.platform,
   // PDFs aus dem System (Doppelklick, „Öffnen mit“, Dock)
@@ -18,6 +25,16 @@ contextBridge.exposeInMainWorld('wbDesktop', {
   chatgptDisconnect: () => ipcRenderer.invoke('chatgpt-disconnect'),
   chatgptStatus: () => ipcRenderer.invoke('chatgpt-status'),
   aiSecret: o => ipcRenderer.invoke('ai-secret', o).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
+  // KI-Anfragen über das Hauptprogramm (gestreamt)
+  aiRequest: async (req, cb) => {
+    const r = await ipcRenderer.invoke('ai-request', req);
+    if (!r || r.error) throw new Error((r && r.error) || 'KI-Anfrage fehlgeschlagen');
+    aiCbs.set(r.id, cb);
+    for (const ev of aiBuf.get(r.id) || []) cb(ev);
+    aiBuf.delete(r.id);
+    return r.id;
+  },
+  aiAbort: id => ipcRenderer.send('ai-abort', id),
   // Datei über den Speichern-Dialog des Systems sichern
   saveFile: (name, bytes) => ipcRenderer.invoke('save-file', { name, bytes }).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
   // automatische Updates

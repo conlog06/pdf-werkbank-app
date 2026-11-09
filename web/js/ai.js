@@ -78,7 +78,7 @@
   async function models(p = S.provider, check) {
     if (p === 'anthropic') {
       if (check) {
-        const r = await fetch(ANT() + '/models?limit=50', { headers: antHeaders(await credential(p)) });
+        const r = await xfetch(ANT() + '/models?limit=50', { headers: antHeaders(await credential(p)) });
         if (!r.ok) throw await httpError(r, p);
         try {
           const j = await r.json(), ids = new Set((j.data || []).map(m => m.id));
@@ -90,7 +90,7 @@
       return modelCache.get(p) || CLAUDE_MODELS;
     }
     if (modelCache.has(p) && !check) return modelCache.get(p);
-    const r = await fetch(OAI() + '/models', { headers: { Authorization: 'Bearer ' + await credential(p) } });
+    const r = await xfetch(OAI() + '/models', { headers: { Authorization: 'Bearer ' + await credential(p) } });
     if (!r.ok) throw await httpError(r, p);
     const j = await r.json();
     let list = (j.data || []);
@@ -107,6 +107,38 @@
     if (m) return m;
     const list = await models();
     return (list[0] || [])[0] || (S.provider === 'anthropic' ? 'claude-sonnet-5-5' : 'gpt-5');
+  }
+
+  /* ---------- Netzwerk ----------
+     Desktop-App: Anfragen laufen über das Hauptprogramm (keine CORS-Sperren für app://, gestreamt per IPC).
+     Webseite: direkt per fetch. */
+  async function xfetch(url, opts = {}) {
+    if (!(DESK && DESK.aiRequest)) {
+      try { return await fetch(url, opts); }
+      catch (e) { if (e.name === 'AbortError') throw e; throw new Error('Keine Verbindung zu ' + new URL(url).host + ' (offline, Firewall oder vom Browser blockiert).'); }
+    }
+    const q = [], enc = new TextEncoder();
+    let wake = null, done = false, err = null, id = null;
+    const poke = () => { if (wake) { const w = wake; wake = null; w(); } };
+    const meta = await new Promise((res, rej) => {
+      DESK.aiRequest({ url, method: opts.method || 'GET', headers: opts.headers || {}, body: opts.body || null }, ev => {
+        if (ev.type === 'head') res(ev);
+        else if (ev.type === 'data') { q.push(ev.data); poke(); }
+        else if (ev.type === 'end') { done = true; poke(); }
+        else if (ev.type === 'error') { err = new Error(ev.message === 'aborted' ? 'Abgebrochen' : 'Keine Verbindung: ' + ev.message); if (ev.message === 'aborted') err.name = 'AbortError'; done = true; rej(err); poke(); }
+      }).then(i => { id = i; if (opts.signal) { if (opts.signal.aborted) DESK.aiAbort(i); else opts.signal.addEventListener('abort', () => DESK.aiAbort(i)); } }, rej);
+    });
+    const reader = {
+      async read() {
+        while (!q.length && !done) await new Promise(r => { wake = r; });
+        if (q.length) return { value: enc.encode(q.shift()), done: false };
+        if (err) throw err;
+        return { value: undefined, done: true };
+      },
+      cancel() { if (id != null) DESK.aiAbort(id); },
+    };
+    const text = async () => { const dec = new TextDecoder(); let t = ''; for (;;) { const { value, done: d } = await reader.read(); if (d) break; t += dec.decode(value); } return t; };
+    return { ok: meta.status >= 200 && meta.status < 300, status: meta.status, body: { getReader: () => reader }, json: async () => JSON.parse(await text()), text };
   }
 
   /* ---------- Anfragen ---------- */
@@ -161,7 +193,7 @@
           content: [...(m.images || []).map(u => { const [, mt, d] = /^data:([^;]+);base64,(.*)$/.exec(u) || []; return { type: 'image', source: { type: 'base64', media_type: mt || 'image/jpeg', data: d || '' } }; }), { type: 'text', text: m.text || ' ' }],
         })),
       };
-      const r = await fetch(ANT() + '/messages', { method: 'POST', signal, headers: { ...antHeaders(cred), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const r = await xfetch(ANT() + '/messages', { method: 'POST', signal, headers: { ...antHeaders(cred), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!r.ok) throw await httpError(r, p);
       let err = null;
       await readSSE(r, (t, j) => {
@@ -181,7 +213,7 @@
       })),
     };
     if (p === 'openai') body.max_output_tokens = maxTokens;
-    const r = await fetch(OAI() + '/responses', { method: 'POST', signal, headers: { Authorization: 'Bearer ' + cred, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await xfetch(OAI() + '/responses', { method: 'POST', signal, headers: { Authorization: 'Bearer ' + cred, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!r.ok) throw await httpError(r, p);
     let err = null, done = false;
     await readSSE(r, (t, j) => {

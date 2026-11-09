@@ -285,6 +285,31 @@ ipcMain.handle('ai-secret', wrap(({ name, value, set }) => {
   return { value: all[name] || '' };
 }));
 
+/* KI-Anfragen über das Hauptprogramm (die Oberfläche läuft unter app://, dort blockiert CORS manche APIs).
+   Nur an die bekannten KI-Dienste, Antwort wird stückweise an das Fenster gestreamt. */
+const AI_HOSTS = /^https:\/\/(api\.openai\.com|api\.anthropic\.com|chatgpt\.com|auth\.openai\.com)\//;
+const aiReqs = new Map(); let aiN = 0;
+ipcMain.handle('ai-request', (e, req) => {
+  if (!req || !AI_HOSTS.test(String(req.url))) return { error: 'Ziel nicht erlaubt' };
+  const id = ++aiN, ctrl = new AbortController(), wc = e.sender;
+  aiReqs.set(id, ctrl);
+  const emit = ev => { if (!wc.isDestroyed()) wc.send('ai-event', id, ev); };
+  setImmediate(async () => {
+    try {
+      const r = await fetch(req.url, { method: req.method || 'GET', headers: req.headers || {}, body: req.body || undefined, signal: ctrl.signal });
+      emit({ type: 'head', status: r.status });
+      const dec = new TextDecoder();
+      if (r.body) for await (const c of r.body) emit({ type: 'data', data: dec.decode(c, { stream: true }) });
+      emit({ type: 'end' });
+    } catch (err) {
+      if (err.name !== 'AbortError') log('ai-request', req.url, err);
+      emit({ type: 'error', message: err.name === 'AbortError' ? 'aborted' : String((err.cause && err.cause.message) || err.message || err) });
+    } finally { aiReqs.delete(id); }
+  });
+  return { id };
+});
+ipcMain.on('ai-abort', (e, id) => { const c = aiReqs.get(id); if (c) c.abort(); });
+
 /* Speichern-Dialog des Systems für exportierte PDFs, Bilder und Texte */
 const FILTERS = { pdf: [{ name: 'PDF-Dokument', extensions: ['pdf'] }], png: [{ name: 'PNG-Bild', extensions: ['png'] }], txt: [{ name: 'Text', extensions: ['txt'] }] };
 ipcMain.handle('save-file', wrapE(async (ev, { name, bytes }) => {
