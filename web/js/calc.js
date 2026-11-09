@@ -40,8 +40,22 @@ function asFraction(v) {
 }
 
 /* ---------- Zerlegen ---------- */
+/* Dezimalkomma: „0,5“ ist eine Zahl. In Funktionsaufrufen trennt „;“ die Werte; steht dort kein „;“,
+   gilt ein Komma zwischen Ziffern als Trenner (max(1,2)), außerhalb von Klammern immer als Dezimalkomma. */
+function decimalComma(src) {
+  const semi = src.includes(';');
+  let depth = 0, out = '';
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth = Math.max(0, depth - 1);
+    if (c === ',' && /\d/.test(src[i - 1] || '') && /\d/.test(src[i + 1] || '') && (semi || depth === 0)) { out += '.'; continue; }
+    out += c;
+  }
+  return out;
+}
 function normalize(src) {
-  return src
+  return decimalComma(src)
     .replace(/[×·∙⋅]/g, '*').replace(/[÷:]/g, '/').replace(/[−–—]/g, '-')
     .replace(/√/g, 'sqrt').replace(/∛/g, 'cbrt').replace(/π/g, 'pi').replace(/∞/g, 'inf')
     .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g, m => '^(' + m.split('').map(c => '0123456789-'['⁰¹²³⁴⁵⁶⁷⁸⁹⁻'.indexOf(c)]).join('') + ')')
@@ -108,6 +122,14 @@ function gamma(z) {
   return Math.sqrt(2 * Math.PI) * t ** (z + 0.5) * Math.exp(-t) * x;
 }
 const gcd = (a, b) => { a = Math.abs(Math.round(a)); b = Math.abs(Math.round(b)); while (b) [a, b] = [b, a % b]; return a; };
+/* Statistik und Verteilungen (Abitur: Binomial-, Normalverteilung) */
+const erf = x => { const t = 1 / (1 + 0.3275911 * Math.abs(x)), y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; };
+const normcdf = (x, m = 0, s = 1) => 0.5 * (1 + erf((x - m) / (s * Math.SQRT2)));
+const normpdf = (x, m = 0, s = 1) => Math.exp(-0.5 * ((x - m) / s) ** 2) / (s * Math.sqrt(2 * Math.PI));
+const invnorm = (p, m = 0, s = 1) => { if (!(p > 0 && p < 1)) return NaN; let lo = -40, hi = 40; for (let i = 0; i < 120; i++) { const mid = (lo + hi) / 2; if (normcdf(mid) < p) lo = mid; else hi = mid; } return m + s * (lo + hi) / 2; };
+const median = (...a) => { const v = a.slice().sort((x, y) => x - y), n = v.length; return n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2; };
+const variance = (...a) => { const m = a.reduce((s, v) => s + v, 0) / a.length; return a.reduce((s, v) => s + (v - m) ** 2, 0) / a.length; };
+const varS = (...a) => (a.length < 2 ? NaN : variance(...a) * a.length / (a.length - 1));
 const nCr = (n, k) => { if (k < 0 || k > n) return 0; k = Math.min(k, n - k); let r = 1; for (let i = 1; i <= k; i++) r = r * (n - k + i) / i; return Math.round(r); };
 // Arität: Zahl = genau so viele, [min, max]
 const FUNCS = {
@@ -129,7 +151,15 @@ const FUNCS = {
   mod: [2, (a, b) => ((a % b) + b) % b], gcd: [[2, 99], (...a) => a.reduce(gcd)], ggt: [[2, 99], (...a) => a.reduce(gcd)],
   lcm: [[2, 99], (...a) => a.reduce((x, y) => Math.abs(x * y) / gcd(x, y))], kgv: [[2, 99], (...a) => a.reduce((x, y) => Math.abs(x * y) / gcd(x, y))],
   fact: [1, fact], gamma: [1, gamma], ncr: [2, nCr], npr: [2, (n, k) => nCr(n, k) * fact(k)], binom: [2, nCr],
-  hypot: [[1, 99], Math.hypot], deg: [1, x => x * 180 / Math.PI], rad: [1, x => x * Math.PI / 180],
+  hypot: [[1, 99], Math.hypot],
+  median: [[1, 99], median], var: [[1, 99], variance], vars: [[2, 99], varS], sd: [[1, 99], (...a) => Math.sqrt(variance(...a))], stabw: [[1, 99], (...a) => Math.sqrt(variance(...a))], sds: [[2, 99], (...a) => Math.sqrt(varS(...a))],
+  sum2: [[1, 99], (...a) => a.reduce((s, v) => s + v, 0)],
+  binompdf: [3, (n, p, k) => (k < 0 || k > n || k !== Math.round(k) ? 0 : nCr(n, k) * p ** k * (1 - p) ** (n - k))],
+  binomcdf: [3, (n, p, k) => { let s = 0; for (let i = 0; i <= Math.min(n, Math.floor(k)); i++) s += nCr(n, i) * p ** i * (1 - p) ** (n - i); return Math.min(1, s); }],
+  poissonpdf: [2, (l, k) => (k < 0 || k !== Math.round(k) ? 0 : Math.exp(-l) * l ** k / fact(k))],
+  normpdf: [[1, 3], normpdf], normcdf: [[1, 3], normcdf], invnorm: [[1, 3], invnorm], erf: [1, erf],
+  clamp: [3, (x, a, b) => Math.min(Math.max(x, a), b)], lerp: [3, (a, b, t) => a + (b - a) * t],
+  sinc: [1, x => (x === 0 ? 1 : Math.sin(x) / x)], heaviside: [1, x => (x < 0 ? 0 : 1)], frac: [1, x => x - Math.floor(x)], deg: [1, x => x * 180 / Math.PI], rad: [1, x => x * Math.PI / 180],
   // Sonderformen mit Ausdruck als erstem Argument
   int: [[3, 3], null], integral: [[3, 3], null], diff: [[2, 2], null], ableitung: [[2, 2], null], sum: [[3, 3], null], prod: [[3, 3], null],
 };
@@ -888,6 +918,16 @@ function createCalculator(root, hooks) {
   $('#calcClearHist').addEventListener('click', () => { history = []; pinned = []; state.vars.clear(); state.funcs.clear(); renderHist(); save(); preview(); });
   $('#calcGReset').addEventListener('click', () => graph.reset());
   $('#calcGInsert').addEventListener('click', () => { const g = graph.toPNG(); hooks.insertImage(g.url, g.w, g.h); });
+  // Live-Graph: Formeln, Variablen und Ausschnitt wandern als bearbeitbares Objekt in die PDF
+  const lg = $('#calcGLive');
+  if (lg && hooks.insertGraph) lg.addEventListener('click', () => {
+    const defs = [...state.vars].filter(([k]) => k !== 'ans').map(([k, v]) => `${k} = ${fmt(v)}`);
+    const fns = [...state.funcs.values()].map(f => f.src);
+    const cur = input.value.trim().split(/\n/).filter(Boolean);
+    const src = [...defs, ...fns, ...cur].filter((l, i, a) => a.indexOf(l) === i).join('\n');
+    if (!plotsNow(runAll(src, { deg: state.deg, vars: new Map(), funcs: new Map() }, true)).length) { hooks.toast('Erst eine Funktion eingeben, z. B. f(x) = a·x² + 1'); return; }
+    hooks.insertGraph(src, { ...graph.view }, !!state.deg);
+  });
   $('#calcInsert').addEventListener('click', () => {
     const res = lastRes.length ? lastRes : [];
     let lines = res.filter(r => r.kind !== 'error' && !r.plot).map(r => `${r.src}${r.kind === 'solve' ? ':  ' : '  '}${r.kind === 'value' ? '= ' : r.kind === 'assign' ? '' : ''}${r.kind === 'assign' ? '' : r.text}`.trim());

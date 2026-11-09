@@ -57,6 +57,7 @@
     select: 'M5 12.5l4.5 4.5L19 7M3 3h18v18H3z', menu: 'M4 6h16M4 12h16M4 18h16', refresh: 'M20 12a8 8 0 1 1-2.4-5.7L20 9M20 4v5h-5',
     notebook: 'M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6zM9 3v18M12 8h4M12 12h4', starf: 'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z',
     link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+    users: 'M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M21 19v-1a4 4 0 0 0-3-3.9M15.5 3.2a3.5 3.5 0 0 1 0 6.6',
     gear: 'M12 9a3 3 0 1 0 0 6a3 3 0 0 0 0-6zM12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1',
   };
   const FOLDER_ICONS = ['folder', 'book', 'school', 'work', 'star', 'heart', 'music', 'flask', 'calc', 'code', 'globe', 'home', 'camera', 'palette', 'fitness', 'receipt', 'file', 'pen', 'bulb', 'flag', 'calendar', 'chart', 'leaf', 'plane', 'car', 'cart', 'gift', 'lock', 'user', 'chat', 'tooth', 'game'];
@@ -399,8 +400,8 @@
     } catch (e) { console.warn('Vorschau', e); return {}; }
   }
   async function importFiles(files, folder = targetFolder()) {
-    const pdfs = [...files].filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
-    if (!pdfs.length) { toast('Bitte PDF-Dateien wählen.'); return []; }
+    const pdfs = [...files].filter(f => f.type === 'application/pdf' || /\.(pdf|werkbank)$/i.test(f.name));
+    if (!pdfs.length) { toast('Bitte PDF- oder Werkbank-Dateien wählen.'); return []; }
     busy(pdfs.length === 1 ? 'PDF wird importiert …' : `${pdfs.length} PDFs werden importiert …`);
     const out = [];
     try {
@@ -415,6 +416,11 @@
     return out;
   }
   async function importBytes(bytes, name, folder) {
+    if (window.WBFile && /\.werkbank$/i.test(name || '')) {
+      const doc = await ST.importWerkbank(bytes, folder);
+      try { const src = (await ST.loadDoc(doc.id)).sources[0]; const { thumb } = await makeThumb(src.bytes); if (thumb) await ST.putBlob('thumb:' + doc.id, thumb); } catch (e) { /* Vorschau später */ }
+      return doc;
+    }
     // geschützte PDFs gleich beim Import entschlüsseln (Bearbeiten, Speichern, Backup)
     if (window.WBDecrypt) bytes = (await window.WBDecrypt.plain(bytes)).bytes;
     const { thumb, pages } = await makeThumb(bytes);
@@ -810,7 +816,7 @@
         isF ? { k: 'edit', i: 'palette', l: 'Name, Farbe und Symbol' } : { k: 'rename', i: 'edit', l: 'Umbenennen' },
         { k: 'fav', i: 'star', l: it.fav ? 'Aus Favoriten entfernen' : 'Zu Favoriten' },
         { k: 'move', i: 'move', l: 'Verschieben …' },
-        ...(isF ? [{ k: 'sub', i: 'plus', l: 'Unterordner erstellen' }] : [{ k: 'dup', i: 'copy', l: 'Duplizieren' }, { k: 'export', i: 'download', l: 'Als PDF exportieren' }, { k: 'share', i: 'link', l: 'Link teilen …' }]),
+        ...(isF ? [{ k: 'sub', i: 'plus', l: 'Unterordner erstellen' }] : [{ k: 'dup', i: 'copy', l: 'Duplizieren' }, { k: 'export', i: 'download', l: 'Als PDF exportieren' }, { k: 'wbexport', i: 'file', l: 'Als Werkbank-Datei (bearbeitbar) …' }, { k: 'collab', i: 'users', l: 'Gemeinsam bearbeiten …' }, { k: 'share', i: 'link', l: 'PDF-Link teilen …' }]),
         '-', { k: 'trash', i: 'trash', l: 'Löschen', danger: true }];
     const k = await showMenu(entries, x, y);
     if (!k) return;
@@ -823,6 +829,19 @@
       case 'sub': folderDialog(null, it.id); break;
       case 'dup': await ST.duplicate(it.id); await refresh(); toast('Dupliziert'); break;
       case 'share': shareLink(it); break;
+      case 'collab': if (window.WBShare) window.WBShare.ownerDialog(it, { toast, busy, dialog, esc, ico }); break;
+      case 'wbexport': {
+        busy('Werkbank-Datei wird erstellt …');
+        try {
+          const blob = await ST.exportWerkbank(it.id), fname = it.name.replace(/[\\/:*?"<>|]/g, '-') + '.werkbank';
+          busy(false);
+          const file = new File([blob], fname, { type: blob.type });
+          if (DESK && DESK.saveFile) { const r = await DESK.saveFile(fname, new Uint8Array(await blob.arrayBuffer())); if (r && r.path) toast('Gespeichert: ' + r.path); }
+          else if (navigator.canShare && navigator.canShare({ files: [file] }) && /iPad|iPhone|Android/.test(navigator.userAgent)) await navigator.share({ files: [file], title: it.name }).catch(() => {});
+          else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 30000); toast('Werkbank-Datei gespeichert · lässt sich verschicken und in PDF Werkbank öffnen'); }
+        } catch (e) { busy(false); toast('Ging nicht: ' + (e.message || e)); }
+        break;
+      }
       case 'export': await ST.markOpened(it.id); location.href = 'index.html?doc=' + encodeURIComponent(it.id) + '&export=1'; break;
       case 'trash': await ST.trash([it.id]); await refresh(); toast(`„${it.name}“ in den Papierkorb gelegt`, [it.id]); break;
       case 'restore': await ST.restore([it.id]); await refresh(); toast('Wiederhergestellt'); break;

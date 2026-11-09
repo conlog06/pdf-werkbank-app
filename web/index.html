@@ -242,6 +242,15 @@ output{font:11.5px var(--f-mono);color:var(--ink);min-width:3.6em;font-variant-n
 .libmode .docname{font:600 14px/1.2 var(--f-ui);color:var(--ink);max-width:min(42ch,40vw)}
 .aibtn{color:var(--accent)}
 #app.aiopen .work{margin-right:418px}
+.gedit{position:fixed;z-index:44;right:12px;top:120px;width:min(330px,calc(100vw - 24px));background:var(--raise);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 50px rgb(0 0 0 / .22);padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px}
+.gedit header{display:flex;align-items:center;gap:8px}.gedit header .ico{color:var(--accent)}
+.gedit .gsrc{width:100%;font:13px/1.45 var(--f-mono);resize:vertical;min-height:72px}
+.gedit .gerr{color:var(--danger);font-size:12px;margin:0}.gedit .gerr:empty{display:none}
+.gsl{display:flex;flex-direction:column;gap:6px}
+.gsrow{display:grid;grid-template-columns:22px 1fr 56px;align-items:center;gap:8px;font:13px var(--f-mono)}
+.gsrow input{accent-color:var(--accent)}.gsrow output{text-align:right;color:var(--muted)}
+.grange{display:grid;grid-template-columns:1fr 1fr;gap:6px}.grange label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}.grange .field{width:100%;min-width:0;height:30px}
+@media (max-width:760px){.gedit{left:0;right:0;top:auto;bottom:0;width:auto;border-radius:14px 14px 0 0}}
 .fm-only{display:none}
 .filemode .menu .fm-only{display:block}
 .filemode .word{display:none}
@@ -449,6 +458,38 @@ body.reading .forml .ff{pointer-events:auto}
   #toast{bottom:calc(72px + env(safe-area-inset-bottom, 0px))}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.sharebar{display:inline-flex;align-items:center;gap:6px;margin-left:8px;padding:3px 8px 3px 7px;border-radius:999px;border:1px solid var(--line);background:var(--panel);font:inherit;font-size:12px;color:var(--ink2,inherit);cursor:pointer;white-space:nowrap}
+.sharebar[hidden]{display:none}
+.sharebar .dot{width:7px;height:7px;border-radius:50%;background:#1aa34a;box-shadow:0 0 0 3px rgba(26,163,74,.18)}
+.sharebar[data-s=saving] .dot{background:#e0a100;box-shadow:0 0 0 3px rgba(224,161,0,.18)}
+.sharebar[data-s=error] .dot,.sharebar[data-s=ended] .dot{background:#d0342c;box-shadow:0 0 0 3px rgba(208,52,44,.18)}
+.sharebar .peers{display:inline-flex}
+.sharebar .peer{width:20px;height:20px;border-radius:50%;background:var(--c,#888);color:#fff;font-size:10.5px;font-weight:700;display:inline-grid;place-items:center;margin-left:-5px;border:2px solid var(--panel)}
+.sharebar .peer:first-child{margin-left:0}.sharebar .peer.more{background:#667}
+body.viewonly .toolbar,body.viewonly #propbar,body.viewonly #btnMerge,body.viewonly .qbar{display:none!important}
+.share-err{max-width:460px;margin:12vh auto;text-align:center;padding:0 16px}.share-err h2{font-size:20px;margin:0 0 8px}
+@media (max-width:700px){.sharebar .st{display:none}}
+.sepia .page{filter:sepia(.42) saturate(1.15) brightness(.97)}
+body.present,body.present .viewer{background:#000!important}
+body.present .readbar{display:none!important}
+body.present .pages{gap:100vh}
+body.present .page{box-shadow:none}
+body.present .viewer{cursor:default}
+#presBlack{position:fixed;inset:0;z-index:300;background:#000;cursor:none}
+#presNum{position:fixed;right:18px;bottom:16px;z-index:301;font:600 13px var(--f-mono);color:#fff;background:rgb(0 0 0 / .55);padding:5px 10px;border-radius:8px;opacity:0;transition:opacity .3s;pointer-events:none}
+#presNum.show{opacity:1}
+body:not(.present) #presNum{display:none}
+.xpill{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:120;display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;border-radius:999px;background:var(--raise);border:1px solid var(--line);box-shadow:0 10px 30px rgb(0 0 0 / .22);font-size:13px;white-space:nowrap}
+.xpill .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:xpulse 1.4s infinite}
+.xpill .dot.rec{background:#e5484d}
+@keyframes xpulse{50%{opacity:.35}}
+.xpill button{border:0;background:var(--chrome2,rgb(0 0 0 / .06));color:inherit;font:inherit;font-weight:600;padding:6px 11px;border-radius:999px;cursor:pointer;min-width:34px}
+.xpill button:hover{background:var(--line)}
+.verlist{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto}
+.verlist .ver{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px}
+.stattbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.stattbl td{padding:6px 4px;border-bottom:1px solid var(--line)}
+.stattbl td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 </style>
 </head>
 <body>
@@ -462,6 +503,7 @@ body.reading .forml .ff{pointer-events:auto}
       <span class="word">PDF Werkbank</span>
       <span class="docname" id="docName" title=""></span>
       <span class="libstate" id="libState" hidden></span>
+      <button class="sharebar" id="shareBar" hidden title="Gemeinsam bearbeiten – Link anzeigen"><span class="dot"></span><span class="st">Live</span><span class="peers" id="sharePeers"></span></button>
     </div>
     <div class="grp">
       <button class="btn" id="btnOpen" title="PDF öffnen (Strg+O)"><i data-i="open"></i><span class="lbl">Öffnen</span></button>
@@ -498,12 +540,17 @@ body.reading .forml .ff{pointer-events:auto}
         <button role="menuitem" data-act="libpages" id="mLibPages" hidden>Seiten aus der Bibliothek einfügen …</button>
         <button role="menuitem" data-act="photos">Fotos oder Scans als Seiten …</button>
         <button role="menuitem" data-act="saveas" class="fm-only">Speichern unter …</button>
+        <button role="menuitem" data-act="werkbank">Als Werkbank-Datei speichern (.werkbank) …</button>
+        <button role="menuitem" data-act="collab" id="mCollab">Gemeinsam bearbeiten (Link) …</button>
         <button role="menuitem" data-act="secure">Mit Passwort speichern …</button>
         <button role="menuitem" data-act="share" hidden>Teilen …</button>
         <button role="menuitem" data-act="tolib" id="mToLib" hidden>In die Bibliothek übernehmen</button>
         <div class="mh">Ansicht</div>
         <button role="menuitem" data-act="fit" class="m-only">Auf Seitenbreite zoomen</button>
         <button role="menuitem" data-act="read">Lesemodus</button>
+        <button role="menuitem" data-act="present">Präsentieren (Vollbild) …</button>
+        <button role="menuitem" data-act="speak">Vorlesen ab dieser Seite</button>
+        <button role="menuitem" data-act="sepia" id="mSepia">Sepia-Lesefarbe</button>
         <button role="menuitem" data-act="night" id="mNight">Nachtmodus für Seiten</button>
         <button role="menuitem" data-act="pencil" id="mPencil">Nur Apple Pencil zeichnet</button>
         <button role="menuitem" data-act="toolbar">Werkzeugleiste anpassen …</button>
@@ -521,6 +568,12 @@ body.reading .forml .ff{pointer-events:auto}
         <button role="menuitem" data-act="png">Seite als Bild speichern (PNG)</button>
         <button role="menuitem" data-act="txt">Text exportieren (TXT)</button>
         <button role="menuitem" data-act="calc">Rechner und Graphen</button>
+        <button role="menuitem" data-act="table">Tabelle einfügen …</button>
+        <button role="menuitem" data-act="qr">QR-Code einfügen …</button>
+        <button role="menuitem" data-act="dictate">Diktieren in ein Textfeld</button>
+        <button role="menuitem" data-act="marks">Markierungen und Kommentare als Text …</button>
+        <button role="menuitem" data-act="stats">Dokument-Statistik</button>
+        <button role="menuitem" data-act="versions" id="mVersions" hidden>Versionsverlauf …</button>
         <hr>
         <button role="menuitem" data-act="keys">Tastenkürzel und Gesten</button>
         <button role="menuitem" data-act="meta">Einstellungen …</button>
@@ -655,7 +708,7 @@ body.reading .forml .ff{pointer-events:auto}
   </footer>
 </div>
 
-<input type="file" id="fileOpen" accept="application/pdf,.pdf" hidden>
+<input type="file" id="fileOpen" accept="application/pdf,.pdf,.werkbank,application/x-pdf-werkbank" hidden>
 <input type="file" id="fileMerge" accept="application/pdf,.pdf" multiple hidden>
 <input type="file" id="fileImg" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
 <input type="file" id="filePhotos" accept="image/*" multiple hidden>
@@ -680,7 +733,7 @@ body.reading .forml .ff{pointer-events:auto}
   <div class="calc-graph" id="calcGraphWrap" hidden>
     <canvas id="calcGraph" aria-label="Graph"></canvas>
     <div class="calc-gi" id="calcGInfo"></div>
-    <div class="row"><button class="btn" id="calcGReset">Ausschnitt zurücksetzen</button><span class="grow"></span><button class="btn" id="calcGInsert">Graph in PDF einfügen</button></div>
+    <div class="row"><button class="btn" id="calcGReset">Ausschnitt zurücksetzen</button><span class="grow"></span><button class="btn" id="calcGInsert" title="Als Bild einfügen">Als Bild</button><button class="btn primary" id="calcGLive" title="Als Live-Graph einfügen: Formeln und Regler bleiben bearbeitbar">Live-Graph einfügen</button></div>
   </div>
   <div class="calc-keys" id="calcKeys">
     <button data-k="sin()">sin</button><button data-k="cos()">cos</button><button data-k="tan()">tan</button><button data-k="ln()">ln</button><button data-k="log()">log</button><button data-k="√()">√</button>
@@ -781,11 +834,14 @@ body.reading .forml .ff{pointer-events:auto}
 <script src="js/sync.js"></script>
 <script src="js/gdrive.js"></script>
 <script src="js/update.js"></script>
+<script src="js/share.js"></script>
 <script src="js/content-engine.js"></script>
 <script src="js/calc.js"></script>
 <script src="js/diag.js"></script>
 <script src="js/palette.js"></script>
 <script src="js/photos.js"></script>
+<script src="js/vendor/qrcode.js"></script>
+<script src="js/wbfile.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/app.js"></script>
 </body>

@@ -161,6 +161,24 @@
     if (extra.color) doc.color = extra.color;
     return put(doc);
   }
+  /* .werkbank-Datei als Dokument übernehmen (Quellen, Stand, Name) */
+  async function importWerkbank(bytes, folder = null) {
+    if (!global.WBFile) throw new Error('Werkbank-Dateien werden hier nicht unterstützt.');
+    const wb = await global.WBFile.unpack(bytes);
+    const srcs = [...wb.sources.values()];
+    if (!srcs.length) throw new Error('Die Werkbank-Datei enthält keine Seiten.');
+    const name = wb.manifest.name || 'Dokument';
+    const doc = await importPdf(srcs[0].bytes, name, folder, { pages: wb.state && wb.state.pages ? wb.state.pages.length : 0 });
+    if (!wb.state) return doc;
+    const state = { ...wb.state, docName: name + '.pdf', dirty: false };
+    const ids = state.srcIds || srcs.map(x => x.id);
+    return saveDoc(doc.id, { state, sources: ids.map(id => wb.sources.get(id)).filter(Boolean), pages: (state.pages || []).length, name });
+  }
+  /* Dokument als .werkbank-Datei (Blob) */
+  async function exportWerkbank(id) {
+    const { item, state, sources } = await loadDoc(id);
+    return global.WBFile.pack({ name: item.name, state: state || null, sources });
+  }
   /* alles zum Öffnen im Editor: { item, state, sources:[{id,name,bytes}] } */
   async function loadDoc(id) {
     let it = await get(id);
@@ -221,7 +239,7 @@
   global.WBStore = {
     all, get, put, update, createFolder, descendants, move, trash, restore, destroy, emptyTrash, purge,
     getBlob, putBlob, delBlob, dropBlobs, kvGet, kvSet,
-    importPdf, loadDoc, saveDoc, duplicate, markOpened,
+    importPdf, importWerkbank, exportWerkbank, loadDoc, saveDoc, duplicate, markOpened,
     putSynced, rawPut, mutate, mutateSynced, publicFields, uuid, newRev,
     onChange: fn => { listeners.add(fn); return () => listeners.delete(fn); },
   };

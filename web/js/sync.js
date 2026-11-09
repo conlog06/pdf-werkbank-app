@@ -283,7 +283,16 @@
     const d = dir(id);
     const dl = async path => { const r = await B().download(path); if (r.error) throw r.error; return r.data; };
     let state = null;
-    try { state = JSON.parse(await (await dl(`${d}/state-${it.rev}.json`)).text()); } catch (e) { state = null; }
+    // Stand mit Wiederholung laden: lädt das andere Gerät gerade noch hoch, nicht vorschnell „ohne Bearbeitung“ annehmen
+    for (let t = 0; t < 3; t++) {
+      try { state = JSON.parse(await (await dl(`${d}/state-${it.rev}.json`)).text()); break; }
+      catch (e) {
+        state = null;
+        const gone = e instanceof SyntaxError || /not.?found|404|does not exist/i.test(String((e && (e.message || e.error || e.statusCode)) || e));
+        if (t === 2) { if (!gone && navigator.onLine !== false) throw e; break; }
+        await new Promise(r => setTimeout(r, t ? 2000 : 800));
+      }
+    }
     const ids = state && state.srcIds ? state.srcIds : it.srcIds || [];
     for (const sid of ids) {
       if (await S().getBlob(`src:${id}:${sid}`)) continue;
@@ -320,6 +329,7 @@
   global.WBSync = {
     init, config, setConfig, signIn, signUp, signOut, syncNow, schedule, fetchDoc, info, share, setMode, mode, MODES,
     ready: () => !!(st.client && st.user),
+    client: async () => { await init(); return st.client; }, user: () => st.user,
     onStatus: fn => { listeners.add(fn); fn(info()); return () => listeners.delete(fn); },
   };
 })(window);

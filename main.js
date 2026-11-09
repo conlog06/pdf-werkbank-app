@@ -51,7 +51,7 @@ function saveSettings(patch) { SET = { ...settings(), ...patch }; try { fs.write
    openMode „library“: wie bisher in die Bibliothek importieren. */
 const docWins = new Map(); // webContents.id → { win, path, dirty, force }
 const early = [];
-const pdfArgs = argv => argv.slice(1).filter(a => /\.pdf$/i.test(a) && !a.startsWith('--') && fs.existsSync(a));
+const pdfArgs = argv => argv.slice(1).filter(a => /\.(pdf|werkbank)$/i.test(a) && !a.startsWith('--') && fs.existsSync(a));
 function openPaths(paths) {
   if (!paths.length) return;
   if (!app.isReady()) { early.push(...paths); return; }
@@ -136,7 +136,7 @@ ipcMain.handle('file-write', wrapE(async (e, { bytes }) => {
 ipcMain.handle('file-save-as', wrapE(async (e, { bytes, name }) => {
   const d = docOf(e.sender);
   const w = BrowserWindow.fromWebContents(e.sender);
-  const r = await dlgSave(w, { defaultPath: d ? d.path : path.join(app.getPath('documents'), String(name || 'Dokument.pdf')), filters: FILTERS.pdf });
+  const r = await dlgSave(w, { defaultPath: d ? d.path : path.join(app.getPath('documents'), String(name || 'Dokument.pdf')), filters: /\.werkbank$/i.test(String(name || '')) ? FILTERS.werkbank : FILTERS.pdf });
   if (r.canceled || !r.filePath) return { path: null };
   await writeAtomic(r.filePath, bytes);
   if (d) { d.path = r.filePath; d.backedUp = true; d.dirty = false; w.setTitle(path.basename(r.filePath) + ' – PDF Werkbank'); if (isMac) { w.setRepresentedFilename(r.filePath); w.setDocumentEdited(false); } }
@@ -152,7 +152,7 @@ ipcMain.on('doc-state', (e, { dirty, title }) => {
 ipcMain.on('close-window', e => { const d = docOf(e.sender); if (d) { d.force = true; d.win.close(); } });
 ipcMain.handle('open-library', () => { const w = win || createLibraryWindow(); if (w.isMinimized()) w.restore(); w.focus(); return true; });
 ipcMain.handle('open-dialog', async e => {
-  const r = await dlgOpen(BrowserWindow.fromWebContents(e.sender), { properties: ['openFile', 'multiSelections'], filters: FILTERS.pdf });
+  const r = await dlgOpen(BrowserWindow.fromWebContents(e.sender), { properties: ['openFile', 'multiSelections'], filters: FILTERS.open });
   if (!r.canceled) for (const p of r.filePaths) openDocWindow(p);
   return { count: r.canceled ? 0 : r.filePaths.length };
 });
@@ -311,7 +311,7 @@ ipcMain.handle('ai-request', (e, req) => {
 ipcMain.on('ai-abort', (e, id) => { const c = aiReqs.get(id); if (c) c.abort(); });
 
 /* Speichern-Dialog des Systems für exportierte PDFs, Bilder und Texte */
-const FILTERS = { pdf: [{ name: 'PDF-Dokument', extensions: ['pdf'] }], png: [{ name: 'PNG-Bild', extensions: ['png'] }], txt: [{ name: 'Text', extensions: ['txt'] }] };
+const FILTERS = { pdf: [{ name: 'PDF-Dokument', extensions: ['pdf'] }], werkbank: [{ name: 'Werkbank-Datei', extensions: ['werkbank'] }], open: [{ name: 'PDF und Werkbank-Dateien', extensions: ['pdf', 'werkbank'] }, { name: 'PDF-Dokument', extensions: ['pdf'] }, { name: 'Werkbank-Datei', extensions: ['werkbank'] }], png: [{ name: 'PNG-Bild', extensions: ['png'] }], txt: [{ name: 'Text', extensions: ['txt'] }] };
 ipcMain.handle('save-file', wrapE(async (ev, { name, bytes }) => {
   const ext = (String(name).split('.').pop() || '').toLowerCase();
   const r = await dlgSave(BrowserWindow.fromWebContents(ev.sender), { defaultPath: path.join(app.getPath('downloads'), String(name).replace(/[\\/:*?"<>|]/g, '-')), filters: FILTERS[ext] || [] });
@@ -405,7 +405,7 @@ nativeTheme.on('updated', () => { if (!isMac) for (const w of BrowserWindow.getA
 function send(k) {
   const f = BrowserWindow.getFocusedWindow(), fd = f && docWins.get(f.webContents.id);
   if (fd && (k === 'save' || k === 'save-as')) { f.webContents.send('menu', k); return; }
-  if (k === 'open') { dlgOpen(f, { properties: ['openFile', 'multiSelections'], filters: FILTERS.pdf }).then(r => { if (!r.canceled) for (const p of r.filePaths) openDocWindow(p); }); return; }
+  if (k === 'open') { dlgOpen(f, { properties: ['openFile', 'multiSelections'], filters: FILTERS.open }).then(r => { if (!r.canceled) for (const p of r.filePaths) openDocWindow(p); }); return; }
   if (k === 'save' || k === 'save-as') return;
   if (!win) { createLibraryWindow(); if (k === 'library') return; }
   win.focus();

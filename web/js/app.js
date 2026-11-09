@@ -130,8 +130,8 @@ const ICONS = {
   lsolid: 'M3 12h18', ldash: 'M3 12h4M10 12h4M17 12h4', ldot: 'M4 12h.01M8 12h.01M12 12h.01M16 12h.01M20 12h.01',
 };
 
-const TOOL_NAMES = { laser: 'Laserpointer', mark: 'Textmarkierung', select: 'Auswählen', objects: 'Inhalte', text: 'Text', edittext: 'Text ändern', pen: 'Stift', eraser: 'Radierer', hl: 'Markieren', ul: 'Unterstreichen', so: 'Durchstreichen', rect: 'Rechteck', ellipse: 'Ellipse', line: 'Linie', arrow: 'Pfeil', measure: 'Messen', white: 'Abdecken', redact: 'Schwärzen', check: 'Haken', cross: 'Kreuz', img: 'Bild', stamp: 'Stempel', note: 'Notiz', wm: 'Wasserzeichen' };
-const PROPS_OF = { multi: ['color'], mark: ['color', 'opacity'], text: ['color', 'font', 'align'], pen: ['penkind', 'color', 'stroke', 'opacity'], eraser: ['esize'], hl: ['color', 'opacity'], ul: ['color'], so: ['color'], rect: ['color', 'stroke', 'fill', 'dash'], ellipse: ['color', 'stroke', 'fill', 'dash'], line: ['color', 'stroke', 'dash'], arrow: ['color', 'stroke', 'dash'], measure: ['color', 'scale'], check: ['color', 'stroke'], cross: ['color', 'stroke'], white: [], redact: [], img: [], stamp: ['color', 'stamp'], note: ['color'], wm: ['color', 'opacity'] };
+const TOOL_NAMES = { laser: 'Laserpointer', mark: 'Textmarkierung', select: 'Auswählen', objects: 'Inhalte', text: 'Text', edittext: 'Text ändern', pen: 'Stift', eraser: 'Radierer', hl: 'Markieren', ul: 'Unterstreichen', so: 'Durchstreichen', rect: 'Rechteck', ellipse: 'Ellipse', line: 'Linie', arrow: 'Pfeil', measure: 'Messen', white: 'Abdecken', redact: 'Schwärzen', check: 'Haken', cross: 'Kreuz', img: 'Bild', graph: 'Live-Graph', table: 'Tabelle', stamp: 'Stempel', note: 'Notiz', wm: 'Wasserzeichen' };
+const PROPS_OF = { multi: ['color'], mark: ['color', 'opacity'], text: ['color', 'font', 'align'], pen: ['penkind', 'color', 'stroke', 'opacity'], eraser: ['esize'], hl: ['color', 'opacity'], ul: ['color'], so: ['color'], rect: ['color', 'stroke', 'fill', 'dash'], ellipse: ['color', 'stroke', 'fill', 'dash'], line: ['color', 'stroke', 'dash'], arrow: ['color', 'stroke', 'dash'], measure: ['color', 'scale'], check: ['color', 'stroke'], cross: ['color', 'stroke'], white: [], redact: [], img: [], graph: [], table: ['color'], stamp: ['color', 'stamp'], note: ['color'], wm: ['color', 'opacity'] };
 const DRAW_TOOLS = new Set(['laser', 'pen', 'eraser', 'hl', 'ul', 'so', 'rect', 'ellipse', 'line', 'arrow', 'measure', 'white', 'redact', 'check', 'cross', 'objects']);
 const SNAP_TOOLS = new Set(['hl', 'ul', 'so']);
 const KEYS = { j: 'laser', v: 'select', m: 'objects', t: 'text', e: 'edittext', p: 'pen', g: 'eraser', h: 'hl', n: 'ul', d: 'so', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', q: 'measure', w: 'white', b: 'redact', k: 'check', x: 'cross', s: 'stamp', c: 'note' };
@@ -194,7 +194,9 @@ const PREF_DEFAULTS = { author: '', unit: 'mm', decimals: 1, scale: 1, exportMar
 const ENG = PL && window.createContentEngine ? window.createContentEngine(PL) : null;
 const els = new Map(), tels = new Map();
 let uidN = 1;
-const uid = (p = 'a') => p + (uidN++).toString(36);
+// Kennungen je Sitzung eindeutig (gemeinsames Bearbeiten: zwei Geräte dürfen nie dieselbe ID vergeben)
+const UIDTAG = Math.random().toString(36).slice(2, 6);
+const uid = (p = 'a') => p + UIDTAG + (uidN++).toString(36);
 
 const pagesEl = $('#pages'), viewer = $('#viewer'), thumbsEl = $('#thumbs'), work = $('#work'), propbar = $('#propbar');
 
@@ -437,6 +439,8 @@ function annotSVG(a) {
         `<path d="M${r2(a.x + NOTE * 0.22)} ${r2(a.y + NOTE * 0.3)}h${NOTE * 0.56}M${r2(a.x + NOTE * 0.22)} ${r2(a.y + NOTE * 0.5)}h${NOTE * 0.4}" stroke="#7a5c00" stroke-width="1" stroke-linecap="round"/></g>`;
     case 'wm':
       return `<text x="${r2(a.x)}" y="${r2(a.y + a.size * 0.35)}" text-anchor="middle" transform="rotate(${-a.ang} ${r2(a.x)} ${r2(a.y)})" font-family='${FONTS.Helvetica.css}' font-size="${a.size}" font-weight="700" fill="${c}" fill-opacity="${a.op / 100}">${esc(a.text)}</text>`;
+    case 'graph': return graphSVG(a);
+    case 'table': return tableSVG(a);
     case 'img': {
       const im = S.images.get(a.img);
       return im ? `<image href="${im.url}" x="${r2(a.x)}" y="${r2(a.y)}" width="${r2(a.w)}" height="${r2(a.h)}" preserveAspectRatio="none"/>` : '';
@@ -952,6 +956,8 @@ function commitCEdit() {
   });
 }
 async function openFiles(files, mode, noAsk) {
+  const wbf = [...files].find(f => /\.werkbank$/i.test(f.name));
+  if (wbf && window.WBFile) { await openWerkbank(wbf, mode, noAsk); return; }
   const pdfs = [...files].filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
   if (!pdfs.length) { toast('Bitte eine PDF-Datei wählen.'); return; }
   if (S.busy) return;
@@ -1214,6 +1220,7 @@ function setCurrent(i, fromScroll) {
   if (fromScroll && S.selPages.size <= 1) S.selPages.clear();
   markThumbSel(); updateStatus();
   if (changed) rememberPos();
+  if (changed && S.shareSess) { clearTimeout(setCurrent.t); setCurrent.t = setTimeout(() => S.shareSess && S.shareSess.setPage(S.cur), 600); }
   if (changed && fromScroll) { const e = tels.get(S.pages[i].id); if (e && !work.classList.contains('nothumbs')) e.t.scrollIntoView({ block: 'nearest' }); }
 }
 function scrollToPage(i) {
@@ -1738,6 +1745,7 @@ function laserDraw() {
   else ctx.clearRect(0, 0, innerWidth, innerHeight);
 }
 pagesEl.addEventListener('pointerdown', e => {
+  if (S.viewonly && S.tool !== 'laser') return; // nur ansehen
   if (S.tool === 'laser' && e.button === 0 && !S.pinch && !(e.pointerType === 'touch' && (!e.isPrimary || S.pencil.only))) {
     e.preventDefault(); if (drag) endDrag();
     drag = { mode: 'laser', pointerId: e.pointerId }; laser.down = true; laserAdd(e, true);
@@ -2349,11 +2357,33 @@ function editNote(p, a, isNew) {
     drawAnnots(p); markDirty();
   };
 }
+/* Doppelklick/-tipp auf Graph, Tabelle oder Notiz – eigene Erkennung, weil das Neuzeichnen beim
+   ersten Klick das Zielelement austauscht und der Browser dann kein dblclick meldet */
+{
+  let last = null;
+  pagesEl.addEventListener('pointerdown', e => {
+    if (S.tool !== 'select' || e.button !== 0 || S.viewonly) { last = null; return; }
+    const wrap = e.target.closest('.page'); if (!wrap) { last = null; return; }
+    const p = pageById(wrap.dataset.id), pt = ptIn(e, els.get(p.id)), now = performance.now();
+    const a = hitTest(p, pt, 'table') || hitTest(p, pt, 'graph');
+    if (a && last && last.id === a.id && now - last.t < 450 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 12) {
+      last = null; e.preventDefault(); e.stopImmediatePropagation();
+      if (drag) endDrag();
+      if (a.t === 'table') tableDialog(p, a); else editGraph(p, a);
+      return;
+    }
+    last = a ? { id: a.id, t: now, x: e.clientX, y: e.clientY } : null;
+  }, true);
+}
 pagesEl.addEventListener('dblclick', e => {
   const wrap = e.target.closest('.page'); if (!wrap) return;
   if (S.tool === 'select') {
     const p = pageById(wrap.dataset.id), n = hitTest(p, ptIn(e, els.get(p.id)), 'note');
     if (n) { editNote(p, n); return; }
+    const gr = hitTest(p, ptIn(e, els.get(p.id)), 'graph');
+    if (gr) { editGraph(p, gr); return; }
+    const tb = hitTest(p, ptIn(e, els.get(p.id)), 'table');
+    if (tb) { tableDialog(p, tb); return; }
   }
   if (S.tool === 'objects') {
     const p = pageById(wrap.dataset.id), it = itemAt(p, ptIn(e, els.get(p.id)), 'text');
@@ -3258,7 +3288,7 @@ function setReading(on) {
   updateStatus();
 }
 function setNight(on) {
-  S.night = on;
+  S.night = on; if (on && S.sepia) setSepia(false);
   pagesEl.classList.toggle('night', on);
   lsSet('pdfwb.night', on ? '1' : '0');
   $('#readNight').setAttribute('aria-pressed', String(on));
@@ -3305,6 +3335,7 @@ const savedSrc = new Set();
 let autoT = 0;
 function scheduleAutosave() {
   if (S.sample || !S.pages.length) return;
+  if (S.shareSess) { S.shareSess.changed(); if (!S.lib) return; }
   clearTimeout(autoT);
   if (S.lib) { libState('pending'); autoT = setTimeout(libSave, 1200); return; }
   autoT = setTimeout(autosave, 1500);
@@ -3322,6 +3353,7 @@ function docState(imgIds) {
 async function applyState(sess, sourceOf) {
   uidN = Math.max(uidN, sess.uidN || 0) + 1;
   for (const id of sess.srcIds) {
+    if (S.sources.has(id)) continue;
     const src = await sourceOf(id);
     if (!src) throw new Error('Quelle fehlt');
     await addSource(src.bytes, src.name, id);
@@ -3492,6 +3524,10 @@ function sinkStream(pg) {
   pg.contentStream = undefined; pg.contentStreamRef = undefined;
 }
 async function buildPdf(pageList) {
+  const conv = await pagesForExport(pageList);
+  try { return await buildPdfInner(conv.pages); } finally { for (const id of conv.temp) S.images.delete(id); }
+}
+async function buildPdfInner(pageList) {
   const { PDFDocument, StandardFonts, degrees, LineCapStyle, BlendMode, rgb } = PL;
   await ensureFontsOf(pageList); // Textbreiten (Ausrichtung, Hintergrund) mit der echten Schrift messen
   const out = await PDFDocument.create();
@@ -4439,7 +4475,8 @@ async function saveToFile(as) {
   fileSaving = (async () => {
     busy(true, as ? 'PDF wird erstellt …' : 'Wird gespeichert …');
     try {
-      const bytes = await buildPdf(S.pages);
+      const isWb = /\.werkbank$/i.test(S.file.name);
+      const bytes = isWb ? new Uint8Array(await werkbankBlob().arrayBuffer()) : await buildPdf(S.pages);
       const r = as ? await DESKF.fileSaveAs(bytes, S.file.name) : await DESKF.fileWrite(bytes);
       busy(false);
       if (!r || !r.path) { toast('Speichern abgebrochen'); return false; }
@@ -4477,7 +4514,7 @@ async function openPathFile(f) {
     }
     try { await idbDel('session:file:' + f.path); } catch (e) { /* egal */ }
   }
-  await openFiles([new File([bytes], f.name, { type: 'application/pdf' })], 'replace', true);
+  await openFiles([new File([bytes], f.name, { type: /\.werkbank$/i.test(f.name) ? 'application/x-pdf-werkbank' : 'application/pdf' })], 'replace', true);
   S.docName = f.name; S.dirty = false; S.sample = false; updateTitle(); fileUI(); fileState();
   setMsg('„' + f.name + '“ geöffnet · Strg/⌘+S speichert direkt in die Datei');
 }
@@ -4497,7 +4534,670 @@ function bindFileMode() {
   return true;
 }
 
+/* ---------- Live-Graphen: Funktionsgraph als bearbeitbares Objekt auf der Seite ----------
+   { t: 'graph', x, y, w, h, src: 'a = 1\nf(x) = a·x²', view: { x0, x1, y0, y1 }, deg } – Formeln, Regler und Ausschnitt
+   bleiben bearbeitbar (Doppelklick), beim Export wird der Graph scharf als Bild eingebettet. */
+const GCOL = ['#1f5fd6', '#d0342c', '#1e8a4c', '#8a3ffc', '#e07b00', '#0f8b8d'];
+function graphEval(a) {
+  if (!window.WBCalc) return { plots: [], vars: [], err: 'Rechner fehlt' };
+  const st = { deg: !!a.deg, vars: new Map(), funcs: new Map() };
+  const res = window.WBCalc.runAll(a.src || '', st, true);
+  const plots = res.filter(r => r.plot).map(r => r.plot);
+  const vars = res.filter(r => r.kind === 'assign' && /^\s*[A-Za-z]\w*\s*=\s*-?[\d.,]+\s*$/.test(r.src)).map(r => ({ name: r.src.split('=')[0].trim(), value: r.value }));
+  const err = res.find(r => r.kind === 'error');
+  return { plots, vars, err: err ? err.src + ': ' + err.text : '' };
+}
+function gStep(range, n) { const raw = range / n, p = 10 ** Math.floor(Math.log10(raw)), m = raw / p; return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p; }
+const gTick = (v, st) => { const d = Math.max(0, -Math.floor(Math.log10(st))); return (Math.abs(v) < st / 1e6 ? 0 : v).toFixed(Math.min(d, 6)).replace('.', ',').replace('-', '−'); };
+function graphSVG(a, forExport) {
+  const { x, y, w, h } = a, v = a.view, ev = graphEval(a);
+  const X = t => x + (t - v.x0) / (v.x1 - v.x0) * w, Y = t => y + h - (t - v.y0) / (v.y1 - v.y0) * h;
+  const fs = Math.max(5.5, Math.min(9, Math.min(w, h) / 26)), cid = 'gc' + a.id;
+  let out = `<g class="graph"><defs><clipPath id="${cid}"><rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="${r2(h)}"/></clipPath></defs>`;
+  out += `<rect x="${r2(x)}" y="${r2(y)}" width="${r2(w)}" height="${r2(h)}" fill="#ffffff" stroke="#c9ced8" stroke-width="0.8" rx="2"/>`;
+  out += `<g clip-path="url(#${cid})">`;
+  const sx = gStep(v.x1 - v.x0, Math.max(3, w / 55)), sy = gStep(v.y1 - v.y0, Math.max(3, h / 45));
+  let grid = '', labels = '';
+  const ax = v.y0 <= 0 && v.y1 >= 0 ? Y(0) : y + h - 1, ay = v.x0 <= 0 && v.x1 >= 0 ? X(0) : x + 1;
+  for (let t = Math.ceil(v.x0 / sx) * sx; t <= v.x1 + 1e-9; t += sx) {
+    const px = X(t); grid += `M${r2(px)} ${r2(y)}V${r2(y + h)}`;
+    if (Math.abs(t) > sx / 1e6) labels += `<text x="${r2(px)}" y="${r2(Math.min(y + h - 2, ax + fs + 1))}" text-anchor="middle">${gTick(t, sx)}</text>`;
+  }
+  for (let t = Math.ceil(v.y0 / sy) * sy; t <= v.y1 + 1e-9; t += sy) {
+    const py = Y(t); grid += `M${r2(x)} ${r2(py)}H${r2(x + w)}`;
+    if (Math.abs(t) > sy / 1e6) labels += `<text x="${r2(Math.max(x + 2, ay - 2))}" y="${r2(py + fs * 0.35)}" text-anchor="${ay - 2 < x + 2 + fs ? 'start' : 'end'}">${gTick(t, sy)}</text>`;
+  }
+  out += `<path d="${grid}" stroke="#e6e9ef" stroke-width="0.5" fill="none"/>`;
+  out += `<path d="M${r2(x)} ${r2(ax)}H${r2(x + w)}M${r2(ay)} ${r2(y)}V${r2(y + h)}" stroke="#5a6374" stroke-width="0.8" fill="none"/>`;
+  out += `<g font-family='${FONTS.Helvetica.css}' font-size="${r2(fs)}" fill="#5a6374">${labels}</g>`;
+  const n = Math.round(clamp(w * (forExport ? 3 : 1.4), 80, 1400));
+  ev.plots.forEach((pl, i) => {
+    let d = '', pen = false, prevY = null;
+    for (let k = 0; k <= n; k++) {
+      const t = v.x0 + (v.x1 - v.x0) * k / n;
+      let yv; try { yv = pl.f(t); } catch (e) { yv = NaN; }
+      if (!isFinite(yv) || (prevY !== null && Math.abs(yv - prevY) > (v.y1 - v.y0) * 4)) { pen = false; prevY = isFinite(yv) ? yv : null; continue; }
+      const py = clamp(Y(yv), y - h * 2, y + h * 3);
+      d += (pen ? 'L' : 'M') + r2(X(t)) + ' ' + r2(py); pen = true; prevY = yv;
+    }
+    if (d) out += `<path d="${d}" stroke="${GCOL[i % GCOL.length]}" stroke-width="${r2(Math.max(1, Math.min(w, h) / 160))}" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`;
+  });
+  out += '</g>';
+  // Legende
+  const leg = ev.plots.map((pl, i) => `<tspan fill="${GCOL[i % GCOL.length]}" x="${r2(x + 5)}" dy="${i ? r2(fs * 1.25) : 0}">${esc((pl.src || pl.name || '').replace(/\*/g, '·').slice(0, 40))}</tspan>`).join('');
+  if (leg) out += `<text x="${r2(x + 5)}" y="${r2(y + fs + 3)}" font-family='${FONTS.Helvetica.css}' font-size="${r2(fs)}" font-weight="600">${leg}</text>`;
+  if (ev.vars.length) out += `<text x="${r2(x + w - 5)}" y="${r2(y + fs + 3)}" text-anchor="end" font-family='${FONTS.Helvetica.css}' font-size="${r2(fs)}" fill="#5a6374">${esc(ev.vars.map(q => q.name + ' = ' + window.WBCalc.fmt(q.value, 4)).join('   '))}</text>`;
+  if (ev.err && !forExport) out += `<text x="${r2(x + 5)}" y="${r2(y + h - 5)}" font-family='${FONTS.Helvetica.css}' font-size="${r2(fs)}" fill="#d0342c">${esc(ev.err.slice(0, 80))}</text>`;
+  return out + '</g>';
+}
+/* Graph als PNG (für den PDF-Export) */
+async function graphPNG(a, scale = 4) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.round(a.w * scale)}" height="${Math.round(a.h * scale)}" viewBox="${a.x} ${a.y} ${a.w} ${a.h}">${graphSVG(a, true)}</svg>`;
+  const img = new Image();
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+  const c = document.createElement('canvas'); c.width = Math.round(a.w * scale); c.height = Math.round(a.h * scale);
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/png');
+}
+/* vor dem Export: Live-Graphen in Bilder umwandeln (auf Kopien der Seiten) */
+async function pagesForExport(list) {
+  const special = a => a.t === 'graph' || a.t === 'table';
+  if (!list.some(p => p.annots.some(special))) return { pages: list, temp: [] };
+  const temp = [];
+  const pages = await Promise.all(list.map(async p => {
+    if (!p.annots.some(special)) return p;
+    const annots = await Promise.all(p.annots.map(async a => {
+      if (a.t === 'table') return tableParts(a);
+      if (a.t !== 'graph') return a;
+      const id = registerImage(await graphPNG(a), 'png', a.w * 4, a.h * 4); temp.push(id);
+      return { id: a.id, t: 'img', img: id, x: a.x, y: a.y, w: a.w, h: a.h };
+    }));
+    return { ...p, annots: annots.flat() };
+  }));
+  return { pages, temp };
+}
+function insertGraph(src, view, deg) {
+  const p = S.pages[S.cur]; if (!p) return;
+  const [W] = dims(p), [cx, cy] = viewCenter(p), w = Math.min(320, W * 0.6), h = w * 0.68;
+  const v = view && isFinite(view.x0) ? { x0: view.x0, x1: view.x1, y0: view.y0, y1: view.y1 } : { x0: -5, x1: 5, y0: -4, y1: 4 };
+  pushHist();
+  const a = { id: uid(), t: 'graph', x: clamp(cx - w / 2, 0, W - w), y: Math.max(10, cy - h / 2), w, h, src, view: v, deg: !!deg };
+  p.annots.push(a); drawAnnots(p); markDirty();
+  setTool('select'); S.sel = { pid: p.id, aid: a.id }; drawAnnots(p); renderProps();
+  toast('Live-Graph eingefügt · Doppelklick zum Bearbeiten');
+  setTimeout(() => editGraph(p, a), 80);
+}
+/* Bearbeiten: Formeln, Regler für Variablen (a = 1 …) und Ausschnitt, Änderungen erscheinen sofort */
+function editGraph(p, a) {
+  closeGraphEditor();
+  pushHist();
+  const box = document.createElement('section'); box.className = 'gedit'; box.setAttribute('aria-label', 'Live-Graph bearbeiten');
+  const num = v => window.WBCalc.fmt(v, 6);
+  const render = () => {
+    const ev = graphEval(a);
+    $('.gsl', box).innerHTML = ev.vars.map(q => {
+      const span = Math.max(1, Math.abs(q.value) * 2, 5);
+      const min = q.lo != null ? q.lo : -span, max = q.hi != null ? q.hi : span;
+      return `<label class="gsrow"><b>${esc(q.name)}</b><input type="range" min="${Math.min(min, q.value)}" max="${Math.max(max, q.value)}" step="${gStep(max - min, 100) / 2}" value="${q.value}" data-var="${esc(q.name)}"><output>${esc(num(q.value))}</output></label>`;
+    }).join('') || '<p class="note" style="margin:0">Tipp: „a = 1“ als Zeile anlegen und in der Formel verwenden – dann erscheint hier ein Regler.</p>';
+    $('.gerr', box).textContent = ev.err || '';
+  };
+  const redraw = () => { drawAnnots(p); markDirty(); };
+  box.innerHTML = `<header><i data-i="calc"></i><b>Live-Graph</b><span class="grow"></span><button class="ibtn" data-g="close" aria-label="Fertig">${icon('close')}</button></header>
+    <textarea class="field gsrc" rows="4" spellcheck="false" aria-label="Formeln, eine je Zeile">${esc(a.src)}</textarea>
+    <p class="gerr"></p><div class="gsl"></div>
+    <div class="grange"><label>x von <input class="field" data-r="x0" value="${num(a.view.x0)}"></label><label>bis <input class="field" data-r="x1" value="${num(a.view.x1)}"></label>
+      <label>y von <input class="field" data-r="y0" value="${num(a.view.y0)}"></label><label>bis <input class="field" data-r="y1" value="${num(a.view.y1)}"></label></div>
+    <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn" data-g="auto">y automatisch</button><button class="btn" data-g="std">Standard-Ausschnitt</button><button class="btn" data-g="deg" aria-pressed="${!!a.deg}">${a.deg ? 'Grad' : 'Bogenmaß'}</button><span class="grow"></span><button class="btn primary" data-g="close">Fertig</button></div>`;
+  document.body.appendChild(box);
+  box.querySelector('[data-i]').outerHTML = icon('calc');
+  const r = els.get(p.id).wrap.getBoundingClientRect(), z = S.zoom;
+  if (innerWidth > 760) { box.style.left = clamp(r.left + (a.x + a.w) * z + 12, 8, innerWidth - 340) + 'px'; box.style.top = clamp(r.top + a.y * z, 70, innerHeight - 420) + 'px'; }
+  render();
+  let t = 0;
+  $('.gsrc', box).addEventListener('input', e => { a.src = e.target.value; clearTimeout(t); t = setTimeout(() => { render(); redraw(); }, 120); });
+  $('.gsrc', box).addEventListener('keydown', e => e.stopPropagation());
+  box.addEventListener('input', e => {
+    const s = e.target.closest('[data-var]');
+    if (s) {
+      const name = s.dataset.var, val = +s.value;
+      a.src = a.src.split('\n').map(l => (new RegExp('^\\s*' + name + '\\s*=\\s*-?[\\d.,]+\\s*$').test(l) ? `${name} = ${num(val)}` : l)).join('\n');
+      $('.gsrc', box).value = a.src; s.nextElementSibling.textContent = num(val);
+      redraw(); return;
+    }
+    const rr = e.target.closest('[data-r]');
+    if (rr) { const v = parseFloat(rr.value.replace(',', '.').replace('−', '-')); if (isFinite(v)) { a.view[rr.dataset.r] = v; if (a.view.x1 > a.view.x0 && a.view.y1 > a.view.y0) redraw(); } }
+  });
+  box.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') closeGraphEditor(); });
+  box.addEventListener('click', e => {
+    const b = e.target.closest('[data-g]'); if (!b) return;
+    const k = b.dataset.g;
+    if (k === 'close') { closeGraphEditor(); return; }
+    if (k === 'std') Object.assign(a.view, { x0: -5, x1: 5, y0: -4, y1: 4 });
+    if (k === 'deg') { a.deg = !a.deg; b.textContent = a.deg ? 'Grad' : 'Bogenmaß'; b.setAttribute('aria-pressed', String(a.deg)); }
+    if (k === 'auto') {
+      const ev = graphEval(a); let lo = Infinity, hi = -Infinity;
+      for (const pl of ev.plots) for (let i = 0; i <= 300; i++) { const xv = a.view.x0 + (a.view.x1 - a.view.x0) * i / 300; let yv; try { yv = pl.f(xv); } catch (er) { yv = NaN; } if (isFinite(yv) && Math.abs(yv) < 1e6) { lo = Math.min(lo, yv); hi = Math.max(hi, yv); } }
+      if (isFinite(lo)) { const pad = (hi - lo || 2) * 0.12; a.view.y0 = lo - pad; a.view.y1 = hi + pad; }
+    }
+    $$('[data-r]', box).forEach(i => { i.value = num(a.view[i.dataset.r]); });
+    redraw();
+  });
+  S.gedit = { box, p, a };
+  if (!COARSE) setTimeout(() => $('.gsrc', box).focus(), 30);
+}
+function closeGraphEditor() {
+  if (!S.gedit) return;
+  S.gedit.box.remove(); S.gedit = null; updateUndo();
+}
+
+/* ---------- Eigenes Format „.werkbank“: alles bleibt bearbeitbar, auch nach dem Verschicken ---------- */
+function werkbankBlob() {
+  const imgIds = new Set(); for (const p of S.pages) for (const a of p.annots) if (a.img) imgIds.add(a.img);
+  const state = docState(imgIds); state.dirty = false;
+  return window.WBFile.pack({ name: baseName(), state, sources: [...S.sources.values()].map(x => ({ id: x.id, name: x.name, bytes: x.bytes })) });
+}
+async function saveWerkbank() {
+  commitEdit(); if (!S.pages.length || !window.WBFile) return;
+  busy(true, 'Werkbank-Datei wird erstellt …');
+  try { const blob = werkbankBlob(); busy(false); await saveBytes(blob, baseName() + '.werkbank'); }
+  catch (e) { busy(false); console.error(e); toast('Speichern fehlgeschlagen: ' + (e.message || e)); }
+}
+async function openWerkbank(file, mode, noAsk) {
+  if (S.busy) return;
+  commitEdit();
+  const bytes = file.bytes ? new Uint8Array(file.bytes) : new Uint8Array(await file.arrayBuffer());
+  if (mode === 'replace' && S.lib && LIB && LIB.importWerkbank) {
+    busy(true, 'Wird in die Bibliothek übernommen …');
+    try { const doc = await LIB.importWerkbank(bytes, null); busy(false); location.href = 'index.html?doc=' + encodeURIComponent(doc.id); }
+    catch (e) { busy(false); toast(e.message || String(e)); }
+    return;
+  }
+  if (mode !== 'replace') { toast('Werkbank-Dateien lassen sich nur öffnen, nicht anhängen.'); return; }
+  if (S.dirty && !S.sample && !noAsk && !await ask('Ungespeicherte Änderungen verwerfen?', `Wenn du „${file.name}“ öffnest, gehen die Änderungen an „${S.docName}“ verloren.`)) return;
+  busy(true, 'Werkbank-Datei wird geöffnet …');
+  try {
+    const wb = await window.WBFile.unpack(bytes);
+    const oldIds = [...S.sources.keys()];
+    if (!wb.state) {
+      const first = [...wb.sources.values()][0]; if (!first) throw new Error('Die Datei enthält keine Seiten.');
+      busy(false); await openFiles([new File([first.bytes], first.name, { type: 'application/pdf' })], 'replace', true); return;
+    }
+    oldIds.forEach(dropSource);
+    await applyState(wb.state, async id => wb.sources.get(id) || null);
+    S.docName = (wb.manifest.name || file.name.replace(/\.werkbank$/i, '')) + '.pdf';
+    S.dirty = false; busy(false); updateTitle(); viewer.scrollTop = 0;
+    scheduleAutosave();
+    setMsg(`„${file.name}“ geöffnet · alle Markierungen, Stifte und Live-Graphen sind bearbeitbar`);
+  } catch (e) { busy(false); console.error(e); toast('Öffnen fehlgeschlagen: ' + (e.message || e)); }
+}
+
+/* ---------- Gemeinsam bearbeiten: Link-Sitzung im Editor ---------- */
+const SHARE_TOKEN = new URLSearchParams(location.search).get('share');
+function shareHooks() {
+  return {
+    getState: () => { const st = docState(); st.dirty = false; return JSON.parse(JSON.stringify(st)); },
+    getSource: id => { const x = S.sources.get(id); return x && { id, name: x.name, bytes: x.bytes }; },
+    hasSource: id => S.sources.has(id),
+    addSource: async (id, src) => { if (!S.sources.has(id)) await addSource(src.bytes, src.name, id); },
+    apply: (st, structural) => applyRemote(st, structural),
+    busy: () => !!(S.editing || drag),
+    onStatus: shareStatus, onPeers: sharePeers,
+  };
+}
+/* Stand der anderen übernehmen, ohne Zoom und Position zu verlieren */
+async function applyRemote(st, structural) {
+  st = JSON.parse(JSON.stringify(st)); // nie Objekte mit der Sitzung teilen (sonst ändert jeder Strich auch deren Basisstand)
+  const top = viewer.scrollTop;
+  S.images = new Map(st.images || []); S.bookmarks = st.bookmarks || []; S.formVals = st.formVals || {}; S.paperSrc = new Map(st.paperSrc || []);
+  if (st.meta) S.meta = st.meta;
+  uidN = Math.max(uidN, st.uidN || 0) + 1;
+  const sel = S.sel;
+  if (structural || st.pages.length !== S.pages.length || st.pages.some((p, i) => p.id !== S.pages[i].id)) {
+    S.pages = st.pages; await Promise.all(S.pages.filter(hasCE).map(ensureDerived));
+    buildViewer(); viewer.scrollTop = top;
+  } else {
+    for (let i = 0; i < S.pages.length; i++) {
+      const p = S.pages[i], q = st.pages[i];
+      if (JSON.stringify(p) === JSON.stringify(q)) continue;
+      const ce = ceKey(p);
+      Object.assign(p, q);
+      if (ceKey(p) !== ce) { await ensureDerived(p); const e = els.get(p.id); if (e) e.key = null; renderPage(p); }
+      drawAnnots(p);
+    }
+    updateSideLater();
+  }
+  if (sel && !(pageById(sel.pid) || { annots: [] }).annots.some(a => a.id === sel.aid)) S.sel = null;
+  renderProps();
+  if (S.lib) { libState('pending'); clearTimeout(autoT); autoT = setTimeout(libSave, 1200); }
+}
+function shareStatus(i) {
+  const el = $('#shareBar'); if (!el) return;
+  el.hidden = false;
+  el.dataset.s = i.status;
+  const t = $('.st', el);
+  if (t) t.textContent = { saving: 'Speichert …', saved: 'Live', synced: 'Live', error: 'Offline', ended: 'Beendet' }[i.status] || 'Live';
+  if (i.status === 'ended') toast('Der Besitzer hat die Freigabe beendet.');
+  if (S.lib && (i.status === 'saved' || i.status === 'synced')) lsSet('pdfwb.sharerev.' + S.lib.id, String(i.rev));
+}
+function sharePeers(list) {
+  const el = $('#sharePeers'); if (!el) return;
+  el.innerHTML = list.slice(0, 5).map(p => `<span class="peer" style="--c:${esc(p.color || '#888')}" title="${esc(p.name || 'Gast')}${p.page != null ? ' · Seite ' + (p.page + 1) : ''}">${esc((p.name || 'G').trim().slice(0, 1).toUpperCase())}</span>`).join('') + (list.length > 5 ? `<span class="peer more">+${list.length - 5}</span>` : '');
+  const t = $('#shareBar .st'); if (t && list.length) t.textContent = 'Live · ' + (list.length === 1 ? list[0].name || 'Gast' : list.length + ' weitere');
+}
+async function askName() {
+  if (!window.WBShare || window.WBShare.me.name) return;
+  return new Promise(res => {
+    dialog('Wie heißt du?', `<p class="note" style="margin:0 0 10px">Damit die anderen sehen, wer mitarbeitet. Nur für dieses Dokument, kein Konto nötig.</p><input class="field" id="shName" maxlength="40" placeholder="Vorname" style="width:100%">`, 'Weiter', b => { window.WBShare.setName($('#shName', b).value.trim() || 'Gast'); res(); return true; });
+    $('#dlgCancel').addEventListener('click', () => { window.WBShare.setName('Gast'); res(); }, { once: true });
+    setTimeout(() => $('#shName').focus(), 30);
+  });
+}
+async function openShared(tok) {
+  if (!window.WBShare) { toast('Gemeinsames Bearbeiten ist hier nicht verfügbar.'); return false; }
+  busy(true, 'Geteiltes Dokument wird geladen …');
+  try {
+    const sess = await window.WBShare.connect(tok, shareHooks());
+    const row = sess.row;
+    if (!row.state || !row.state.pages) {
+      // Besitzer hat ein unbearbeitetes PDF geteilt: Quelle als Dokument öffnen
+      const sid = (row.src_ids || [])[0]; if (!sid) throw new Error('Das geteilte Dokument ist noch leer. Bitte in einem Moment neu laden.');
+      const src = await sess.sourceOf(sid);
+      await addSource(src.bytes, row.name + '.pdf', sid);
+      S.pages = [...S.proxies.keys()].filter(k => k.startsWith(sid + ':')).map((k, i) => { const pg = S.proxies.get(k), vp = pg.getViewport({ scale: 1 }); return { id: 'p' + sid + i, src: sid, idx: i, baseRot: pg.rotate || 0, rot: 0, w0: vp.width, h0: vp.height, annots: [] }; });
+      S.docName = row.name + '.pdf'; S.sample = false; S.zoom = initialZoom(); buildViewer();
+    } else {
+      await applyState(JSON.parse(JSON.stringify(row.state)), sid => sess.sourceOf(sid));
+      S.docName = row.name + '.pdf';
+    }
+    S.dirty = false; S.share = { token: tok }; S.shareSess = sess;
+    busy(false); updateTitle(); libUI();
+    const base = shareHooks().getState();
+    sess.start(row.rev, row.state && row.state.pages ? row.state : base);
+    if (!(row.state && row.state.pages)) sess.flush();
+    const inf = sess.info();
+    if (!sess.canEdit()) { S.viewonly = true; document.body.classList.add('viewonly'); setTool('select'); setMsg('Nur ansehen · Änderungen des Besitzers erscheinen live'); }
+    else setMsg('Gemeinsam bearbeiten · Änderungen erscheinen bei allen in Sekunden');
+    shareStatus({ status: 'synced', rev: inf.rev });
+    askName().then(() => sess.setPage(S.cur || 0));
+    return true;
+  } catch (e) {
+    busy(false); console.error(e);
+    $('#pages').innerHTML = `<div class="share-err"><h2>Link lässt sich nicht öffnen</h2><p>${esc(e.message || String(e))}</p></div>`;
+    return true;
+  }
+}
+/* Besitzer öffnet ein geteiltes Dokument aus der Bibliothek: Änderungen der Gäste holen und live bleiben */
+async function attachShareForLib() {
+  if (!window.WBShare || !S.lib || S.renderMode) return;
+  const libId = S.lib.id, tok = await window.WBShare.tokenForDoc(libId);
+  if (S.shareSess) { S.shareSess.close(); S.shareSess = null; S.share = null; }
+  if (!tok || !S.lib || S.lib.id !== libId) { const sb = $('#shareBar'); if (sb && !tok) sb.hidden = true; return; }
+  try {
+    const sess = await window.WBShare.connect(tok, shareHooks()), row = sess.row;
+    const seen = +lsGet('pdfwb.sharerev.' + S.lib.id) || 0;
+    S.share = { token: tok }; S.shareSess = sess;
+    if (row.state && row.state.pages && row.rev > seen) {
+      // Gäste haben inzwischen gearbeitet: deren Stand mit dem lokalen zusammenführen
+      const merged = row.state; // offline beim Besitzer nichts geändert: Stand der Gäste gilt
+      for (const sid of merged.srcIds || []) if (!S.sources.has(sid)) { const src = await sess.sourceOf(sid); await addSource(src.bytes, src.name, sid); }
+      await applyRemote(merged, true);
+      sess.start(row.rev, row.state);
+      toast('Änderungen aus dem geteilten Link übernommen');
+    } else { sess.start(row.rev, row.state && row.state.pages ? row.state : null); if (S.dirty || row.rev <= seen) sess.flush(); }
+    shareStatus({ status: 'synced', rev: row.rev });
+  } catch (e) { console.warn('Freigabe verbinden', e); }
+}
+function collabDialog() {
+  if (!window.WBShare) { toast('Gemeinsames Bearbeiten ist hier nicht verfügbar.'); return; }
+  if (S.share && !S.lib) {
+    const url = window.WBShare.linkOf(S.share.token);
+    dialog('Gemeinsam bearbeiten', `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><div style="border:1px solid var(--line);border-radius:12px;overflow:hidden;line-height:0">${window.WBShare.qrSVG(url, 150)}</div><div style="flex:1;min-width:220px"><p class="note" style="margin-top:0">Diesen Link an weitere Personen schicken:</p><input class="field" readonly value="${esc(url)}" style="width:100%" id="shUrl"></div></div>`, 'Link kopieren', () => { navigator.clipboard.writeText(url).then(() => toast('Link kopiert'), () => {}); return true; });
+    return;
+  }
+  if (!S.lib) { toast('Zum Teilen das Dokument zuerst in die Bibliothek übernehmen (⋯ › In die Bibliothek übernehmen).'); return; }
+  libSave().finally(() => window.WBShare.ownerDialog({ id: S.lib.id, name: S.lib.name }, { toast, busy: (m) => (m ? busy(true, m) : busy(false)) }).then(() => attachShareForLib()));
+}
+
+/* ==================== Version 1.6: weitere Werkzeuge ==================== */
+const pill = (() => {
+  let el = null;
+  return (html, onClick) => {
+    if (el) { el.remove(); el = null; }
+    if (!html) return;
+    el = document.createElement('div'); el.className = 'xpill'; el.innerHTML = html; document.body.appendChild(el);
+    el.addEventListener('click', e => { const b = e.target.closest('[data-x]'); if (b) onClick(b.dataset.x, b); });
+    return el;
+  };
+})();
+
+/* ---------- Präsentation: eine Seite pro Bildschirm, Pfeiltasten, Laser, B = schwarz ---------- */
+const pres = { on: false, black: '', prevZoom: 1, prevFit: false, hint: null };
+function presFit() {
+  const p = S.pages[S.cur]; if (!p) return;
+  const [W, H] = dims(p), vw = viewer.clientWidth - 24, vh = viewer.clientHeight - 24;
+  setZoom(Math.min(vw / W, vh / H), null, false);
+  requestAnimationFrame(() => presGo(S.cur, true));
+}
+function presGo(i, instant) {
+  i = clamp(i, 0, S.pages.length - 1);
+  const e = els.get(S.pages[i].id); if (!e) return;
+  viewer.scrollTo({ top: e.wrap.offsetTop - Math.max(0, (viewer.clientHeight - e.wrap.offsetHeight) / 2), behavior: 'auto' });
+  setCurrent(i);
+  const c = $('#presNum'); if (c) { c.textContent = `${i + 1} / ${S.pages.length}`; c.classList.add('show'); clearTimeout(pres.hint); pres.hint = setTimeout(() => c.classList.remove('show'), 1400); }
+}
+function presBlack(k) { pres.black = pres.black === k ? '' : k; const o = $('#presBlack'); o.hidden = !pres.black; o.style.background = pres.black === 'w' ? '#fff' : '#000'; }
+function setPresent(on) {
+  if (on === pres.on) return;
+  commitEdit();
+  pres.on = on;
+  if (on) {
+    pres.prevZoom = S.zoom; pres.prevFit = S.fitMode;
+    if (!S.reading) setReading(true);
+    document.body.classList.add('present');
+    if (!$('#presBlack')) {
+      document.body.insertAdjacentHTML('beforeend', '<div id="presBlack" hidden></div><div id="presNum"></div>');
+      $('#presBlack').addEventListener('click', () => presBlack(pres.black));
+    }
+    setTool('select');
+    setTimeout(presFit, 120);
+    toast('Präsentation · ← → blättern · L Laser · B schwarz · W weiß · Esc beenden');
+  } else {
+    document.body.classList.remove('present'); presBlack(''); if ($('#presBlack')) $('#presBlack').hidden = true;
+    if (S.tool === 'laser') setTool('select');
+    if (S.reading) setReading(false);
+    setTimeout(() => (pres.prevFit ? fitWidth() : setZoom(pres.prevZoom)), 80);
+  }
+}
+window.addEventListener('keydown', e => {
+  if (!pres.on || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key, n = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, ' ': 1, Enter: 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1, Backspace: -1 }[k];
+  let used = true;
+  if (n) presGo(S.cur + (e.shiftKey && k === ' ' ? -1 : n));
+  else if (k === 'Home') presGo(0); else if (k === 'End') presGo(S.pages.length - 1);
+  else if (k === 'b' || k === 'B' || k === '.') presBlack('b');
+  else if (k === 'w' || k === 'W' || k === ',') presBlack('w');
+  else if (k === 'l' || k === 'L' || k === 'j') setTool(S.tool === 'laser' ? 'select' : 'laser');
+  else if (k === 'Escape') setPresent(false);
+  else used = false;
+  if (used) { e.preventDefault(); e.stopImmediatePropagation(); }
+}, true);
+viewer.addEventListener('click', e => { if (pres.on && S.tool !== 'laser' && !e.target.closest('a,.forml')) presGo(S.cur + (e.clientX < innerWidth * 0.25 ? -1 : 1)); });
+addEventListener('resize', () => { if (pres.on) { clearTimeout(pres.rt); pres.rt = setTimeout(presFit, 150); } });
+document.addEventListener('fullscreenchange', () => { if (pres.on && !document.fullscreenElement) setPresent(false); });
+
+/* ---------- Vorlesen (Sprachausgabe des Systems) ---------- */
+const tts = { on: false, rate: +(lsGet('pdfwb.ttsrate') || 1), gen: 0 };
+function ttsStop() { tts.on = false; tts.gen++; try { speechSynthesis.cancel(); } catch (e) { /* egal */ } pill(null); }
+function ttsVoice(lang) {
+  const vs = speechSynthesis.getVoices(), l = lang.slice(0, 2);
+  return vs.find(v => v.lang === lang && /natural|neural|premium|enhanced/i.test(v.name)) || vs.find(v => v.lang === lang) || vs.find(v => v.lang && v.lang.slice(0, 2) === l) || null;
+}
+async function speakDoc(from = S.cur) {
+  if (!('speechSynthesis' in window)) { toast('Vorlesen wird von diesem Browser nicht unterstützt.'); return; }
+  if (tts.on) { ttsStop(); return; }
+  tts.on = true; const gen = ++tts.gen;
+  const bar = () => pill(`<span class="dot"></span><span>Vorlesen · Seite <b id="ttsPg">${S.cur + 1}</b></span><button data-x="rate" title="Tempo">${tts.rate}×</button><button data-x="next" title="Nächste Seite">⏭</button><button data-x="stop" title="Stopp">■</button>`, (k, b) => {
+    if (k === 'stop') ttsStop();
+    else if (k === 'next') { const nx = S.cur + 1; ttsStop(); if (nx < S.pages.length) speakDoc(nx); }
+    else if (k === 'rate') { tts.rate = { 1: 1.25, 1.25: 1.5, 1.5: 0.85, 0.85: 1 }[tts.rate] || 1; lsSet('pdfwb.ttsrate', String(tts.rate)); b.textContent = tts.rate + '×'; const c = S.cur; ttsStop(); speakDoc(c); }
+  });
+  bar();
+  for (let i = from; i < S.pages.length && tts.on && gen === tts.gen; i++) {
+    const { text, own } = await pageText(S.pages[i]);
+    const all = [text, ...own].join('\n').replace(/-\n(?=[a-zäöü])/g, '').replace(/\s*\n\s*/g, ' ').trim();
+    if (!all) continue;
+    if (i !== S.cur) scrollToPage(i);
+    const pg = $('#ttsPg'); if (pg) pg.textContent = i + 1;
+    const lang = /\b(the|and|of|to|is)\b/i.test(all.slice(0, 400)) && !/\b(der|die|und|das|ist)\b/i.test(all.slice(0, 400)) ? 'en-US' : 'de-DE', voice = ttsVoice(lang);
+    const chunks = all.match(/[^.!?…]{1,220}(?:[.!?…]+|$)|\S{221,}/g) || [all];
+    for (const ch of chunks) {
+      if (!tts.on || gen !== tts.gen) return;
+      await new Promise(res => {
+        const u = new SpeechSynthesisUtterance(ch.trim()); u.lang = lang; u.rate = tts.rate; if (voice) u.voice = voice;
+        u.onend = u.onerror = () => res(); speechSynthesis.speak(u);
+        // Sicherheitsnetz: manche Systeme melden das Ende nicht
+        setTimeout(res, 2500 + ch.length * 160 / tts.rate);
+      });
+    }
+  }
+  if (gen === tts.gen) { tts.on = false; pill(null); }
+}
+
+/* ---------- Diktieren in ein Textfeld ---------- */
+const dict = { rec: null, a: null, p: null, base: '' };
+function dictateStop() {
+  const r = dict.rec; dict.rec = null;
+  if (r) { try { r.stop(); } catch (e) { /* egal */ } }
+  pill(null);
+  if (dict.a && dict.p) {
+    if (!dict.a.text.trim()) { dict.p.annots = dict.p.annots.filter(x => x !== dict.a); drawAnnots(dict.p); }
+    else { markDirty(); S.sel = { pid: dict.p.id, aid: dict.a.id }; drawAnnots(dict.p); renderProps(); }
+  }
+  dict.a = dict.p = null;
+}
+function dictate() {
+  if (dict.rec) { dictateStop(); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR || DESKF) { toast(DESKF ? 'In der Desktop-App diktierst du mit der Diktierfunktion des Systems: am Mac zweimal Fn, unter Windows Win + H – dann in ein Textfeld sprechen.' : 'Diktieren geht in diesem Browser nicht. Chrome, Edge oder Safari verwenden – oder die Diktierfunktion der Tastatur.'); return; }
+  commitEdit();
+  const p = S.pages[S.cur]; if (!p) return;
+  let a = S.sel && S.sel.pid === p.id && p.annots.find(x => x.id === S.sel.aid && x.t === 'text');
+  if (!a) {
+    const [cx, cy] = viewCenter(p), [W] = dims(p), tp = TP.text;
+    a = { id: uid(), t: 'text', x: clamp(cx - 120, 10, W - 60), y: cy, text: '', color: tp.color, size: tp.size, font: tp.font, bold: tp.bold, bg: tp.bg || '' };
+    pushHist(); p.annots.push(a);
+  } else pushHist();
+  dict.a = a; dict.p = p; dict.base = a.text ? a.text.replace(/\s*$/, ' ') : '';
+  const rec = new SR(); dict.rec = rec;
+  rec.lang = navigator.language && /^en/.test(navigator.language) ? navigator.language : 'de-DE'; rec.continuous = true; rec.interimResults = true;
+  rec.onresult = ev => {
+    let fin = '', tmp = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) (ev.results[i].isFinal ? (fin += ev.results[i][0].transcript) : (tmp += ev.results[i][0].transcript));
+    if (fin) dict.base += fin.trim().replace(/\s*(neue Zeile|new line)\s*/gi, '\n').replace(/\s*(Punkt)$/i, '.').replace(/\s*(Komma)$/i, ',') + ' ';
+    a.text = (dict.base + tmp).replace(/^\s+/, ''); drawAnnots(p);
+  };
+  rec.onerror = ev => { if (ev.error === 'not-allowed') toast('Bitte den Zugriff aufs Mikrofon erlauben.'); else if (ev.error === 'network') toast('Diktieren braucht hier eine Internetverbindung. Alternativ: Diktierfunktion des Systems (Mac: 2× Fn, Windows: Win + H).'); else if (ev.error !== 'no-speech' && ev.error !== 'aborted') toast('Diktieren: ' + ev.error); };
+  rec.onend = () => { if (dict.rec === rec) dictateStop(); };
+  try { rec.start(); } catch (e) { toast('Diktieren ließ sich nicht starten.'); dict.rec = null; return; }
+  pill('<span class="dot rec"></span><span>Diktat läuft · „neue Zeile“ für Umbruch</span><button data-x="stop">Fertig</button>', k => { if (k === 'stop') dictateStop(); });
+}
+
+/* ---------- Tabellen als bearbeitbares Objekt ---------- */
+const TBL_PAD = 3;
+function tableGeom(a) {
+  const rows = a.rows.length || 1, cols = Math.max(1, ...a.rows.map(r => r.length));
+  const cw = a.cw && a.cw.length === cols ? a.cw : Array(cols).fill(1), sum = cw.reduce((s, x) => s + x, 0);
+  const xs = [a.x]; for (const c of cw) xs.push(xs[xs.length - 1] + a.w * c / sum);
+  const rh = a.h / rows, ys = Array.from({ length: rows + 1 }, (_, i) => a.y + i * rh);
+  return { rows, cols, xs, ys, rh };
+}
+function tableFit(a) { const g = tableGeom(a); return Math.min(a.size || 10, g.rh * 0.62); }
+function cellText(s, w, size) { const max = Math.max(1, Math.floor((w - 2 * TBL_PAD) / (size * 0.5))); s = String(s == null ? '' : s); return s.length > max ? s.slice(0, Math.max(1, max - 1)) + '…' : s; }
+function tableSVG(a) {
+  const g = tableGeom(a), c = a.color || '#1b2130', fs = tableFit(a), num = s => /^[-+−]?[\d.,\s]+%?$|^[-+−]?[\d.,]+\s?(€|\$|EUR)$/.test(String(s).trim());
+  let o = `<g class="table"><rect x="${r2(a.x)}" y="${r2(a.y)}" width="${r2(a.w)}" height="${r2(a.h)}" fill="#ffffff"/>`;
+  if (a.head) o += `<rect x="${r2(a.x)}" y="${r2(a.y)}" width="${r2(a.w)}" height="${r2(g.rh)}" fill="#3e63dd" fill-opacity="0.12"/>`;
+  if (a.zebra) for (let r = a.head ? 2 : 1; r < g.rows; r += 2) o += `<rect x="${r2(a.x)}" y="${r2(g.ys[r])}" width="${r2(a.w)}" height="${r2(g.rh)}" fill="#000" fill-opacity="0.045"/>`;
+  o += `<rect x="${r2(a.x)}" y="${r2(a.y)}" width="${r2(a.w)}" height="${r2(a.h)}" fill="none" stroke="${c}" stroke-width="0.9"/>`;
+  for (let i = 1; i < g.cols; i++) o += `<line x1="${r2(g.xs[i])}" y1="${r2(a.y)}" x2="${r2(g.xs[i])}" y2="${r2(a.y + a.h)}" stroke="${c}" stroke-width="0.5"/>`;
+  for (let i = 1; i < g.rows; i++) o += `<line x1="${r2(a.x)}" y1="${r2(g.ys[i])}" x2="${r2(a.x + a.w)}" y2="${r2(g.ys[i])}" stroke="${c}" stroke-width="${i === 1 && a.head ? 0.9 : 0.5}"/>`;
+  a.rows.forEach((row, r) => row.forEach((s, ci) => {
+    if (s == null || s === '') return;
+    const w = g.xs[ci + 1] - g.xs[ci], right = num(s) && !(a.head && r === 0);
+    const tx = right ? g.xs[ci + 1] - TBL_PAD : g.xs[ci] + TBL_PAD, ty = g.ys[r] + g.rh / 2 + fs * 0.35;
+    o += `<text x="${r2(tx)}" y="${r2(ty)}" font-family='${FONTS.Helvetica.css}' font-size="${r2(fs)}"${a.head && r === 0 ? ' font-weight="700"' : ''}${right ? ' text-anchor="end"' : ''} fill="${c}">${esc(cellText(s, w, fs))}</text>`;
+  }));
+  return o + '</g>';
+}
+/* für den Export: Tabelle in Linien, Flächen und Texte zerlegen (bleibt Vektor und durchsuchbar) */
+function tableParts(a) {
+  const g = tableGeom(a), c = a.color || '#1b2130', fs = tableFit(a), out = [], num = s => /^[-+−]?[\d.,\s]+%?$|^[-+−]?[\d.,]+\s?(€|\$|EUR)$/.test(String(s).trim());
+  out.push({ id: a.id + 'w', t: 'white', x: a.x, y: a.y, w: a.w, h: a.h });
+  if (a.head) out.push({ id: a.id + 'h', t: 'hl', x: a.x, y: a.y, w: a.w, h: g.rh, color: '#3e63dd', op: 12 });
+  if (a.zebra) for (let r = a.head ? 2 : 1; r < g.rows; r += 2) out.push({ id: a.id + 'z' + r, t: 'hl', x: a.x, y: g.ys[r], w: a.w, h: g.rh, color: '#000000', op: 4.5 });
+  out.push({ id: a.id + 'b', t: 'rect', x: a.x, y: a.y, w: a.w, h: a.h, color: c, sw: 0.9 });
+  for (let i = 1; i < g.cols; i++) out.push({ id: a.id + 'c' + i, t: 'line', x1: g.xs[i], y1: a.y, x2: g.xs[i], y2: a.y + a.h, color: c, sw: 0.5 });
+  for (let i = 1; i < g.rows; i++) out.push({ id: a.id + 'r' + i, t: 'line', x1: a.x, y1: g.ys[i], x2: a.x + a.w, y2: g.ys[i], color: c, sw: i === 1 && a.head ? 0.9 : 0.5 });
+  a.rows.forEach((row, r) => row.forEach((s, ci) => {
+    if (s == null || s === '') return;
+    const w = g.xs[ci + 1] - g.xs[ci], txt = cellText(s, w, fs), right = num(s) && !(a.head && r === 0), bold = !!(a.head && r === 0);
+    const tw = measure(txt, { size: fs, font: 'Helvetica', bold });
+    out.push({ id: a.id + 't' + r + '_' + ci, t: 'text', x: right ? g.xs[ci + 1] - TBL_PAD - tw : g.xs[ci] + TBL_PAD, y: g.ys[r] + g.rh / 2 + fs * 0.35 - FONT('Helvetica').bl * fs, text: txt, color: c, size: fs, font: 'Helvetica', bold });
+  }));
+  return out;
+}
+function parseTable(src) {
+  const lines = String(src).replace(/\r/g, '').split('\n'); while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const sep = lines.some(l => l.includes('\t')) ? '\t' : lines.some(l => l.includes('|')) ? '|' : ';';
+  return lines.map(l => (sep === '|' ? l.replace(/^\s*\|/, '').replace(/\|\s*$/, '') : l).split(sep).map(x => x.trim()));
+}
+function tableDialog(p, a) {
+  const isNew = !a;
+  const src = a ? a.rows.map(r => r.join(' | ')).join('\n') : 'Spalte A | Spalte B | Spalte C\n | | \n | | ';
+  dialog(isNew ? 'Tabelle einfügen' : 'Tabelle bearbeiten', `
+    <p class="note" style="margin:0 0 8px">Eine Zeile pro Tabellenzeile, Zellen mit <b>|</b> trennen. Aus Excel oder Numbers kopierte Zellen einfach einfügen.</p>
+    <textarea class="field" id="tbSrc" rows="8" style="width:100%;font:13px/1.5 var(--f-mono);white-space:pre">${esc(src)}</textarea>
+    <div class="frow" style="margin-top:8px;gap:14px;flex-wrap:wrap">
+      <label class="chk"><input type="checkbox" id="tbHead"${!a || a.head ? ' checked' : ''}> Erste Zeile als Kopf</label>
+      <label class="chk"><input type="checkbox" id="tbZebra"${a && a.zebra ? ' checked' : ''}> Zeilen abwechselnd tönen</label>
+      <label class="fld" style="margin:0"><span>Schriftgröße</span><input class="field" id="tbSize" type="number" min="5" max="24" value="${a ? a.size || 10 : 10}" style="width:70px"></label>
+    </div>`, isNew ? 'Einfügen' : 'Übernehmen', b => {
+    const rows = parseTable($('#tbSrc', b).value); if (!rows.length) return false;
+    const cols = Math.max(...rows.map(r => r.length)); for (const r of rows) while (r.length < cols) r.push('');
+    const size = clamp(+$('#tbSize', b).value || 10, 5, 24), head = $('#tbHead', b).checked, zebra = $('#tbZebra', b).checked;
+    pushHist();
+    if (isNew) {
+      p = p || S.pages[S.cur]; const [W] = dims(p), [cx, cy] = viewCenter(p);
+      const w = Math.min(W - 40, Math.max(160, cols * 90)), h = rows.length * size * 1.9;
+      a = { id: uid(), t: 'table', x: clamp(cx - w / 2, 10, W - w - 10), y: Math.max(10, cy - h / 2), w, h, rows, head, zebra, size, color: '#1b2130' };
+      p.annots.push(a); setTool('select'); S.sel = { pid: p.id, aid: a.id };
+    } else {
+      const rh = a.h / a.rows.length; Object.assign(a, { rows, head, zebra, size }); a.h = Math.max(rh, size * 1.4) * rows.length;
+      if (a.cw && a.cw.length !== cols) delete a.cw;
+    }
+    markDirty(); drawAnnots(p); renderProps();
+    if (isNew) toast('Tabelle eingefügt · Doppelklick zum Bearbeiten');
+  });
+}
+
+/* ---------- QR-Code als Bild ---------- */
+function qrDialog() {
+  if (!window.qrcode) { toast('QR-Codes sind hier nicht verfügbar.'); return; }
+  const def = S.share && window.WBShare ? window.WBShare.linkOf(S.share.token) : '';
+  dialog('QR-Code einfügen', `<label class="fld"><span>Link oder Text</span><input class="field" id="qrText" value="${esc(def)}" placeholder="https://…" style="width:100%"></label>
+    <div id="qrPrev" style="display:grid;place-items:center;min-height:170px;margin-top:6px"></div>`, 'Einfügen', b => {
+    const t = $('#qrText', b).value.trim(); if (!t) return false;
+    let q; try { q = window.qrcode(0, 'M'); q.addData(t); q.make(); } catch (e) { toast('Der Text ist zu lang für einen QR-Code.'); return false; }
+    const n = q.getModuleCount(), m = 3, k = 12, c = document.createElement('canvas'); c.width = c.height = (n + 2 * m) * k;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.fillStyle = '#000';
+    for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (q.isDark(r, col)) ctx.fillRect((col + m) * k, (r + m) * k, k, k);
+    placeImage(registerImage(c.toDataURL('image/png'), 'png', c.width, c.height), 110);
+  });
+  const prev = () => { const t = $('#qrText').value.trim(), el = $('#qrPrev'); if (!t) { el.innerHTML = '<span class="note">Vorschau</span>'; return; } try { const q = window.qrcode(0, 'M'); q.addData(t); q.make(); const n = q.getModuleCount(); let d = ''; for (let r = 0; r < n; r++) for (let c2 = 0; c2 < n; c2++) if (q.isDark(r, c2)) d += `M${c2 + 2} ${r + 2}h1v1h-1z`; el.innerHTML = `<svg viewBox="0 0 ${n + 4} ${n + 4}" width="160" height="160" style="background:#fff;border-radius:8px"><path d="${d}"/></svg>`; } catch (e) { el.innerHTML = '<span class="note">Zu lang</span>'; } };
+  $('#qrText').addEventListener('input', prev); prev();
+}
+
+/* ---------- Versionsverlauf (Bibliothek): automatische Zwischenstände ---------- */
+const VER_MAX = 15, VER_GAP = 10 * 60e3;
+async function versionList(id) {
+  const keys = (await idbKeys()).map(String).filter(k => k.startsWith('ver:' + id + ':'));
+  return keys.map(k => +k.split(':').pop()).sort((a, b) => b - a);
+}
+async function snapshotVersion(force) {
+  if (!S.lib || !S.pages.length) return;
+  try {
+    const id = S.lib.id, list = await versionList(id);
+    if (!force && list.length && Date.now() - list[0] < VER_GAP) return;
+    const st = docState(); st.dirty = false;
+    for (const sid of st.srcIds) if (!(await idbGet(`vsrc:${id}:${sid}`))) { const s = S.sources.get(sid); if (s) await idbSet(`vsrc:${id}:${sid}`, { name: s.name, bytes: s.bytes }); }
+    const notes = S.pages.reduce((n, p) => n + p.annots.length, 0);
+    await idbSet(`ver:${id}:${Date.now()}`, { state: st, pages: S.pages.length, notes });
+    const all = await versionList(id);
+    for (const ts of all.slice(VER_MAX)) await idbDel(`ver:${id}:${ts}`);
+    // Quellen aufräumen, die keine Version mehr braucht
+    const need = new Set();
+    for (const ts of all.slice(0, VER_MAX)) { const v = await idbGet(`ver:${id}:${ts}`); for (const sid of (v && v.state.srcIds) || []) need.add(sid); }
+    for (const k of (await idbKeys()).map(String)) if (k.startsWith(`vsrc:${id}:`) && !need.has(k.split(':').pop())) await idbDel(k);
+  } catch (e) { console.warn('Version sichern', e); }
+}
+async function versionsDialog() {
+  if (!S.lib) { toast('Den Versionsverlauf gibt es für Dokumente in der Bibliothek.'); return; }
+  await snapshotVersion(false);
+  const id = S.lib.id, list = await versionList(id);
+  const metas = await Promise.all(list.map(async ts => { const v = await idbGet(`ver:${id}:${ts}`); return { ts, pages: v ? v.pages : 0, notes: v ? v.notes : 0 }; }));
+  const fmt = ts => new Date(ts).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  dialog('Versionsverlauf', metas.length ? `<p class="note" style="margin:0 0 10px">Beim Arbeiten wird höchstens alle 10 Minuten ein Zwischenstand auf diesem Gerät gesichert (die letzten ${VER_MAX}).</p>
+    <div class="verlist">${metas.map((m, i) => `<div class="ver"><div><b>${fmt(m.ts)}</b>${i === 0 ? ' <span class="note">· neuester</span>' : ''}<div class="note">${m.pages} ${m.pages === 1 ? 'Seite' : 'Seiten'} · ${m.notes} eigene Elemente</div></div><button class="btn" data-ver="${m.ts}">Wiederherstellen</button></div>`).join('')}</div>`
+    : '<p class="note">Noch keine Versionen. Sie entstehen automatisch beim Bearbeiten.</p>', 'Schließen', () => true);
+  $('#dlgCancel').hidden = true;
+  $('#dlgBody').onclick = async e => {
+    const b = e.target.closest('[data-ver]'); if (!b) return;
+    const v = await idbGet(`ver:${id}:${b.dataset.ver}`); if (!v) return;
+    $('#dlgOk').click();
+    await snapshotVersion(true);
+    busy(true, 'Version wird wiederhergestellt …');
+    try {
+      await applyState(JSON.parse(JSON.stringify(v.state)), async sid => S.sources.get(sid) || await idbGet(`vsrc:${id}:${sid}`));
+      busy(false); markDirty(); toast('Version vom ' + fmt(+b.dataset.ver) + ' wiederhergestellt · der vorherige Stand liegt als neueste Version bereit');
+    } catch (er) { busy(false); toast('Wiederherstellen fehlgeschlagen: ' + (er.message || er)); }
+  };
+}
+
+/* ---------- Sepia (augenschonend) ---------- */
+function setSepia(on) {
+  S.sepia = on; pagesEl.classList.toggle('sepia', on); lsSet('pdfwb.sepia', on ? '1' : '0');
+  if (on && S.night) setNight(false);
+  const m = $('#mSepia'); if (m) m.textContent = (on ? '✓ ' : '') + 'Sepia-Lesefarbe';
+}
+
+/* ---------- Dokument-Statistik ---------- */
+async function statsDialog() {
+  busy(true, 'Dokument wird gezählt …');
+  try {
+    let words = 0, chars = 0, empty = 0;
+    const kinds = {};
+    for (const p of S.pages) {
+      const { text } = await pageText(p);
+      const w = text.split(/\s+/).filter(x => /[\p{L}\p{N}]/u.test(x)).length; words += w; chars += text.replace(/\s/g, '').length; if (!w) empty++;
+      for (const a of p.annots) { const k = a.t === 'mark' ? 'mark' : noteGroup(a) === 'draw' ? 'draw' : a.t; kinds[k] = (kinds[k] || 0) + 1; }
+    }
+    const bytes = [...S.sources.values()].reduce((s, x) => s + x.bytes.byteLength, 0);
+    const label = { mark: 'Textmarkierungen', draw: 'Zeichnungen', text: 'Textfelder', note: 'Notizen', img: 'Bilder', hl: 'Flächenmarkierungen', graph: 'Live-Graphen', table: 'Tabellen', stamp: 'Stempel', white: 'Abdeckungen', redact: 'Schwärzungen', measure: 'Maße' };
+    const rows = [['Seiten', S.pages.length], ['Wörter', words.toLocaleString('de-DE')], ['Zeichen (ohne Leerzeichen)', chars.toLocaleString('de-DE')], ['Lesezeit', words ? '≈ ' + Math.max(1, Math.round(words / 230)) + ' Min.' : '–'], ['Seiten ohne Text (Scan/Handschrift)', empty], ['Lesezeichen', S.bookmarks.length], ['Original-PDFs', S.sources.size + ' · ' + (bytes / 1048576).toFixed(1).replace('.', ',') + ' MB']]
+      .concat(Object.entries(kinds).sort((a, b) => b[1] - a[1]).map(([k, n]) => [label[k] || TOOL_NAMES[k] || k, n]));
+    busy(false);
+    dialog('Dokument-Statistik', `<table class="stattbl">${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(String(v))}</td></tr>`).join('')}</table>`, 'Schließen', () => true);
+    $('#dlgCancel').hidden = true;
+  } catch (e) { busy(false); toast('Statistik fehlgeschlagen: ' + (e.message || e)); }
+}
+
+/* ---------- Markierungen und Kommentare als Text ---------- */
+function exportMarks() {
+  const out = [];
+  S.pages.forEach((p, i) => {
+    const items = p.annots.filter(a => (a.t === 'mark' && a.text) || a.comment || (a.t === 'note' && a.text))
+      .sort((a, b) => (a.rects ? a.rects[0].y : a.y || 0) - (b.rects ? b.rects[0].y : b.y || 0));
+    for (const a of items) {
+      const kind = a.t === 'note' ? 'Notiz' : a.t === 'mark' ? { hl: 'Markiert', ul: 'Unterstrichen', so: 'Durchgestrichen' }[a.kind] || 'Markiert' : TOOL_NAMES[a.t] || a.t;
+      let line = `S. ${i + 1} · ${kind}: ${(a.t === 'mark' ? '„' + a.text.trim().replace(/\s+/g, ' ') + '“' : (a.text || '').trim())}`;
+      if (a.comment) line += `\n    Kommentar${a.author ? ' (' + a.author + ')' : ''}: ${a.comment}`;
+      out.push(line);
+    }
+  });
+  if (!out.length) { toast('Keine Textmarkierungen, Notizen oder Kommentare im Dokument.'); return; }
+  const name = S.docName.replace(/\.pdf$/i, ''), txt = `Markierungen aus „${name}“\n${'='.repeat(20)}\n\n` + out.join('\n\n') + '\n';
+  dialog('Markierungen', `<p class="note" style="margin:0 0 8px">${out.length} Einträge mit Seitenzahl.</p><textarea class="field" readonly rows="12" style="width:100%;font:12.5px/1.5 var(--f-mono)">${esc(txt)}</textarea>`, 'Als TXT speichern', () => { saveBytes(new TextEncoder().encode(txt), name + ' – Markierungen.txt'); });
+  const c = document.createElement('button'); c.className = 'btn'; c.textContent = 'Kopieren'; c.style.marginRight = 'auto';
+  c.onclick = () => navigator.clipboard.writeText(txt).then(() => toast('In die Zwischenablage kopiert'), () => {});
+  const acts = $('#dlgOk').parentElement; acts.insertBefore(c, acts.firstChild);
+  const done = () => { c.remove(); $('#dlg').removeEventListener('click', clean, true); };
+  const clean = e => { if (e.target.closest('#dlgOk,#dlgCancel')) setTimeout(done, 0); };
+  $('#dlg').addEventListener('click', clean, true);
+}
+
 /* ---------- Bedienelemente verbinden ---------- */
+{ const sb = $('#shareBar'); if (sb) sb.addEventListener('click', () => collabDialog()); }
 function bindUI() {
   $$('[data-i]').forEach(el => { el.outerHTML = icon(el.dataset.i); });
   $('#swatches').innerHTML = SWATCHES.map(c => `<button class="sw" data-c="${c}" style="background:${c}" title="${c}" aria-label="Farbe ${c}"></button>`).join('');
@@ -4574,10 +5274,11 @@ function bindUI() {
     open: () => $('#fileOpen').click(), fit: fitWidth, merge: () => $('#fileMerge').click(), rotl: () => rotatePages(-90), rotr: () => rotatePages(90), blank: insertBlank, extract: extractPages, del: deletePages,
     tolib: toLibrary, lib: () => goLibrary(),
     read: () => setReading(true), night: () => setNight(!S.night), pencil: () => setPencilOnly(!S.pencil.only), bm: addBookmark, share: sharePdf, calc: () => window.toggleCalc(),
-    saveas: () => saveToFile(true), toolbar: toolbarDialog, keys: shortcutsDialog, secure: secureDialog, photos: photosDialog, libpages: libPagesDialog };
+    saveas: () => saveToFile(true), werkbank: saveWerkbank, collab: collabDialog, toolbar: toolbarDialog, keys: shortcutsDialog, present: () => setPresent(true), speak: () => speakDoc(), dictate, table: () => tableDialog(), qr: qrDialog, versions: versionsDialog, sepia: () => setSepia(!S.sepia), stats: statsDialog, marks: exportMarks, secure: secureDialog, photos: photosDialog, libpages: libPagesDialog };
   $('[data-act="share"]').hidden = !canShareFiles();
   $('#mPencil').hidden = !COARSE;
-  setNight(lsGet('pdfwb.night') === '1');
+  setNight(lsGet('pdfwb.night') === '1'); if (lsGet('pdfwb.sepia') === '1') setSepia(true);
+  { const q = $('[data-act="qr"]'); if (q) q.hidden = !window.qrcode; const v = $('#mVersions'); if (v) v.hidden = !LIB; }
   $('#btnRead').onclick = () => setReading(true);
   $('#readExit').onclick = () => setReading(false);
   $('#readNight').onclick = () => setNight(!S.night);
@@ -4616,6 +5317,7 @@ function bindUI() {
   const calc = window.WBCalc ? window.WBCalc.createCalculator(calcEl, {
     insertText: t => { insertTextAnnot(winAnsiSafe(t)); toast('Ergebnis auf der Seite eingefügt'); },
     insertImage: (url, w, h) => { const id = registerImage(url, 'png', w, h); placeImage(id, 300); toast('Graph auf der Seite eingefügt'); },
+    insertGraph: (src, view, deg) => { toggleCalc(false); insertGraph(src, view, deg); },
     close: () => toggleCalc(false), toast,
   }) : null;
   window.toggleCalc = toggleCalc;
@@ -4776,6 +5478,8 @@ function bindUI() {
   window.addEventListener('keydown', e => {
     const tgt = e.target, typing = /^(INPUT|TEXTAREA|SELECT)$/.test(tgt.tagName) || tgt.isContentEditable;
     const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    // nur ansehen: Blättern, Zoom, Suche und Vollbild erlaubt, alles andere nicht
+    if (S.viewonly && !typing && !/^(arrow|page|home|end|escape|f$|f11|\?)/.test(k) && !(mod && /^[f+=\-0p]$/.test(k)) && !(k === ' ')) { if (k.length === 1 || /delete|backspace/.test(k)) { e.preventDefault(); return; } }
     if (!$('#sigModal').hidden || !$('#askModal').hidden || !$('#dlg').hidden || !$('#noteModal').hidden) {
       if (e.key === 'Escape') {
         if (!$('#sigModal').hidden) closeSig();
@@ -4887,7 +5591,7 @@ async function libSave() {
       const sources = [...S.sources.values()].map(x => ({ id: x.id, name: x.name, bytes: x.bytes }));
       await LIB.saveDoc(S.lib.id, { state, sources, thumb: await pageThumb(), pages: S.pages.length });
       S.dirty = false; updateTitle(); libState('saved');
-      scheduleDrive();
+      scheduleDrive(); snapshotVersion(false);
     } catch (e) { console.error(e); libState('error'); toast('In der Bibliothek sichern fehlgeschlagen: ' + (e.message || e)); }
   })();
   try { await libSaving; } finally { libSaving = null; }
@@ -4942,6 +5646,7 @@ async function openLibDoc(id) {
     busy(false); setMsg('Aus der Bibliothek geöffnet · Änderungen werden automatisch gesichert');
     ensureFontsOf(S.pages);
     if (!S.renderMode && !/[?&](page|q)=/.test(location.search)) resumePos();
+    if (!S.renderMode) attachShareForLib();
     // Vorschau nachziehen, falls noch keine da ist
     if (!(await LIB.getBlob('thumb:' + id))) { const t = await pageThumb(); if (t) await LIB.putBlob('thumb:' + id, t); }
     return true;
@@ -4994,6 +5699,7 @@ function libUI() {
   b.hidden = !LIB;
   const m = $('#mToLib'); if (m) m.hidden = !LIB || !!S.lib;
   const lp = $('#mLibPages'); if (lp) lp.hidden = !S.lib;
+  const mc = $('#mCollab'); if (mc) mc.hidden = !window.WBShare || (!S.lib && !S.share);
   document.body.classList.toggle('libmode', !!S.lib);
   const sv = $('#btnSave');
   if (S.lib) { sv.title = 'Als PDF-Datei exportieren'; const l = sv.querySelector('.lbl'); if (l) l.textContent = 'Exportieren'; }
@@ -5079,6 +5785,7 @@ async function boot() {
       if (qp.get('export') === '1') { history.replaceState(null, '', 'index.html?doc=' + encodeURIComponent(qp.get('doc'))); savePdf(); } return; }
   }
   if (bindFileMode()) return;
+  if (SHARE_TOKEN && await openShared(SHARE_TOKEN)) return;
   if (await restoreSession()) return;
   busy(true, 'Beispiel wird geladen …');
   try {
