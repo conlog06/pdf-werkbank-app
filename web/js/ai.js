@@ -93,12 +93,13 @@
     const r = await xfetch(OAI() + '/models', { headers: { Authorization: 'Bearer ' + await credential(p) } });
     if (!r.ok) throw await httpError(r, p);
     const j = await r.json();
-    let list = (j.data || []);
+    // ChatGPT-Abo: { models: [{ slug, display_name, visibility }] } in Server-Reihenfolge; API: { data: [{ id }] }
+    let list = (j.models || j.data || []);
     if (p === 'chatgpt') list = list.filter(m => !m.visibility || m.visibility === 'list');
     else list = list.filter(m => /^(gpt|o\d|chatgpt)/i.test(m.id) && !/audio|realtime|tts|transcri|image|search|embed|moderation|instruct|codex|computer|preview-\d{4}/i.test(m.id));
     const ver = id => { const m = /(\d+(?:\.\d+)?)/.exec(id); return m ? parseFloat(m[1]) : 0; };
-    list.sort((a, b) => ver(b.id || b.slug) - ver(a.id || a.slug) || /mini|nano/.test(a.id) - /mini|nano/.test(b.id) || String(a.id).localeCompare(String(b.id)));
-    const out = list.map(m => [m.id || m.slug, m.display_name || m.id || m.slug]);
+    if (p !== 'chatgpt') list.sort((a, b) => ver(b.id || b.slug) - ver(a.id || a.slug) || /mini|nano/.test(a.id) - /mini|nano/.test(b.id) || String(a.id).localeCompare(String(b.id)));
+    const out = list.map(m => [m.slug || m.id, m.display_name || m.slug || m.id]).filter(x => x[0]);
     modelCache.set(p, out);
     return out;
   }
@@ -106,7 +107,7 @@
     const m = S.models[S.provider];
     if (m) return m;
     const list = await models();
-    return (list[0] || [])[0] || (S.provider === 'anthropic' ? 'claude-sonnet-5-5' : 'gpt-5');
+    return (list[0] || [])[0] || (S.provider === 'anthropic' ? 'claude-sonnet-5-5' : S.provider === 'chatgpt' ? 'gpt-6.1-sol' : 'gpt-5');
   }
 
   /* ---------- Netzwerk ----------
@@ -151,6 +152,10 @@
         : r.status === 429 ? (p === 'chatgpt' ? 'Dein ChatGPT-Kontingent für diese App ist gerade aufgebraucht. Später erneut versuchen oder das Limit in den ChatGPT-Einstellungen erhöhen.' : 'Zu viele Anfragen oder Guthaben aufgebraucht. Bitte kurz warten oder das Guthaben prüfen.')
           : r.status === 400 && /credit|balance|billing/i.test(msg) ? 'Kein Guthaben mehr auf dem API-Konto.'
             : (msg || 'Fehler ' + r.status));
+    if ((r.status === 400 || r.status === 404) && /model/i.test(msg) && /not supported|does not exist|not found|unsupported/i.test(msg)) {
+      delete S.models[p]; modelCache.delete(p); save();
+      e.message = 'Dieses Modell gibt es für dein Konto nicht. Bitte in den KI-Einstellungen (Zahnrad) ein Modell aus der Liste wählen und erneut versuchen.';
+    }
     e.status = r.status; e.auth = r.status === 401 || r.status === 403;
     return e;
   }
