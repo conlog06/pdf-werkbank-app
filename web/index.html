@@ -242,6 +242,10 @@ output{font:11.5px var(--f-mono);color:var(--ink);min-width:3.6em;font-variant-n
 .libmode .docname{font:600 14px/1.2 var(--f-ui);color:var(--ink);max-width:min(42ch,40vw)}
 .aibtn{color:var(--accent)}
 #app.aiopen .work{margin-right:418px}
+.fm-only{display:none}
+.filemode .menu .fm-only{display:block}
+.filemode .word{display:none}
+.filemode .docname{font:600 14px/1.2 var(--f-ui);color:var(--ink);max-width:min(42ch,40vw)}
 .favs{display:flex;align-items:center;gap:5px;flex:none}
 .favs .fav{width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--raise);display:grid;place-items:center;cursor:pointer;padding:0;position:relative}
 .favs .fav i{display:block;border-radius:50%;background:var(--c)}
@@ -493,6 +497,7 @@ body.reading .forml .ff{pointer-events:auto}
         <button role="menuitem" data-act="merge">Weitere PDF anhängen …</button>
         <button role="menuitem" data-act="libpages" id="mLibPages" hidden>Seiten aus der Bibliothek einfügen …</button>
         <button role="menuitem" data-act="photos">Fotos oder Scans als Seiten …</button>
+        <button role="menuitem" data-act="saveas" class="fm-only">Speichern unter …</button>
         <button role="menuitem" data-act="secure">Mit Passwort speichern …</button>
         <button role="menuitem" data-act="share" hidden>Teilen …</button>
         <button role="menuitem" data-act="tolib" id="mToLib" hidden>In die Bibliothek übernehmen</button>
@@ -778,6 +783,7 @@ body.reading .forml .ff{pointer-events:auto}
 <script src="js/update.js"></script>
 <script src="js/content-engine.js"></script>
 <script src="js/calc.js"></script>
+<script src="js/diag.js"></script>
 <script src="js/palette.js"></script>
 <script src="js/photos.js"></script>
 <script src="js/ai.js"></script>

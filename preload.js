@@ -25,6 +25,19 @@ contextBridge.exposeInMainWorld('wbDesktop', {
   onUpdate: cb => { ipcRenderer.on('update-status', (_e, s) => cb(s)); ipcRenderer.invoke('update-status').then(cb); },
   checkUpdate: () => ipcRenderer.invoke('update-check'),
   installUpdate: () => ipcRenderer.invoke('update-install'),
+  // Standard-PDF-Programm: Datei direkt bearbeiten und zurückschreiben
+  onOpenPath: cb => { ipcRenderer.on('open-path', (_e, f) => cb({ name: f.name, path: f.path, bytes: f.bytes, mtime: f.mtime })); },
+  fileWrite: bytes => ipcRenderer.invoke('file-write', { bytes }).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
+  fileSaveAs: (bytes, name) => ipcRenderer.invoke('file-save-as', { bytes, name }).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
+  docState: st => ipcRenderer.send('doc-state', st),
+  closeWindow: () => ipcRenderer.send('close-window'),
+  openLibrary: () => ipcRenderer.invoke('open-library'),
+  openDialog: () => ipcRenderer.invoke('open-dialog'),
+  settings: patch => ipcRenderer.invoke('desk-settings', patch),
+  defaultPdf: set => ipcRenderer.invoke('default-pdf', { set: !!set }).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
+  diag: () => ipcRenderer.invoke('diag'),
+  showPath: which => ipcRenderer.invoke('show-path', which),
+  reportError: msg => ipcRenderer.send('renderer-error', String(msg)),
   // Oberfläche bereit: wartende Dateien schicken
   ready: () => ipcRenderer.send('renderer-ready'),
 });

@@ -1,7 +1,7 @@
 {
   "name": "pdf-werkbank-app",
   "productName": "PDF Werkbank",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "PDF Werkbank als Desktop-App für Windows und macOS: Bibliothek mit Ordnern, PDF-Editor und Abgleich mit der Webseite.",
   "main": "main.js",
   "author": "Constantin Loggen <scrabby8@gmail.com>",
@@ -37,17 +37,10 @@
       "main.js",
       "preload.js",
       "chatgpt-auth.js",
+      "default-app.js",
       "web/**/*",
       "build/icon.png",
       "package.json"
-    ],
-    "fileAssociations": [
-      {
-        "ext": "pdf",
-        "name": "PDF-Dokument",
-        "role": "Editor",
-        "mimeType": "application/pdf"
-      }
     ],
     "afterPack": "scripts/adhoc-sign.cjs",
     "mac": {
@@ -71,7 +64,17 @@
           ]
         }
       ],
-      "artifactName": "PDF-Werkbank-${version}-mac-${arch}.${ext}"
+      "artifactName": "PDF-Werkbank-${version}-mac-${arch}.${ext}",
+      "fileAssociations": [
+        {
+          "ext": "pdf",
+          "name": "PDF-Dokument",
+          "description": "PDF-Dokument",
+          "role": "Editor",
+          "rank": "Default",
+          "mimeType": "application/pdf"
+        }
+      ]
     },
     "dmg": {
       "title": "PDF Werkbank ${version}"
@@ -86,7 +89,16 @@
           ]
         }
       ],
-      "artifactName": "PDF-Werkbank-Setup-${version}.${ext}"
+      "artifactName": "PDF-Werkbank-Setup-${version}.${ext}",
+      "fileAssociations": [
+        {
+          "ext": "pdf",
+          "name": "PDFWerkbank.Document",
+          "description": "PDF-Dokument",
+          "role": "Editor",
+          "mimeType": "application/pdf"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

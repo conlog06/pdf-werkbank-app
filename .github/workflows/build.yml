@@ -42,6 +42,29 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      # Prüfen, ob die App sich wirklich als PDF-Programm anmeldet (echte Rechner in der CI)
+      - name: Standard-PDF-Programm testen (macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          APP=$(ls -d dist/mac-arm64/*.app dist/mac/*.app 2>/dev/null | head -1)
+          echo "App: $APP"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleDocumentTypes' "$APP/Contents/Info.plist" || true
+          /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
+          node -e "const d=require('./default-app'),o={bundleId:'de.loggx.pdfwerkbank',openExternal:async()=>{}};(async()=>{console.log('vorher',await d.status(o));console.log('setzen',await d.makeDefault(o));console.log('nachher',await d.status(o))})()"
+      - name: Standard-PDF-Programm testen (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist\*.exe | Select-Object -First 1
+          Start-Process $exe.FullName -ArgumentList '/S' -Wait
+          reg query "HKCU\Software\RegisteredApplications" /v "PDF Werkbank"
+          reg query "HKCU\Software\PDF Werkbank\Capabilities\FileAssociations"
+          reg query "HKCU\Software\Classes\PDFWerkbank.Document\shell\open\command"
+          reg query "HKCU\Software\Classes\.pdf\OpenWithProgids"
+          node -e "require('./default-app').status({bundleId:'x'}).then(r=>console.log('status',r))"
+
       - uses: actions/upload-artifact@v4
         with:
           name: PDF-Werkbank-${{ runner.os }}

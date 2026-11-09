@@ -543,7 +543,7 @@ let restoring = false;
 async function undo() { commitEdit(); if (!S.hist.length || restoring) return; restoring = true; S.fut.push(snap()); try { await restore(S.hist.pop()); } finally { restoring = false; } }
 async function redo() { commitEdit(); if (!S.fut.length || restoring) return; restoring = true; S.hist.push(snap()); try { await restore(S.fut.pop()); } finally { restoring = false; } }
 function updateUndo() { $('#btnUndo').disabled = !S.hist.length; $('#btnRedo').disabled = !S.fut.length; }
-function markDirty() { S.dirty = true; updateTitle(); scheduleAutosave(); }
+function markDirty() { const was = S.dirty; S.dirty = true; updateTitle(); scheduleAutosave(); if (!was && S.file) fileState(); }
 function updateTitle() {
   const n = $('#docName');
   n.textContent = S.docName + (S.sample ? ' · Beispiel' : '') + (S.dirty && !S.sample ? ' ●' : '');
@@ -560,9 +560,12 @@ async function addSource(bytes, name, fixedId) {
   }
   const pdf = await PDFJS.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
   S.sources.set(id, { id, name, bytes, pdf });
-  const out = [];
-  for (let i = 0; i < pdf.numPages; i++) {
-    const pg = await pdf.getPage(i + 1);
+  const out = [], n = pdf.numPages;
+  // Seiten in Blöcken parallel laden: große PDFs (Hunderte Seiten) öffnen deutlich schneller
+  const pgs = new Array(n);
+  for (let i0 = 0; i0 < n; i0 += 24) await Promise.all(Array.from({ length: Math.min(24, n - i0) }, (_, k) => pdf.getPage(i0 + k + 1).then(pg => { pgs[i0 + k] = pg; })));
+  for (let i = 0; i < n; i++) {
+    const pg = pgs[i];
     S.proxies.set(id + ':' + i, pg);
     const vp = pg.getViewport({ scale: 1 });
     out.push({ id: uid('p'), src: id, idx: i, baseRot: pg.rotate || 0, rot: 0, w0: vp.width, h0: vp.height, annots: [] });
@@ -1003,12 +1006,31 @@ async function openFiles(files, mode, noAsk) {
 }
 
 /* ---------- Ansicht ---------- */
+/* Seiten nahe am Sichtbereich merken; gerendert wird über eine Warteschlange mit begrenzter Parallelität,
+   damit schnelles Scrollen durch große PDFs nicht Dutzende Leinwände gleichzeitig erzeugt (Speicher, iPad) */
+const nearSet = new Set();
 const io = new IntersectionObserver(entries => {
   for (const en of entries) {
     const p = pageById(en.target.dataset.id); if (!p) continue;
-    if (en.isIntersecting) renderPage(p); else releasePage(p);
+    if (en.isIntersecting) { nearSet.add(p.id); renderPage(p); } else { nearSet.delete(p.id); releasePage(p); }
   }
 }, { root: viewer, rootMargin: '1200px 0px' });
+const RQ = { queue: [], running: 0, max: COARSE ? 2 : 3 };
+function rqDistance(id) {
+  const e = els.get(id); if (!e) return 1e9;
+  const r = e.wrap.getBoundingClientRect(), v = viewer.getBoundingClientRect();
+  return r.bottom < v.top ? v.top - r.bottom : r.top > v.bottom ? r.top - v.bottom : 0;
+}
+function rqPump() {
+  while (RQ.running < RQ.max && RQ.queue.length) {
+    // zuerst die Seite, die dem Sichtbereich am nächsten ist
+    let bi = 0, bd = Infinity;
+    for (let i = 0; i < RQ.queue.length; i++) { const d = rqDistance(RQ.queue[i].id); if (d < bd) { bd = d; bi = i; } }
+    const job = RQ.queue.splice(bi, 1)[0];
+    RQ.running++;
+    job.run().catch(err => console.error(err)).finally(() => { RQ.running--; rqPump(); });
+  }
+}
 
 function sizePageEl(p, e) {
   const [W, H] = dims(p);
@@ -1040,17 +1062,22 @@ function buildViewer() {
   buildThumbs(); updateStatus(); renderProps(); updateSideLater();
   ensureFontsOf(S.pages);
 }
-async function renderPage(p) {
+function renderPage(p) {
   const e = els.get(p.id); if (!e) return;
   const R = rotOf(p), key = S.zoom + '|' + R + '|' + ceKey(p);
   if (e.key === key) return;
   e.key = key;
   if (e.task) { try { e.task.cancel(); } catch (x) { /* egal */ } e.task = null; }
+  RQ.queue = RQ.queue.filter(j => j.id !== p.id);
+  RQ.queue.push({ id: p.id, run: () => (e.key === key && els.get(p.id) === e ? drawPage(p, e, key, R) : Promise.resolve()) });
+  rqPump();
+}
+async function drawPage(p, e, key, R) {
   const proxy = proxyOf(p); if (!proxy) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const base = proxy.getViewport({ scale: 1, rotation: R });
   let scale = S.zoom * dpr;
-  const maxPx = 16e6;
+  const maxPx = COARSE ? 9e6 : 16e6; // Tablets: weniger Grafikspeicher je Seite
   if (base.width * base.height * scale * scale > maxPx) scale = Math.sqrt(maxPx / (base.width * base.height));
   const vp = proxy.getViewport({ scale, rotation: R });
   const c = document.createElement('canvas'); c.className = 'pcv';
@@ -1059,16 +1086,21 @@ async function renderPage(p) {
   const task = proxy.render({ canvasContext: c.getContext('2d'), viewport: vp, annotationMode: PDFJS.AnnotationMode ? PDFJS.AnnotationMode.ENABLE_FORMS : undefined, background: 'rgba(0,0,0,0)' });
   e.task = task;
   try { await task.promise; } catch (err) { if (err && err.name !== 'RenderingCancelledException') console.error(err); return; }
-  if (e.key !== key || els.get(p.id) !== e) return;
-  e.task = null; e.cv.replaceWith(c); e.cv = c;
+  if (e.key !== key || els.get(p.id) !== e) { c.width = c.height = 0; return; }
+  e.task = null; const old = e.cv; e.cv.replaceWith(c); e.cv = c; old.width = old.height = 0; // Speicher sofort freigeben
 }
 function releasePage(p) {
+  RQ.queue = RQ.queue.filter(j => j.id !== p.id);
   const e = els.get(p.id); if (!e || !e.key) return;
   if (e.task) { try { e.task.cancel(); } catch (x) { /* egal */ } e.task = null; }
   e.key = null; e.cv.width = 1; e.cv.height = 1;
 }
 function nearView(el) { const r = el.getBoundingClientRect(), v = viewer.getBoundingClientRect(); return r.bottom > v.top - 1200 && r.top < v.bottom + 1200; }
-function renderVisible() { for (const p of S.pages) { const e = els.get(p.id); if (e && nearView(e.wrap)) renderPage(p); } }
+function renderVisible() {
+  // nur die vom IntersectionObserver gemeldeten Seiten prüfen statt alle (große Dokumente)
+  const ids = nearSet.size ? [...nearSet] : S.pages.map(p => p.id);
+  for (const id of ids) { const p = pageById(id), e = p && els.get(id); if (e && nearView(e.wrap)) renderPage(p); }
+}
 function refreshPage(p) {
   const e = els.get(p.id);
   if (e) { sizePageEl(p, e); e.key = null; if (nearView(e.wrap)) renderPage(p); else releasePage(p); drawAnnots(p); buildFormLayer(p); }
@@ -3306,9 +3338,11 @@ async function autosave() {
     for (const s of S.sources.values()) if (!savedSrc.has(s.id)) { await idbSet('src:' + s.id, { name: s.name, bytes: s.bytes }); savedSrc.add(s.id); }
     const imgIds = new Set();
     for (const p of S.pages) for (const a of p.annots) if (a.img) imgIds.add(a.img);
-    await idbSet('session', docState(imgIds));
-    const keep = new Set([...S.sources.keys()].map(k => 'src:' + k));
-    for (const k of await idbKeys()) if (String(k).startsWith('src:') && !keep.has(k)) { await idbDel(k); savedSrc.delete(String(k).slice(4)); }
+    await idbSet(sessKey(), docState(imgIds));
+    // Quellen behalten, die irgendeine gespeicherte Sitzung braucht (mehrere Fenster der Desktop-App)
+    const keys = await idbKeys(), keep = new Set([...S.sources.keys()].map(k => 'src:' + k));
+    for (const k of keys) if (String(k).startsWith('session') && k !== sessKey()) { try { const o = await idbGet(k); for (const id of (o && o.srcIds) || []) keep.add('src:' + id); } catch (e) { /* egal */ } }
+    for (const k of keys) if (String(k).startsWith('src:') && !keep.has(k)) { await idbDel(k); savedSrc.delete(String(k).slice(4)); }
   } catch (e) { /* Zwischenspeicher nicht verfügbar */ }
 }
 async function restoreSession() {
@@ -4381,6 +4415,88 @@ function bindQbar() {
   });
 }
 
+/* ---------- Desktop: PDF direkt aus dem System bearbeiten (Standard-PDF-Programm) ----------
+   Doppelklick auf eine PDF öffnet ein eigenes Fenster; Strg/⌘+S schreibt zurück in dieselbe Datei. */
+const DESKF = window.wbDesktop || null;
+const FILE_MODE = !!(DESKF && DESKF.onOpenPath && /[?&]file=1/.test(location.search));
+const sessKey = () => (S.file ? 'session:file:' + S.file.path : 'session');
+function fileUI() {
+  document.body.classList.toggle('filemode', !!S.file);
+  const sv = $('#btnSave'); if (!sv || !S.file) return;
+  sv.title = 'In „' + S.file.name + '“ speichern (Strg/⌘+S)';
+  const l = sv.querySelector('.lbl'); if (l) l.textContent = 'Speichern';
+  const m = $('#mToLib'); if (m) m.hidden = !LIB;
+}
+function fileState() {
+  if (!S.file || !DESKF.docState) return;
+  DESKF.docState({ dirty: !!S.dirty, title: S.file.name + (S.dirty ? ' ●' : '') + ' – PDF Werkbank' });
+}
+let fileSaving = null;
+async function saveToFile(as) {
+  if (!S.file) return savePdf();
+  commitEdit(); if (S.busy || !S.pages.length) return false;
+  if (fileSaving) return fileSaving;
+  fileSaving = (async () => {
+    busy(true, as ? 'PDF wird erstellt …' : 'Wird gespeichert …');
+    try {
+      const bytes = await buildPdf(S.pages);
+      const r = as ? await DESKF.fileSaveAs(bytes, S.file.name) : await DESKF.fileWrite(bytes);
+      busy(false);
+      if (!r || !r.path) { toast('Speichern abgebrochen'); return false; }
+      if (as) { S.file = { path: r.path, name: r.path.split(/[\\/]/).pop() }; S.docName = S.file.name; fileUI(); }
+      S.dirty = false; updateTitle(); fileState();
+      try { await idbDel(sessKey()); } catch (e) { /* egal */ }
+      toast(as ? 'Gespeichert unter ' + r.path : 'Gespeichert' + (r.backup ? ' · Sicherheitskopie des Originals angelegt' : ''));
+      return true;
+    } catch (e) {
+      busy(false); console.error(e);
+      const msg = e && e.message || String(e);
+      if (/schreibgeschützt|geöffnet|EPERM|EACCES|EBUSY/i.test(msg) && await ask('Datei lässt sich nicht überschreiben', msg + ' Stattdessen unter neuem Namen speichern?', 'Speichern unter …', 'Abbrechen')) return saveToFile(true);
+      toast('Speichern fehlgeschlagen: ' + msg);
+      return false;
+    } finally { fileSaving = null; }
+  })();
+  return fileSaving;
+}
+async function openPathFile(f) {
+  busy(false);
+  const bytes = new Uint8Array(f.bytes);
+  S.file = { path: f.path, name: f.name };
+  // ungesicherte Änderungen nach einem Absturz?
+  let sess = null;
+  try { sess = await idbGet('session:file:' + f.path); } catch (e) { sess = null; }
+  if (sess && sess.dirty && sess.pages && sess.pages.length && (!f.mtime || sess.savedAt > f.mtime)) {
+    const when = new Date(sess.savedAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+    if (await ask('Ungesicherte Änderungen wiederherstellen?', `„${f.name}“ wurde am ${when} nicht gespeichert (z. B. nach einem Absturz). Änderungen zurückholen?`, 'Wiederherstellen', 'Verwerfen', false)) {
+      busy(true, 'Wird wiederhergestellt …');
+      try {
+        await applyState(sess, async id => { const s = await idbGet('src:' + id); if (s) savedSrc.add(id); return s; });
+        S.docName = f.name; busy(false); updateTitle(); fileUI(); fileState(); setMsg('Änderungen wiederhergestellt · Strg/⌘+S speichert in die Datei');
+        return;
+      } catch (e) { busy(false); console.error(e); for (const id of [...S.sources.keys()]) dropSource(id); S.pages = []; }
+    }
+    try { await idbDel('session:file:' + f.path); } catch (e) { /* egal */ }
+  }
+  await openFiles([new File([bytes], f.name, { type: 'application/pdf' })], 'replace', true);
+  S.docName = f.name; S.dirty = false; S.sample = false; updateTitle(); fileUI(); fileState();
+  setMsg('„' + f.name + '“ geöffnet · Strg/⌘+S speichert direkt in die Datei');
+}
+function bindFileMode() {
+  if (!FILE_MODE) return false;
+  DESKF.onOpenPath(f => { openPathFile(f).catch(e => { console.error(e); toast('Öffnen fehlgeschlagen: ' + (e.message || e)); }); });
+  DESKF.onMenu && DESKF.onMenu(async k => {
+    if (k === 'save-close') { if (await saveToFile()) DESKF.closeWindow(); }
+    else if (k === 'save') saveToFile();
+    else if (k === 'save-as') saveToFile(true);
+  });
+  $('#btnLib').hidden = false; $('#btnLib').title = 'Bibliothek öffnen';
+  $('#btnLib').onclick = e => { e.preventDefault(); e.stopImmediatePropagation(); DESKF.openLibrary(); };
+  const ob = $('#btnOpen'); if (ob) ob.addEventListener('click', e => { e.preventDefault(); e.stopImmediatePropagation(); DESKF.openDialog(); }, true);
+  busy(true, 'PDF wird geöffnet …');
+  setTimeout(() => DESKF.ready(), 0);
+  return true;
+}
+
 /* ---------- Bedienelemente verbinden ---------- */
 function bindUI() {
   $$('[data-i]').forEach(el => { el.outerHTML = icon(el.dataset.i); });
@@ -4394,7 +4510,7 @@ function bindUI() {
 
   $('#btnOpen').onclick = () => $('#fileOpen').click();
   $('#btnMerge').onclick = () => $('#fileMerge').click();
-  $('#btnSave').onclick = savePdf;
+  $('#btnSave').onclick = () => (S.file ? saveToFile() : savePdf());
   if ($('#btnLib')) $('#btnLib').onclick = () => goLibrary();
   // beim Verlassen schnell noch sichern (Tab schließen, App wechseln)
   document.addEventListener('visibilitychange', () => { if (document.hidden && S.lib && S.dirty && !S.renderMode) libSave(); });
@@ -4458,7 +4574,7 @@ function bindUI() {
     open: () => $('#fileOpen').click(), fit: fitWidth, merge: () => $('#fileMerge').click(), rotl: () => rotatePages(-90), rotr: () => rotatePages(90), blank: insertBlank, extract: extractPages, del: deletePages,
     tolib: toLibrary, lib: () => goLibrary(),
     read: () => setReading(true), night: () => setNight(!S.night), pencil: () => setPencilOnly(!S.pencil.only), bm: addBookmark, share: sharePdf, calc: () => window.toggleCalc(),
-    toolbar: toolbarDialog, keys: shortcutsDialog, secure: secureDialog, photos: photosDialog, libpages: libPagesDialog };
+    saveas: () => saveToFile(true), toolbar: toolbarDialog, keys: shortcutsDialog, secure: secureDialog, photos: photosDialog, libpages: libPagesDialog };
   $('[data-act="share"]').hidden = !canShareFiles();
   $('#mPencil').hidden = !COARSE;
   setNight(lsGet('pdfwb.night') === '1');
@@ -4672,6 +4788,7 @@ function bindUI() {
       return;
     }
     if (!$('#menu').hidden && e.key === 'Escape') { closeMenu(); return; }
+    if (mod && k === 's' && S.file) { e.preventDefault(); saveToFile(e.shiftKey); return; }
     if (mod && k === 's') { e.preventDefault(); if (S.lib && !e.shiftKey) { libSave().then(() => { setMsg('In der Bibliothek gesichert'); toast('In der Bibliothek gesichert · Als PDF-Datei: „Exportieren“ oder Strg+Umschalt+S'); }); } else savePdf(); return; }
     if (mod && k === 'o') { e.preventDefault(); $('#fileOpen').click(); return; }
     if (mod && k === 'f') { e.preventDefault(); fi.focus(); fi.select(); return; }
@@ -4961,6 +5078,7 @@ async function boot() {
       }, 350);
       if (qp.get('export') === '1') { history.replaceState(null, '', 'index.html?doc=' + encodeURIComponent(qp.get('doc'))); savePdf(); } return; }
   }
+  if (bindFileMode()) return;
   if (await restoreSession()) return;
   busy(true, 'Beispiel wird geladen …');
   try {

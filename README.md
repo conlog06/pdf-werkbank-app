@@ -26,6 +26,7 @@ Unter **[Releases](https://github.com/conlog06/pdf-werkbank-app/releases/latest)
 - **PDFs öffnen** per Doppelklick bzw. „Öffnen mit → PDF Werkbank“: landen in der Bibliothek und gehen direkt auf.
 - **Sync:** Mit demselben Konto haben Webseite und App dieselben Ordner, Dokumente und Markierungen, live und auch offline (Abgleich beim nächsten Online-Sein).
 - **Google Drive:** automatisches Backup aller Dokumente als PDF in „Meine Ablage › PDF Werkbank“, mit derselben Ordnerstruktur. Einmal im Browser anmelden, danach läuft es im Hintergrund.
+- **Standard-PDF-Programm:** Doppelklick auf eine PDF öffnet sie direkt in einem eigenen Fenster, Speichern schreibt in dieselbe Datei (mit Sicherheitskopie des Originals). Festlegen: Bibliothek › Einstellungen › App; unter Windows öffnet sich dafür die Seite „Standard-Apps“.
 - **KI mit ChatGPT-Abo:** Im Editor ✦ → „Mit ChatGPT anmelden“. Die Anmeldung läuft im System-Browser (OpenAI „Sign in with ChatGPT“ für Open-Source- und lokale Apps), danach nutzt der KI-Assistent dein Plus- oder Pro-Abo. Alternativ ein OpenAI- oder Claude-API-Schlüssel; Zugänge liegen verschlüsselt im System-Schlüsselbund.
 - Läuft komplett offline, eigene Fensterleiste, heller und dunkler Modus.
 
@@ -62,6 +63,8 @@ Installer lokal bauen: `npm run dist:win` (unter Windows) bzw. `npm run dist:mac
 |---|---|
 | `main.js` | Fenster, eigenes Protokoll `app://werkbank`, Menü, PDF-Dateizuordnung, Updates |
 | `preload.js` | Schmale Brücke zur Oberfläche (`window.wbDesktop`) |
+| `default-app.js` | Standard-PDF-Programm abfragen/setzen (macOS Launch Services, Windows-Einstellungen) |
+| `build/installer.nsh` | Meldet die App bei Windows als PDF-Programm an (Standard-Apps) |
 | `chatgpt-auth.js` | „Mit ChatGPT anmelden“: Anmeldung im System-Browser (PKCE, Rücksprung auf 127.0.0.1), Token erneuern |
 | `scripts/prepare-web.mjs` | Kopiert die Weboberfläche nach `web/`, bindet pdf.js und pdf-lib lokal ein |
 | `scripts/adhoc-sign.cjs` | Ad-hoc-Signatur für macOS ohne Apple-Entwicklerkonto |

@@ -880,6 +880,10 @@
       <div data-p="app" hidden>
         <div class="srow"><span class="t"><b>PDF Werkbank${ver ? ' ' + esc(ver) : ''}</b><small>${DESK ? 'Desktop-App · aktualisiert sich selbst' : 'Webseite · lädt neue Versionen automatisch'}</small></span><button type="button" class="btn" data-go="update">Nach Updates suchen</button></div>
         ${!DESK && !standalone() ? `<div class="srow"><span class="t"><b>Als App installieren</b><small>Vollbild, eigenes Symbol, offline</small></span><button type="button" class="btn" data-go="install">Anleitung</button></div>` : ''}
+        ${DESK && DESK.defaultPdf ? `<div class="srow"><span class="t"><b>Standard-Programm für PDFs</b><small id="stDefState">wird geprüft …</small></span><button type="button" class="btn" data-go="default">Festlegen</button></div>` : ''}
+        ${DESK && DESK.settings ? `<label class="fld"><span>Doppelklick auf eine PDF im Explorer/Finder</span><select class="field" id="stOpenMode"><option value="edit">Direkt öffnen und in der Datei speichern (wie Acrobat)</option><option value="library">In die Bibliothek importieren</option></select></label>` : ''}
+        <div class="srow"><span class="t"><b>Fehlerprotokoll</b><small id="stDiag">${window.WBDiag ? WBDiag.count() + ' Einträge' : ''}</small></span>${DESK && DESK.showPath ? '<button type="button" class="btn" data-go="logs">Ordner</button> ' : ''}<button type="button" class="btn" data-go="diag">Kopieren</button></div>
+        ${DESK && DESK.showPath ? `<div class="srow"><span class="t"><b>Sicherheitskopien</b><small>Vor dem ersten Überschreiben einer Datei legt die App eine Kopie des Originals an (die letzten 30).</small></span><button type="button" class="btn" data-go="backups">Ordner öffnen</button></div>` : ''}
         <div class="srow"><span class="t"><b>Tastenkürzel</b><small>Strg/⌘ K öffnet die Befehlssuche, im Editor zeigt „?“ alle Kürzel</small></span></div>
       </div>
       <div class="acts"><button class="btn primary" data-x="0">Fertig</button></div>`, {
@@ -892,13 +896,45 @@
           const t = e.target.closest('[data-t]'); if (t) { show(t.dataset.t); return; }
           const h = e.target.closest('[data-th]'); if (h) { setTheme(h.dataset.th); $$('[data-th]', d).forEach(x => x.setAttribute('aria-pressed', String(x === h))); return; }
           const g = e.target.closest('[data-go]');
+          if (g && g.dataset.go === 'default') { makeDefaultPdf(d); return; }
+          if (g && g.dataset.go === 'diag') { WBDiag.report().then(t => navigator.clipboard.writeText(t)).then(() => toast('Fehlerprotokoll kopiert'), () => toast('Kopieren nicht möglich')); return; }
+          if (g && (g.dataset.go === 'logs' || g.dataset.go === 'backups')) { DESK.showPath(g.dataset.go); return; }
           if (g) { const k = g.dataset.go; close(); if (k === 'sync') syncDialog(); else if (k === 'drive') driveDialog(); else if (k === 'install') installDialog(); else if (k === 'update' && window.WBUpdate) WBUpdate.check(true); return; }
           if (e.target.closest('[data-x]')) close();
         });
         d.querySelector('#stTile').oninput = e => setTile(+e.target.value);
+        if (DESK && DESK.defaultPdf) DESK.defaultPdf(false).then(r => { const el = d.querySelector('#stDefState'); if (el) el.textContent = r.isDefault ? 'PDF Werkbank öffnet alle PDFs ✓' : r.unsupported ? 'auf diesem System nicht möglich' : 'Noch ein anderes Programm' + (r.current ? ' (' + r.current + ')' : ''); }).catch(() => {});
+        const om = d.querySelector('#stOpenMode');
+        if (om) { DESK.settings().then(st => { om.value = st.openMode || 'edit'; }); om.onchange = () => { DESK.settings({ openMode: om.value }); toast(om.value === 'edit' ? 'PDFs öffnen sich direkt zum Bearbeiten' : 'PDFs werden in die Bibliothek importiert'); }; }
+        if (window.WBDiag) WBDiag.storage().then(st => { const el = d.querySelector('#stDiag'); if (el && st) el.textContent = `${WBDiag.count()} Einträge · Speicher ${WBDiag.mb(st.usage)} von ${WBDiag.mb(st.quota)}`; });
         d.querySelector('#stLayout').onchange = e => { V.layout = e.target.value; lsSet('pdfwb.lib.layout', V.layout); renderContent(); const vg = $('#vGrid'), vl = $('#vList'); if (vg) vg.setAttribute('aria-pressed', String(V.layout === 'grid')); if (vl) vl.setAttribute('aria-pressed', String(V.layout === 'list')); };
       },
     });
+  }
+  /* Standard-PDF-Programm (Desktop) */
+  async function makeDefaultPdf(d) {
+    try {
+      const r = await DESK.defaultPdf(true);
+      const el = d && d.querySelector('#stDefState');
+      if (r.done || r.isDefault) { toast('PDF Werkbank öffnet jetzt alle PDFs'); if (el) el.textContent = 'PDF Werkbank öffnet alle PDFs ✓'; DESK.settings({ askDefault: false }); return true; }
+      if (r.settingsOpened) toast('In den Windows-Einstellungen bei „.pdf“ PDF Werkbank auswählen');
+      else toast('Finder: Rechtsklick auf eine PDF › Informationen › Öffnen mit: PDF Werkbank › „Alle ändern …“');
+      return false;
+    } catch (e) { toast('Ging nicht: ' + (e.message || e)); return false; }
+  }
+  async function askDefaultPdf() {
+    if (!DESK || !DESK.defaultPdf || !DESK.settings) return;
+    const st = await DESK.settings(); if (!st.askDefault) return;
+    const r = await DESK.defaultPdf(false).catch(() => null); if (!r || r.isDefault || r.unsupported) return;
+    const bar = document.createElement('div'); bar.className = 'defbar';
+    bar.innerHTML = `<span>${ico('file')}<b>PDFs immer mit PDF Werkbank öffnen?</b> Doppelklick öffnet die Datei direkt, Speichern schreibt in dieselbe Datei.</span><button class="btn primary" data-d="1">Als Standard festlegen</button><button class="btn" data-d="0">Nicht mehr fragen</button>`;
+    document.body.appendChild(bar);
+    bar.onclick = async e => {
+      const b = e.target.closest('[data-d]'); if (!b) return;
+      if (b.dataset.d === '1') await makeDefaultPdf();
+      DESK.settings({ askDefault: false });
+      bar.remove();
+    };
   }
   function renderAIState() {
     const el = $('#aiState'); if (!el || !window.WBAI) return;
@@ -1044,6 +1080,8 @@
     $('#syncBtn').onclick = syncDialog;
     $('#installBtn').onclick = installDialog; renderInstall();
     $('#setIco').innerHTML = ico('gear'); $('#setBtn').onclick = () => settingsDialog(); renderAIState();
+    setTimeout(askDefaultPdf, 2500);
+    if (window.WBDiag) setTimeout(() => WBDiag.checkSpace(m => toast(m)), 5000);
     if (GD) { $('#driveBtn').onclick = driveDialog; GD.onStatus(renderDrive); GD.watch(); } else $('#driveBtn').hidden = true;
 
     $('#nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (b) go({ kind: b.dataset.nav, id: null }); };
