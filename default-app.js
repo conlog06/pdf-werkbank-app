@@ -27,7 +27,7 @@ if (${set ? 'true' : 'false'}) {
     if (url && t && ws.setDefaultApplicationAtURLToOpenContentTypeCompletionHandler) {
       var done = false;
       ws.setDefaultApplicationAtURLToOpenContentTypeCompletionHandler(url, t, function (err) { out.ws = err && !err.isNil() ? ObjC.unwrap(err.localizedDescription) : 'ok'; done = true; });
-      for (var i = 0; i < 40 && !done; i++) delay(0.1);
+      for (var i = 0; i < 80 && !done; i++) $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.1));
       if (!done) out.ws = 'timeout';
     } else out.ws = 'unavailable';
   } catch (e) { out.ws = 'err: ' + e; }
