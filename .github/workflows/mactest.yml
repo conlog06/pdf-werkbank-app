@@ -1,0 +1,11 @@
+name: macOS Standard-App testen
+on:
+  push:
+    branches: [main]
+    paths: ['default-app.js', 'ci/**', '.github/workflows/mactest.yml']
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: bash ci/mac-default-test.sh
