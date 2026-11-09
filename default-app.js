@@ -20,8 +20,9 @@ var ALL = 0xFFFFFFFF, uti = $('${PDF_UTI}'), out = { ws: null, ls: null };
 function cur() { var c = $.LSCopyDefaultRoleHandlerForContentType(uti, ALL); return c ? ObjC.unwrap(c) : ''; }
 if (${set ? 'true' : 'false'}) {
   try {
-    ObjC.import('UniformTypeIdentifiers');
-    var ws = $.NSWorkspace.sharedWorkspace, t = $.UTType.typeWithIdentifier(uti);
+    $.NSBundle.bundleWithPath($('/System/Library/Frameworks/UniformTypeIdentifiers.framework')).load;
+    var UT = $.NSClassFromString($('UTType'));
+    var ws = $.NSWorkspace.sharedWorkspace, t = UT && !UT.isNil() ? UT.typeWithIdentifier(uti) : null;
     var url = ${appPath ? `$.NSURL.fileURLWithPath($(${JSON.stringify(appPath)}))` : `ws.URLForApplicationWithBundleIdentifier($('${bundleId}'))`};
     if (url && t && ws.setDefaultApplicationAtURLToOpenContentTypeCompletionHandler) {
       var done = false;
