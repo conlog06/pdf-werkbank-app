@@ -1,7 +1,7 @@
 {
   "name": "pdf-werkbank-app",
   "productName": "PDF Werkbank",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "PDF Werkbank als Desktop-App für Windows und macOS: Bibliothek mit Ordnern, PDF-Editor und Abgleich mit der Webseite.",
   "main": "main.js",
   "author": "Constantin Loggen <scrabby8@gmail.com>",
@@ -65,16 +65,25 @@
         }
       ],
       "artifactName": "PDF-Werkbank-${version}-mac-${arch}.${ext}",
-      "fileAssociations": [
-        {
-          "ext": "pdf",
-          "name": "PDF-Dokument",
-          "description": "PDF-Dokument",
-          "role": "Editor",
-          "rank": "Default",
-          "mimeType": "application/pdf"
-        }
-      ]
+      "extendInfo": {
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "PDF-Dokument",
+            "CFBundleTypeRole": "Editor",
+            "LSHandlerRank": "Default",
+            "LSItemContentTypes": [
+              "com.adobe.pdf"
+            ],
+            "CFBundleTypeExtensions": [
+              "pdf"
+            ],
+            "CFBundleTypeMIMETypes": [
+              "application/pdf"
+            ],
+            "CFBundleTypeIconFile": "icon.icns"
+          }
+        ]
+      }
     },
     "dmg": {
       "title": "PDF Werkbank ${version}"

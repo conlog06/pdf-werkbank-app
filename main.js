@@ -160,7 +160,7 @@ ipcMain.handle('desk-settings', (e, patch) => (patch ? saveSettings(patch) : set
 /* Standard-PDF-Programm */
 const DEF = require('./default-app');
 ipcMain.handle('default-pdf', wrapE(async (e, { set } = {}) => {
-  const o = { bundleId: 'de.loggx.pdfwerkbank', openExternal: u => shell.openExternal(u) };
+  const o = { bundleId: 'de.loggx.pdfwerkbank', appPath: isMac ? path.resolve(app.getPath('exe'), '..', '..', '..') : undefined, openExternal: u => shell.openExternal(u) };
   const r = set ? await DEF.makeDefault(o) : await DEF.status(o);
   if (set) log('default-pdf', r);
   return r;
@@ -419,7 +419,7 @@ function buildMenu() {
       { label: 'PDF Werkbank im Web', click: () => shell.openExternal('https://conlog06.github.io/pdf-werkbank/library.html') },
       { label: 'Projekt auf GitHub', click: () => shell.openExternal('https://github.com/conlog06/pdf-werkbank-app') },
       { type: 'separator' },
-      { label: 'Als Standard-PDF-Programm festlegen', click: async () => { const r = await DEF.makeDefault({ bundleId: 'de.loggx.pdfwerkbank', openExternal: u => shell.openExternal(u) }).catch(e => ({ error: e.message })); dialog.showMessageBox({ message: r.done ? 'PDF Werkbank öffnet jetzt alle PDFs.' : 'Bitte im Finder festlegen', detail: r.done ? '' : 'Rechtsklick auf eine PDF › Informationen › „Öffnen mit“: PDF Werkbank › „Alle ändern …“' + (r.error ? '\n\n' + r.error : '') }); } },
+      { label: 'Als Standard-PDF-Programm festlegen', click: async () => { const r = await DEF.makeDefault({ bundleId: 'de.loggx.pdfwerkbank', appPath: path.resolve(app.getPath('exe'), '..', '..', '..'), openExternal: u => shell.openExternal(u) }).catch(e => ({ error: e.message })); dialog.showMessageBox({ message: r.done ? 'PDF Werkbank öffnet jetzt alle PDFs.' : 'Bitte im Finder festlegen', detail: r.done ? '' : 'Rechtsklick auf eine PDF › Informationen › „Öffnen mit“: PDF Werkbank › „Alle ändern …“' + (r.error ? '\n\n' + r.error : '') }); } },
       { label: 'Fehlerprotokoll anzeigen', click: () => shell.showItemInFolder(logFile()) },
       { label: 'Sicherheitskopien anzeigen', click: () => shell.openPath(backupDir()) }] },
   ]));
