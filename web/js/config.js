@@ -8,9 +8,19 @@
  *   googleDesktopClientId  = OAuth-Client vom Typ „Desktop-App“ (für die Desktop-App)
  * Den Clientschlüssel der Desktop-App nicht hier eintragen, sondern als GitHub-Secret GOOGLE_DESKTOP_SECRET
  * im Repo pdf-werkbank-app hinterlegen; er wird beim Bauen der App eingesetzt. */
+/* Cloud-Dienste (ab 1.7), siehe README „Cloud-Dienste einrichten“:
+ *   onedriveClientId = Anwendungs-ID (Client-ID) aus Microsoft Entra / Azure „App-Registrierungen“ (kein Geheimnis nötig)
+ *   dropboxAppKey    = „App key“ aus der Dropbox App Console (kein App-Secret eintragen)
+ * Anmelden mit Apple, Microsoft oder Google für den Sync: Anbieter im Supabase-Dashboard einschalten und hier auflisten,
+ *   z. B. authProviders: ['apple', 'azure', 'google'] */
 window.WB_CONFIG = {
   supabaseUrl: 'https://yhvvoqqcelkadvfdkblx.supabase.co',
   supabaseKey: 'sb_publishable_rK6cdlgv40IMEr5CUf1HTQ_P0LzRQRX',
   googleClientId: '611827808910-o8l642cfn76ca8e3ft1te2jlrvs42c4a.apps.googleusercontent.com',
   googleDesktopClientId: '611827808910-9cd7cs9ikkf50kv6sil11aesdhath6lp.apps.googleusercontent.com',
+  onedriveClientId: '',
+  dropboxAppKey: '',
+  authProviders: [],
 };
+
+window.WB_CONFIG.ocr = { script: 'lib/ocr/tesseract.min.js', workerPath: 'lib/ocr/worker.min.js', corePath: 'lib/ocr/', langPath: 'lib/ocr/', localLangs: ['deu', 'eng'] };

@@ -127,11 +127,16 @@ const ICONS = {
   hand: 'M3 17c2.5-3 4-9 6-9s-1 9 1.5 9 3-5 5-5 1 3 3 3 2-1 2.5-1.5',
   sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
   aleft: 'M4 6h16M4 10h10M4 14h16M4 18h10', acenter: 'M4 6h16M7 10h10M4 14h16M7 18h10', aright: 'M4 6h16M10 10h10M4 14h16M10 18h10',
+  grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', scan: 'M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M7 9h10M7 12h10M7 15h6',
+  compress: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5', compare: 'M4 4h7v16H4zM13 4h7v16h-7zM6.5 8h2M15.5 8h2M6.5 12h2M15.5 12h2',
+  field: 'M3 7h18v10H3zM7 10v4M6 10h2M6 14h2', qr: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2',
+  cloud: 'M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z', users: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 6.5M18 14c2 .7 3 2.8 3 6',
+  lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3', insert: 'M12 5v14M5 12h14', chev: 'M9 6l6 6-6 6',
   lsolid: 'M3 12h18', ldash: 'M3 12h4M10 12h4M17 12h4', ldot: 'M4 12h.01M8 12h.01M12 12h.01M16 12h.01M20 12h.01',
 };
 
-const TOOL_NAMES = { laser: 'Laserpointer', mark: 'Textmarkierung', select: 'Auswählen', objects: 'Inhalte', text: 'Text', edittext: 'Text ändern', pen: 'Stift', eraser: 'Radierer', hl: 'Markieren', ul: 'Unterstreichen', so: 'Durchstreichen', rect: 'Rechteck', ellipse: 'Ellipse', line: 'Linie', arrow: 'Pfeil', measure: 'Messen', white: 'Abdecken', redact: 'Schwärzen', check: 'Haken', cross: 'Kreuz', img: 'Bild', graph: 'Live-Graph', table: 'Tabelle', stamp: 'Stempel', note: 'Notiz', wm: 'Wasserzeichen' };
-const PROPS_OF = { multi: ['color'], mark: ['color', 'opacity'], text: ['color', 'font', 'align'], pen: ['penkind', 'color', 'stroke', 'opacity'], eraser: ['esize'], hl: ['color', 'opacity'], ul: ['color'], so: ['color'], rect: ['color', 'stroke', 'fill', 'dash'], ellipse: ['color', 'stroke', 'fill', 'dash'], line: ['color', 'stroke', 'dash'], arrow: ['color', 'stroke', 'dash'], measure: ['color', 'scale'], check: ['color', 'stroke'], cross: ['color', 'stroke'], white: [], redact: [], img: [], graph: [], table: ['color'], stamp: ['color', 'stamp'], note: ['color'], wm: ['color', 'opacity'] };
+const TOOL_NAMES = { laser: 'Laserpointer', mark: 'Textmarkierung', select: 'Auswählen', objects: 'Inhalte', text: 'Text', edittext: 'Text ändern', pen: 'Stift', eraser: 'Radierer', hl: 'Markieren', ul: 'Unterstreichen', so: 'Durchstreichen', rect: 'Rechteck', ellipse: 'Ellipse', line: 'Linie', arrow: 'Pfeil', measure: 'Messen', white: 'Abdecken', redact: 'Schwärzen', check: 'Haken', cross: 'Kreuz', img: 'Bild', graph: 'Live-Graph', table: 'Tabelle', field: 'Formularfeld', stamp: 'Stempel', note: 'Notiz', wm: 'Wasserzeichen' };
+const PROPS_OF = { multi: ['color'], mark: ['color', 'opacity'], text: ['color', 'font', 'align'], pen: ['penkind', 'color', 'stroke', 'opacity'], eraser: ['esize'], hl: ['color', 'opacity'], ul: ['color'], so: ['color'], rect: ['color', 'stroke', 'fill', 'dash'], ellipse: ['color', 'stroke', 'fill', 'dash'], line: ['color', 'stroke', 'dash'], arrow: ['color', 'stroke', 'dash'], measure: ['color', 'scale'], check: ['color', 'stroke'], cross: ['color', 'stroke'], white: [], redact: [], img: [], graph: [], table: ['color'], field: [], stamp: ['color', 'stamp'], note: ['color'], wm: ['color', 'opacity'] };
 const DRAW_TOOLS = new Set(['laser', 'pen', 'eraser', 'hl', 'ul', 'so', 'rect', 'ellipse', 'line', 'arrow', 'measure', 'white', 'redact', 'check', 'cross', 'objects']);
 const SNAP_TOOLS = new Set(['hl', 'ul', 'so']);
 const KEYS = { j: 'laser', v: 'select', m: 'objects', t: 'text', e: 'edittext', p: 'pen', g: 'eraser', h: 'hl', n: 'ul', d: 'so', r: 'rect', o: 'ellipse', l: 'line', a: 'arrow', q: 'measure', w: 'white', b: 'redact', k: 'check', x: 'cross', s: 'stamp', c: 'note' };
@@ -441,6 +446,7 @@ function annotSVG(a) {
       return `<text x="${r2(a.x)}" y="${r2(a.y + a.size * 0.35)}" text-anchor="middle" transform="rotate(${-a.ang} ${r2(a.x)} ${r2(a.y)})" font-family='${FONTS.Helvetica.css}' font-size="${a.size}" font-weight="700" fill="${c}" fill-opacity="${a.op / 100}">${esc(a.text)}</text>`;
     case 'graph': return graphSVG(a);
     case 'table': return tableSVG(a);
+    case 'field': return fieldSVG(a);
     case 'img': {
       const im = S.images.get(a.img);
       return im ? `<image href="${im.url}" x="${r2(a.x)}" y="${r2(a.y)}" width="${r2(a.w)}" height="${r2(a.h)}" preserveAspectRatio="none"/>` : '';
@@ -2365,11 +2371,11 @@ function editNote(p, a, isNew) {
     if (S.tool !== 'select' || e.button !== 0 || S.viewonly) { last = null; return; }
     const wrap = e.target.closest('.page'); if (!wrap) { last = null; return; }
     const p = pageById(wrap.dataset.id), pt = ptIn(e, els.get(p.id)), now = performance.now();
-    const a = hitTest(p, pt, 'table') || hitTest(p, pt, 'graph');
+    const a = hitTest(p, pt, 'table') || hitTest(p, pt, 'graph') || hitTest(p, pt, 'field');
     if (a && last && last.id === a.id && now - last.t < 450 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 12) {
       last = null; e.preventDefault(); e.stopImmediatePropagation();
       if (drag) endDrag();
-      if (a.t === 'table') tableDialog(p, a); else editGraph(p, a);
+      if (a.t === 'table') tableDialog(p, a); else if (a.t === 'field') fieldDialog(p, a); else editGraph(p, a);
       return;
     }
     last = a ? { id: a.id, t: now, x: e.clientX, y: e.clientY } : null;
@@ -2384,6 +2390,8 @@ pagesEl.addEventListener('dblclick', e => {
     if (gr) { editGraph(p, gr); return; }
     const tb = hitTest(p, ptIn(e, els.get(p.id)), 'table');
     if (tb) { tableDialog(p, tb); return; }
+    const fd = hitTest(p, ptIn(e, els.get(p.id)), 'field');
+    if (fd) { fieldDialog(p, fd); return; }
   }
   if (S.tool === 'objects') {
     const p = pageById(wrap.dataset.id), it = itemAt(p, ptIn(e, els.get(p.id)), 'text');
@@ -3550,6 +3558,7 @@ async function buildPdfInner(pageList) {
     return fontCache.get(key);
   };
   const clean = (font, str) => Array.from(str.replace(/\t/g, '    ')).map(ch => { try { font.encodeText(ch); return ch; } catch (e) { return '?'; } }).join('');
+  const usedFields = new Set();
   for (const p of pageList) {
     let ld = libDocs.get(p.src);
     if (!ld) {
@@ -3614,6 +3623,9 @@ async function buildPdfInner(pageList) {
         const px = a.x + dx * Math.cos(al) + dy * Math.sin(al), py = a.y - dx * Math.sin(al) + dy * Math.cos(al);
         const [tx, ty] = T(px, py);
         pg.drawText(txt, { x: tx, y: ty, size: a.size, font, color: hex2rgb(a.color), opacity: a.op / 100, rotate: degrees(R + a.ang) });
+      } else if (a.t === 'field') {
+        try { await exportField(out, pg, a, T, R, usedFields); } catch (e) { console.warn('Formularfeld', e); }
+        continue;
       } else if (a.t === 'note') {
         const p1 = T(a.x, a.y + NOTE), p2 = T(a.x + NOTE, a.y), c = hex2rgb(a.color);
         const ann = out.context.obj({
@@ -5196,6 +5208,497 @@ function exportMarks() {
   $('#dlg').addEventListener('click', clean, true);
 }
 
+/* ===================== Version 1.7 ===================== */
+const closeDlg = () => { $('#dlg').hidden = true; $('#dlgOk').onclick = $('#dlgCancel').onclick = null; };
+/* Quelle austauschen (Texterkennung, Verkleinern): gleiche Seiten, gleiche Lage – Markierungen bleiben gültig.
+   Die neue Fassung bekommt eine eigene Kennung (Bibliothek und Sync speichern sie so sicher neu, Rückgängig zeigt wieder die alte). */
+async function replaceSource(id, bytes) {
+  const s = S.sources.get(id); if (!s) return id;
+  const pdf = await PDFJS.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+  if (pdf.numPages !== s.pdf.numPages) { pdf.destroy(); throw new Error('Seitenzahl hat sich verändert'); }
+  const nid = uid('s');
+  S.sources.set(nid, { id: nid, name: s.name, bytes, pdf });
+  for (let i = 0; i < pdf.numPages; i++) S.proxies.set(nid + ':' + i, await pdf.getPage(i + 1));
+  for (const p of S.pages) if (p.src === id) p.src = nid;
+  for (const [k, v] of [...S.paperSrc]) if (v === id) S.paperSrc.set(k, nid);
+  if (S.decrypted.has(id)) S.decrypted.add(nid);
+  charCache.clear(); citemCache.clear();
+  for (const p of S.pages) if (p.src === nid && hasCE(p)) await ensureDerived(p).catch(() => {});
+  return nid;
+}
+const usedSources = () => [...new Set(S.pages.map(p => p.src))].filter(id => S.sources.has(id));
+
+/* ---------- Texterkennung (OCR) ---------- */
+function ocrDialog() {
+  if (!window.WBTools) { toast('Die Texterkennung ist hier nicht verfügbar.'); return; }
+  dialog('Texterkennung (OCR)', `<p class="note" style="margin:0">Macht eingescannte Seiten und Fotos durchsuchbar: Text lässt sich danach suchen, markieren, kopieren und vorlesen. Die Erkennung läuft auf diesem Gerät, nichts wird hochgeladen.</p>
+    <div class="frow"><label class="fld"><span>Sprache</span><select class="field" id="ocrLang">${Object.entries(WBTools.LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+    <label class="fld"><span>Seiten</span><select class="field" id="ocrPages"><option value="auto">Alle Seiten ohne Text</option><option value="cur">Nur diese Seite</option><option value="all">Alle Seiten neu erkennen</option></select></label></div>
+    <p class="note" style="margin:0">Beim ersten Mal werden etwa 6 MB Erkennungsdaten geladen.</p>`, 'Text erkennen', b => {
+    const langs = $('#ocrLang', b).value, sel = $('#ocrPages', b).value;
+    closeDlg(); runOcr(langs, sel); return false;
+  });
+}
+async function runOcr(langs, sel) {
+  commitEdit(); if (S.busy) return;
+  const cur = S.pages[S.cur];
+  const plan = new Map();
+  for (const p of sel === 'cur' ? [cur] : S.pages) { if (!plan.has(p.src)) plan.set(p.src, new Set()); plan.get(p.src).add(p.idx); }
+  let words = 0, pagesDone = 0, stop = false;
+  const total = [...plan.values()].reduce((n, s) => n + s.size, 0);
+  const pl = pill(`<span class="spin"></span><span id="ocrMsg">Texterkennung startet …</span><button class="btn" data-x="stop">Abbrechen</button>`, k => { if (k === 'stop') { stop = true; WBTools.stopOcr(); } });
+  busy(true, 'Texterkennung läuft …');
+  pushHist();
+  try {
+    for (const [sid, idxs] of plan) {
+      if (stop) break;
+      const s = S.sources.get(sid); if (!s) continue;
+      const r = await WBTools.ocr(s.bytes, {
+        langs, mode: sel === 'all' || sel === 'cur' ? 'all' : 'auto', pages: [...idxs],
+        onProgress: (d, t, m) => { const el = pl && pl.querySelector('#ocrMsg'); if (el) el.textContent = `${m} (${Math.min(total, pagesDone + d)}/${total})`; },
+      });
+      pagesDone += idxs.size;
+      if (r.bytes) { await replaceSource(sid, r.bytes); words += r.words; }
+    }
+    busy(false); pill(null);
+    if (stop) { toast('Texterkennung abgebrochen'); }
+    if (words) { buildViewer(); scrollToPage(S.cur); markDirty(); toast(`${words} Wörter erkannt · Text ist jetzt durchsuchbar`); }
+    else if (!stop) toast(sel === 'auto' ? 'Alle Seiten haben schon Text – nichts zu erkennen.' : 'Auf der Seite wurde kein Text erkannt.');
+  } catch (e) { console.error(e); busy(false); pill(null); toast(stop ? 'Texterkennung abgebrochen' : 'Texterkennung fehlgeschlagen: ' + (e.message || e)); }
+}
+
+/* ---------- PDF verkleinern ---------- */
+function compressDialog() {
+  if (!window.WBTools) return;
+  const size = usedSources().reduce((n, id) => n + S.sources.get(id).bytes.length, 0);
+  dialog('PDF verkleinern', `<p class="note" style="margin:0">Aktuelle Größe der Original-PDFs: <b>${WBTools.fmtMB(size)}</b>. Fotos und Scans werden verkleinert und neu komprimiert, ungenutzte Reste entfernt. Text, Schriften, Vektorgrafiken und deine Markierungen bleiben unverändert.</p>
+    <div class="radios">${Object.entries(WBTools.LEVELS).map(([k, v]) => `<label class="chkrow"><input type="radio" name="clv" value="${k}" ${k === 'medium' ? 'checked' : ''}> ${v.label}</label>`).join('')}</div>`, 'Verkleinern', b => {
+    const level = $('[name=clv]:checked', b).value; closeDlg(); runCompress(level); return false;
+  });
+}
+async function runCompress(level) {
+  commitEdit(); if (S.busy) return;
+  busy(true, 'PDF wird verkleinert …');
+  let before = 0, after = 0, imgs = 0;
+  pushHist();
+  try {
+    for (const sid of usedSources()) {
+      const s = S.sources.get(sid);
+      const r = await WBTools.compress(s.bytes, { level, onProgress: (d, t, m) => setMsg(`Verkleinern: ${m}`, true) });
+      before += r.before;
+      if (r.after < r.before * 0.97) { await replaceSource(sid, r.bytes); after += r.after; imgs += r.images; } else after += r.before;
+    }
+    busy(false);
+    if (after < before * 0.97) { buildViewer(); scrollToPage(S.cur); markDirty(); toast(`Verkleinert: ${WBTools.fmtMB(before)} → ${WBTools.fmtMB(after)} (−${Math.round((1 - after / before) * 100)} %)`); }
+    else toast(`Die PDF ist schon gut komprimiert (${WBTools.fmtMB(before)}).`);
+  } catch (e) { console.error(e); busy(false); toast('Verkleinern fehlgeschlagen: ' + (e.message || e)); }
+}
+
+/* ---------- Suchen und schwärzen ---------- */
+const RX = {
+  email: ['E-Mail-Adressen', /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g],
+  phone: ['Telefonnummern', /(?:\+|\b0)\d[\d /()–-]{5,}\d\b/g],
+  iban: ['IBAN', /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,4})?\b/g],
+  money: ['Geldbeträge', /(?:€|EUR)\s?\d[\d.,]*\d|\b\d[\d.]*(?:,\d{1,2})?\s?(?:€|EUR\b|Euro\b)/g],
+  date: ['Datumsangaben', /\b\d{1,2}\.\s?\d{1,2}\.\s?(?:\d{4}|\d{2})\b/g],
+};
+function pageString(p) {
+  const ch = charsOf(p); if (!ch) return null;
+  let s = ''; const map = [];
+  ch.flat.forEach((c, i) => {
+    const prev = ch.flat[i - 1];
+    if (prev) {
+      if (prev.line !== c.line) { s += '\n'; map.push(-1); }
+      else if (c.x - (prev.x + prev.w) > Math.max(prev.h, c.h) * 0.22 && prev.ch !== ' ' && c.ch !== ' ') { s += ' '; map.push(-1); }
+    }
+    for (const _ of c.ch) { s += _; map.push(i); }
+  });
+  return { s, map, flat: ch.flat };
+}
+async function findRedactions(terms, kinds, opt) {
+  const res = [];
+  const rxs = kinds.map(k => RX[k][1]);
+  for (const t of terms) {
+    let src = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    if (opt.word) src = '(?<![\\p{L}\\p{N}])' + src + '(?![\\p{L}\\p{N}])';
+    rxs.push(new RegExp(src, 'gu' + (opt.cs ? '' : 'i')));
+  }
+  for (const p of S.pages) {
+    try { await analysisOf(p); } catch (e) { continue; }
+    const ps = pageString(p); if (!ps) continue;
+    for (const rx of rxs) {
+      rx.lastIndex = 0; let m;
+      while ((m = rx.exec(ps.s))) {
+        if (!m[0]) { rx.lastIndex++; continue; }
+        const idx = []; for (let k = m.index; k < m.index + m[0].length; k++) if (ps.map[k] >= 0) idx.push(ps.map[k]);
+        const lines = new Map();
+        for (const i of idx) { const c = ps.flat[i]; if (!c.ch.trim()) continue; const b = lines.get(c.line); if (!b) lines.set(c.line, { x0: c.x, y0: c.y, x1: c.x + c.w, y1: c.y + c.h }); else { b.x0 = Math.min(b.x0, c.x); b.y0 = Math.min(b.y0, c.y); b.x1 = Math.max(b.x1, c.x + c.w); b.y1 = Math.max(b.y1, c.y + c.h); } }
+        for (const b of lines.values()) res.push({ p, text: m[0], x: b.x0 - 1, y: b.y0 - 1, w: b.x1 - b.x0 + 2, h: b.y1 - b.y0 + 2 });
+      }
+    }
+  }
+  return res;
+}
+function redactSearchDialog() {
+  let found = null;
+  dialog('Suchen und schwärzen', `<p class="note" style="margin:0">Findet Begriffe oder persönliche Daten im ganzen Dokument und schwärzt alle Treffer. Der Text darunter wird endgültig aus der PDF gelöscht.</p>
+    <label class="fld"><span>Begriffe (mehrere mit Komma trennen)</span><input class="field" id="rsTerms" placeholder="z. B. Max Mustermann, Musterstraße 5"></label>
+    <div class="chkgrid">${Object.entries(RX).map(([k, [l]]) => `<label class="chkrow"><input type="checkbox" name="rsk" value="${k}"> ${l}</label>`).join('')}</div>
+    <div class="chkgrid"><label class="chkrow"><input type="checkbox" id="rsWord" checked> Nur ganze Wörter</label><label class="chkrow"><input type="checkbox" id="rsCs"> Groß-/Kleinschreibung</label></div>
+    <div class="row"><button type="button" class="btn" id="rsFind">Treffer suchen</button><span class="note" id="rsInfo"></span></div>`, 'Alle schwärzen', () => {
+    (async () => {
+      if (!found) await doFind();
+      if (!found || !found.length) return;
+      const list = found; closeDlg(); await applyRedactions(list);
+    })();
+    return false;
+  });
+  const b = $('#dlgBody');
+  const read = () => ({ terms: $('#rsTerms', b).value.split(/[,;\n]/).map(x => x.trim()).filter(x => x.length >= 2), kinds: $$('[name=rsk]:checked', b).map(x => x.value), opt: { word: $('#rsWord', b).checked, cs: $('#rsCs', b).checked } });
+  async function doFind() {
+    const q = read();
+    if (!q.terms.length && !q.kinds.length) { $('#rsInfo', b).textContent = 'Bitte einen Begriff eingeben oder eine Art wählen.'; found = null; return; }
+    $('#rsInfo', b).textContent = 'Suche …';
+    found = await findRedactions(q.terms, q.kinds, q.opt);
+    const pages = new Set(found.map(f => f.p.id)).size;
+    $('#rsInfo', b).textContent = found.length ? `${found.length} ${found.length === 1 ? 'Treffer' : 'Treffer'} auf ${pages} ${pages === 1 ? 'Seite' : 'Seiten'}: ${[...new Set(found.map(f => f.text))].slice(0, 4).join(', ')}${found.length > 4 ? ' …' : ''}` : 'Keine Treffer.';
+  }
+  b.onclick = e => { if (e.target.closest('#rsFind')) doFind(); };
+  b.onchange = b.oninput = () => { found = null; };
+}
+async function applyRedactions(list) {
+  busy(true, 'Wird geschwärzt …');
+  pushHist();
+  const by = new Map(); for (const r of list) { if (!by.has(r.p)) by.set(r.p, []); by.get(r.p).push(r); }
+  try {
+    for (const [p, rs] of by) {
+      const f = d2u(p), ce = newCE(p);
+      for (const r of rs) {
+        p.annots.push({ id: uid(), t: 'redact', x: r2(r.x), y: r2(r.y), w: r2(r.w), h: r2(r.h) });
+        const c1 = f(r.x, r.y), c2 = f(r.x + r.w, r.y + r.h);
+        ce.red.push([Math.min(c1[0], c2[0]), Math.min(c1[1], c2[1]), Math.max(c1[0], c2[0]), Math.max(c1[1], c2[1])].map(r2));
+      }
+      p.ce = ce;
+      await ensureDerived(p).catch(e => console.warn(e));
+      drawAnnots(p); refreshPage(p);
+    }
+    busy(false); markDirty(); if (S.find) runFind(S.find.q);
+    toast(`${list.length} Stellen auf ${by.size} ${by.size === 1 ? 'Seite' : 'Seiten'} geschwärzt · Text ist aus der PDF entfernt`);
+  } catch (e) { console.error(e); busy(false); toast('Schwärzen fehlgeschlagen: ' + (e.message || e)); }
+}
+
+/* ---------- Formularfelder erstellen ---------- */
+const FIELD_KINDS = { text: 'Textfeld', multi: 'Mehrzeiliges Textfeld', check: 'Kontrollkästchen', choice: 'Auswahlliste', date: 'Datum', sig: 'Unterschriftsfeld' };
+const FIELD_SIZE = { text: [180, 20], multi: [260, 70], check: [13, 13], choice: [160, 20], date: [100, 20], sig: [200, 42] };
+function fieldSVG(a) {
+  const c = a.color || '#3e63dd', x = r2(a.x), y = r2(a.y), w = r2(a.w), h = r2(a.h);
+  let o = `<g class="field"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}" fill-opacity="0.08" stroke="${c}" stroke-width="0.8" stroke-dasharray="${a.kind === 'check' ? '' : '3 2'}" rx="${a.kind === 'check' ? 1.5 : 2}"/>`;
+  const fs = Math.min(11, Math.max(6, h * 0.55)), ty = r2(a.y + Math.min(h, fs * 1.55) / 2 + fs * 0.36);
+  const T = (s, col, extra = '') => `<text x="${r2(a.x + 3)}" y="${ty}" font-family='${FONTS.Helvetica.css}' font-size="${r2(fs)}" fill="${col}" ${extra}>${esc(s)}</text>`;
+  if (a.kind === 'check') { if (a.value) o += `<path d="M${x + w * 0.2} ${y + h * 0.55}l${w * 0.22} ${h * 0.22} ${w * 0.4}-${h * 0.5}" fill="none" stroke="${c}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>`; }
+  else if (a.kind === 'sig') o += `<line x1="${r2(a.x + 6)}" y1="${r2(a.y + h - 8)}" x2="${r2(a.x + w - 6)}" y2="${r2(a.y + h - 8)}" stroke="${c}" stroke-width="0.6"/><text x="${r2(a.x + 6)}" y="${r2(a.y + h - 2)}" font-family='${FONTS.Helvetica.css}' font-size="5.5" fill="${c}">Unterschrift · ${esc(a.name || '')}</text>`;
+  else {
+    o += a.value ? T(cellText(a.value, a.w - 14, fs), '#1b2130') : T(cellText(a.kind === 'date' ? 'TT.MM.JJJJ' : a.name || '', a.w - 14, fs), c, 'fill-opacity="0.55"');
+    if (a.kind === 'choice') o += `<path d="M${r2(a.x + w - 10)} ${r2(a.y + h / 2 - 1.5)}l3 3 3-3" fill="none" stroke="${c}" stroke-width="1"/>`;
+  }
+  if (a.req) o += `<text x="${r2(a.x + w - 2)}" y="${r2(a.y + 6)}" text-anchor="end" font-size="7" fill="#c4352b">*</text>`;
+  return o + '</g>';
+}
+function uniqueFieldName(base, skip) {
+  const names = new Set(S.pages.flatMap(p => p.annots.filter(a => a.t === 'field' && a !== skip).map(a => a.name)));
+  let n = base || 'Feld', k = 2; while (names.has(n)) n = (base || 'Feld') + ' ' + k++;
+  return n;
+}
+function fieldDialog(p, a) {
+  const isNew = !a;
+  const cur = a || { kind: 'text', name: '', value: '', options: [], req: false };
+  dialog(isNew ? 'Formularfeld einfügen' : 'Formularfeld', `<div class="frow"><label class="fld"><span>Art</span><select class="field" id="ffKind">${Object.entries(FIELD_KINDS).map(([k, v]) => `<option value="${k}" ${k === cur.kind ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+    <label class="fld"><span>Name</span><input class="field" id="ffName" value="${esc(cur.name)}" placeholder="z. B. Vorname"></label></div>
+    <label class="fld" id="ffOptW"><span>Auswahlmöglichkeiten (eine pro Zeile)</span><textarea class="field area" id="ffOpts" rows="4">${esc((cur.options || []).join('\n'))}</textarea></label>
+    <label class="fld" id="ffValW"><span>Vorausgefüllt</span><input class="field" id="ffVal" value="${esc(cur.kind === 'check' ? '' : cur.value || '')}"></label>
+    <label class="chkrow" id="ffChkW"><input type="checkbox" id="ffChk" ${cur.kind === 'check' && cur.value ? 'checked' : ''}> Angekreuzt</label>
+    <label class="chkrow"><input type="checkbox" id="ffReq" ${cur.req ? 'checked' : ''}> Pflichtfeld</label>
+    <p class="note" style="margin:0">Wird als echtes PDF-Formularfeld gespeichert, das man in Acrobat, Vorschau, Browsern und Apps ausfüllen kann. Größe und Lage änderst du wie bei jedem Element.</p>`, isNew ? 'Einfügen' : 'Übernehmen', b => {
+    const kind = $('#ffKind', b).value, name = $('#ffName', b).value.trim() || FIELD_KINDS[kind];
+    const options = $('#ffOpts', b).value.split('\n').map(s => s.trim()).filter(Boolean);
+    if (kind === 'choice' && !options.length) { toast('Bitte mindestens eine Auswahlmöglichkeit eintragen.'); return false; }
+    const value = kind === 'check' ? $('#ffChk', b).checked : $('#ffVal', b).value;
+    pushHist();
+    if (isNew) {
+      p = S.pages[S.cur]; const [W, H] = dims(p), [w, h] = FIELD_SIZE[kind], [cx, cy] = viewCenter(p);
+      a = { id: uid(), t: 'field', kind, x: r2(clamp(cx - w / 2, 8, W - w - 8)), y: r2(clamp(cy - h / 2, 8, H - h - 8)), w, h, color: '#3e63dd' };
+      p.annots.push(a);
+    } else if (a.kind !== kind) { const [w, h] = FIELD_SIZE[kind]; if (kind === 'check' || a.kind === 'check') { a.w = w; a.h = h; } }
+    Object.assign(a, { kind, name: uniqueFieldName(name, a), options, value: kind === 'choice' && value && !options.includes(value) ? '' : value, req: $('#ffReq', b).checked });
+    drawAnnots(p); markDirty(); if (isNew) select(p.id, a.id);
+    toast(isNew ? `${FIELD_KINDS[kind]} „${a.name}“ eingefügt` : 'Formularfeld geändert');
+  });
+  const b = $('#dlgBody');
+  const sync = () => { const k = $('#ffKind', b).value; $('#ffOptW', b).hidden = k !== 'choice'; $('#ffValW', b).hidden = k === 'check' || k === 'sig'; $('#ffChkW', b).hidden = k !== 'check'; };
+  b.onchange = sync; sync();
+}
+/* vorhandene Formularlinien (_____ oder ……) und Kästchen (☐) als Felder erkennen */
+async function detectFields() {
+  commitEdit();
+  busy(true, 'Formular wird erkannt …');
+  const add = [];
+  for (const p of S.pages) {
+    try { await analysisOf(p); } catch (e) { continue; }
+    const ps = pageString(p); if (!ps) continue;
+    const have = p.annots.filter(a => a.t === 'field');
+    const free = b => !have.some(f => f.x < b.x + b.w && b.x < f.x + f.w && f.y < b.y + b.h && b.y < f.y + f.h);
+    const rx = /(_{5,}|\.{8,}|…{3,})|([☐□❑▢◻])/g; let m;
+    while ((m = rx.exec(ps.s))) {
+      const idx = []; for (let k = m.index; k < m.index + m[0].length; k++) if (ps.map[k] >= 0) idx.push(ps.map[k]);
+      if (!idx.length) continue;
+      const cs = idx.map(i => ps.flat[i]), x0 = Math.min(...cs.map(c => c.x)), x1 = Math.max(...cs.map(c => c.x + c.w)), y1 = Math.max(...cs.map(c => c.y + c.h)), hh = Math.max(...cs.map(c => c.h));
+      // Beschriftung: Text davor in derselben Zeile
+      const lineStart = ps.s.lastIndexOf('\n', m.index - 1) + 1;
+      let label = ps.s.slice(lineStart, m.index).replace(/[_.…☐□❑▢◻]+/g, ' ').trim().split(/\s{2,}/).pop() || '';
+      label = label.replace(/[:\s]+$/, '').slice(-40);
+      let f;
+      if (m[2]) { const s = Math.max(8, Math.min(16, hh)); f = { kind: 'check', x: x0, y: y1 - s, w: s, h: s }; const after = ps.s.slice(m.index + 1, (ps.s.indexOf('\n', m.index) + 1 || ps.s.length + 1) - 1).trim().split(/\s{2,}|[☐□❑▢◻]/)[0]; label = (after || label).slice(0, 40); }
+      else { const h = Math.max(12, Math.min(20, hh * 1.4)); f = { kind: 'text', x: x0, y: y1 - h + 1, w: Math.max(30, x1 - x0), h }; }
+      if (!free(f)) continue;
+      have.push(f);
+      add.push({ p, a: { id: uid(), t: 'field', ...Object.fromEntries(Object.entries(f).map(([k, v]) => [k, typeof v === 'number' ? r2(v) : v])), name: label || (f.kind === 'check' ? 'Auswahl' : 'Feld'), value: f.kind === 'check' ? false : '', options: [], req: false, color: '#3e63dd' } });
+    }
+  }
+  busy(false);
+  if (!add.length) { toast('Keine Formularlinien oder Kästchen gefunden. Felder lassen sich über ⋯ › Einfügen › Formularfeld setzen.'); return; }
+  pushHist();
+  for (const { p, a } of add) { a.name = uniqueFieldName(a.name); p.annots.push(a); }
+  new Set(add.map(x => x.p)).forEach(drawAnnots); markDirty();
+  toast(`${add.length} Formularfelder erkannt · Doppelklick ändert Name und Art`);
+}
+/* Export: echte AcroForm-Felder */
+async function exportField(out, pg, a, T, R, used) {
+  const { rgb, PDFName, PDFHexString } = PL;
+  const form = out.getForm();
+  let name = String(a.name || 'Feld').replace(/\./g, '_').trim() || 'Feld', k = 2; const base = name;
+  while (used.has(name)) name = base + ' ' + k++;
+  used.add(name);
+  const c1 = T(a.x, a.y), c2 = T(a.x + a.w, a.y + a.h);
+  const x = Math.min(c1[0], c2[0]), y = Math.min(c1[1], c2[1]), w = Math.abs(c2[0] - c1[0]), h = Math.abs(c2[1] - c1[1]);
+  const vert = R % 180 !== 0;
+  const o = { x, y, width: w, height: h, borderColor: rgb(0.55, 0.6, 0.72), borderWidth: 0.6, backgroundColor: rgb(0.94, 0.96, 1) };
+  if (a.kind === 'check') { const f = form.createCheckBox(name); f.addToPage(pg, { ...o, backgroundColor: rgb(1, 1, 1) }); if (a.value) f.check(); if (a.req) f.enableRequired(); return; }
+  if (a.kind === 'choice') { const f = form.createDropdown(name); f.setOptions(a.options || []); if (a.value) f.select(a.value); f.addToPage(pg, o); if (a.req) f.enableRequired(); return; }
+  if (a.kind === 'sig') {
+    const ctx = out.context;
+    const ref = ctx.register(ctx.obj({ Type: 'Annot', Subtype: 'Widget', FT: 'Sig', T: PDFHexString.fromText(name), F: 4, P: pg.ref, Rect: [x, y, x + w, y + h], MK: { BG: [0.94, 0.96, 1], BC: [0.55, 0.6, 0.72] } }));
+    pg.node.addAnnot(ref); form.acroForm.addField(ref);
+    if (a.req) ctx.lookup(ref).set(PDFName.of('Ff'), ctx.obj(2));
+    return;
+  }
+  const f = form.createTextField(name);
+  if (a.kind === 'multi') f.enableMultiline();
+  if (a.kind === 'date') { try { f.setMaxLength(10); } catch (e) { /* egal */ } }
+  if (a.value) f.setText(winAnsiSafe(String(a.value)));
+  f.addToPage(pg, o);
+  if (a.kind !== 'multi') f.setFontSize(Math.max(6, Math.min(12, (vert ? w : h) * 0.6)));
+  if (a.req) f.enableRequired();
+}
+
+/* ---------- Seitenübersicht: alle Seiten im Raster sortieren, drehen, löschen ---------- */
+const org = { el: null, sel: new Set(), last: null };
+function organizer(on = true) {
+  if (!on) { if (org.el) { org.el.remove(); org.el = null; document.removeEventListener('keydown', orgKey, true); buildViewer(); scrollToPage(S.cur); } return; }
+  commitEdit(); closeMenu();
+  org.sel = new Set(S.selPages.size > 1 ? S.selPages : S.pages[S.cur] ? [S.pages[S.cur].id] : []);
+  const el = document.createElement('div'); el.className = 'orgv';
+  el.innerHTML = `<header><b>Seitenübersicht</b><span class="note" id="orgInfo"></span><span class="grow"></span>
+    <button class="btn" data-o="all">Alle</button><button class="ibtn" data-o="rotl" title="Links drehen">${icon('rotl')}</button><button class="ibtn" data-o="rotr" title="Rechts drehen">${icon('rotr')}</button>
+    <button class="ibtn" data-o="left" title="Nach vorn">${icon('up').replace('M6 15l6-6 6 6', 'M15 6l-6 6 6 6')}</button><button class="ibtn" data-o="right" title="Nach hinten">${icon('up').replace('M6 15l6-6 6 6', 'M9 6l6 6-6 6')}</button>
+    <button class="ibtn" data-o="dup" title="Duplizieren">${icon('dup')}</button><button class="ibtn" data-o="blank" title="Leere Seite dahinter">${icon('blank')}</button><button class="ibtn" data-o="extract" title="Als eigene PDF speichern">${icon('extract')}</button><button class="ibtn" data-o="del" title="Löschen">${icon('trash')}</button>
+    <button class="btn primary" data-o="close">Fertig</button></header><div class="orggrid"></div>`;
+  document.body.appendChild(el); org.el = el;
+  document.addEventListener('keydown', orgKey, true);
+  orgRender();
+  el.addEventListener('click', orgClick);
+  // Ziehen zum Umsortieren (Maus und Finger)
+  let dragId = null, ghost = null, over = null;
+  el.addEventListener('pointerdown', e => {
+    const t = e.target.closest('.orgt'); if (!t || e.button > 0) return;
+    const start = { x: e.clientX, y: e.clientY, id: t.dataset.id, timer: 0, moved: false };
+    const begin = () => { dragId = start.id; t.classList.add('drag'); ghost = t.cloneNode(true); ghost.className = 'orgt ghost'; ghost.style.width = t.offsetWidth + 'px'; document.body.appendChild(ghost); };
+    if (e.pointerType !== 'mouse') start.timer = setTimeout(begin, 350);
+    const move = ev => {
+      const d = Math.hypot(ev.clientX - start.x, ev.clientY - start.y);
+      if (!dragId && e.pointerType === 'mouse' && d > 6) begin();
+      if (!dragId) { if (d > 10) clearTimeout(start.timer); return; }
+      ev.preventDefault(); start.moved = true;
+      ghost.style.left = ev.clientX - ghost.offsetWidth / 2 + 'px'; ghost.style.top = ev.clientY - 40 + 'px';
+      const h = document.elementFromPoint(ev.clientX, ev.clientY), ot = h && h.closest('.orgt:not(.ghost)');
+      $$('.orgt.before,.orgt.after', el).forEach(x => x.classList.remove('before', 'after'));
+      over = null;
+      if (ot && ot.dataset.id !== dragId) { const r = ot.getBoundingClientRect(), after = ev.clientX > r.left + r.width / 2; ot.classList.add(after ? 'after' : 'before'); over = { id: ot.dataset.id, after }; }
+    };
+    const up = () => {
+      clearTimeout(start.timer); removeEventListener('pointermove', move, true); removeEventListener('pointerup', up, true); removeEventListener('pointercancel', up, true);
+      if (!dragId) return;
+      if (ghost) ghost.remove(); ghost = null;
+      const ids = org.sel.has(dragId) ? S.pages.filter(p => org.sel.has(p.id)).map(p => p.id) : [dragId];
+      if (over && !ids.includes(over.id)) orgMove(ids, over.id, over.after);
+      dragId = null; over = null; orgRender();
+      el.dataset.noclick = '1'; setTimeout(() => { delete el.dataset.noclick; }, 50);
+    };
+    addEventListener('pointermove', move, { capture: true, passive: false }); addEventListener('pointerup', up, true); addEventListener('pointercancel', up, true);
+  });
+}
+function orgKey(e) {
+  if (!org.el) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); organizer(false); }
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && !e.target.closest('input')) { e.preventDefault(); e.stopPropagation(); orgAct('del'); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); e.stopPropagation(); orgAct('all'); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.stopPropagation(); (e.shiftKey ? redo() : undo()).then(() => orgRender()); }
+}
+function orgMove(ids, targetId, after) {
+  pushHist();
+  const moving = S.pages.filter(p => ids.includes(p.id)), rest = S.pages.filter(p => !ids.includes(p.id));
+  let at = rest.findIndex(p => p.id === targetId); if (at < 0) return; if (after) at++;
+  rest.splice(at, 0, ...moving); S.pages = rest; S.cur = S.pages.indexOf(moving[0]); markDirty();
+}
+const orgThumbs = new Map();
+function orgRender() {
+  const g = $('.orggrid', org.el); if (!g) return;
+  const sz = innerWidth < 600 ? 110 : 150;
+  g.innerHTML = S.pages.map((p, i) => { const [W, H] = dims(p); return `<div class="orgt${org.sel.has(p.id) ? ' on' : ''}" data-id="${p.id}"><div class="orgc" style="aspect-ratio:${W}/${H};width:${sz}px"><canvas></canvas><svg viewBox="0 0 ${W} ${H}">${p.annots.map(annotSVG).join('')}</svg></div><span>${i + 1}</span></div>`; }).join('');
+  $('#orgInfo', org.el).textContent = `${S.pages.length} Seiten${org.sel.size ? ' · ' + org.sel.size + ' ausgewählt' : ''} · Ziehen zum Sortieren`;
+  const io = new IntersectionObserver(ents => ents.forEach(en => { if (!en.isIntersecting) return; io.unobserve(en.target); orgPaint(en.target); }), { root: g, rootMargin: '300px' });
+  $$('.orgt', g).forEach(t => io.observe(t));
+}
+async function orgPaint(t) {
+  const p = pageById(t.dataset.id); if (!p) return;
+  const cv = $('canvas', t), w = $('.orgc', t).clientWidth, key = pkey(p) + '|' + rotOf(p) + '|' + w;
+  const hit = orgThumbs.get(p.id);
+  if (hit && hit.key === key) { cv.width = hit.c.width; cv.height = hit.c.height; cv.getContext('2d').drawImage(hit.c, 0, 0); return; }
+  try {
+    await ensureDerived(p);
+    const pr = proxyOf(p), base = pr.getViewport({ scale: 1, rotation: rotOf(p) }), vp = pr.getViewport({ scale: w * Math.min(2, devicePixelRatio || 1) / base.width, rotation: rotOf(p) });
+    cv.width = Math.floor(vp.width); cv.height = Math.floor(vp.height);
+    await pr.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+    const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; c.getContext('2d').drawImage(cv, 0, 0);
+    orgThumbs.set(p.id, { key, c }); if (orgThumbs.size > 120) orgThumbs.delete(orgThumbs.keys().next().value);
+  } catch (e) { /* Vorschau egal */ }
+}
+function orgClick(e) {
+  if (org.el.dataset.noclick) return;
+  const b = e.target.closest('[data-o]'); if (b) { orgAct(b.dataset.o); return; }
+  const t = e.target.closest('.orgt'); if (!t) return;
+  const id = t.dataset.id;
+  if (e.shiftKey && org.last) { const a = S.pages.findIndex(p => p.id === org.last), z = S.pages.findIndex(p => p.id === id); S.pages.slice(Math.min(a, z), Math.max(a, z) + 1).forEach(p => org.sel.add(p.id)); }
+  else if (e.ctrlKey || e.metaKey || COARSE || org.sel.size > 1 && !e.detail) { if (org.sel.has(id)) org.sel.delete(id); else org.sel.add(id); }
+  else if (e.detail >= 2) { S.cur = S.pages.findIndex(p => p.id === id); organizer(false); return; }
+  else org.sel = new Set([id]);
+  org.last = id;
+  $$('.orgt', org.el).forEach(x => x.classList.toggle('on', org.sel.has(x.dataset.id)));
+  $('#orgInfo', org.el).textContent = `${S.pages.length} Seiten${org.sel.size ? ' · ' + org.sel.size + ' ausgewählt' : ''}${COARSE ? ' · lange drücken und ziehen zum Sortieren' : ' · Doppelklick öffnet die Seite'}`;
+}
+async function orgAct(k) {
+  const sel = S.pages.filter(p => org.sel.has(p.id));
+  if (k === 'close') { if (sel.length) S.cur = S.pages.indexOf(sel[0]); organizer(false); return; }
+  if (k === 'all') { org.sel = org.sel.size === S.pages.length ? new Set() : new Set(S.pages.map(p => p.id)); orgRender(); return; }
+  if (!sel.length) { toast('Erst Seiten antippen'); return; }
+  if (k === 'rotl' || k === 'rotr') { const d = k === 'rotl' ? -90 : 90; pushHist(); for (const p of sel) { const [W, H] = dims(p); p.annots = p.annots.map(a => rotAnnot(a, W, H, d)); p.rot = (p.rot + d + 360) % 360; } markDirty(); }
+  else if (k === 'del') { if (sel.length >= S.pages.length) { toast('Mindestens eine Seite muss bleiben.'); return; } pushHist(); S.pages = S.pages.filter(p => !org.sel.has(p.id)); org.sel.clear(); S.cur = clamp(S.cur, 0, S.pages.length - 1); markDirty(); toast(sel.length === 1 ? 'Seite gelöscht' : `${sel.length} Seiten gelöscht`); }
+  else if (k === 'dup') { pushHist(); const last = S.pages.indexOf(sel[sel.length - 1]); const copies = sel.map(p => { const c = clone(p); c.id = uid('p'); c.annots = c.annots.map(a => ({ ...a, id: uid() })); return c; }); S.pages.splice(last + 1, 0, ...copies); org.sel = new Set(copies.map(c => c.id)); markDirty(); }
+  else if (k === 'left' || k === 'right') {
+    const idx = S.pages.indexOf(sel[0]), end = S.pages.indexOf(sel[sel.length - 1]);
+    if (k === 'left' && idx > 0) orgMove(sel.map(p => p.id), S.pages[idx - 1].id, false);
+    else if (k === 'right' && end < S.pages.length - 1) orgMove(sel.map(p => p.id), S.pages[end + 1].id, true);
+  }
+  else if (k === 'blank') {
+    const p0 = sel[sel.length - 1], [W, H] = dims(p0);
+    S.cur = S.pages.indexOf(p0);
+    await insertPaper('blank', [W, H], 1);
+    org.sel = new Set([S.pages[S.cur + 1] ? S.pages[S.cur + 1].id : p0.id]);
+  }
+  else if (k === 'extract') { S.selPages = new Set(sel.map(p => p.id)); if (sel.length === 1) S.cur = S.pages.indexOf(sel[0]); await extractPages(); S.selPages.clear(); return; }
+  orgRender();
+}
+
+/* ---------- Vergleichen ---------- */
+async function compareDialog() {
+  if (!window.WBCompare) { toast('Vergleichen ist hier nicht verfügbar.'); return; }
+  commitEdit();
+  const first = S.sources.get(S.pages[0] && S.pages[0].src);
+  const opts = [['orig', 'Mit dem Original (vor meinen Änderungen)'], ['file', 'Mit einer PDF vom Gerät …']];
+  if (window.WBCloud && WBCloud.anyEnabled()) opts.push(['cloud', 'Mit einer PDF aus der Cloud …']);
+  if (LIB && window.WBDrive && window.WBDrive.pdfOf) opts.push(['lib', 'Mit einem Dokument aus der Bibliothek …']);
+  dialog('Vergleichen', `<p class="note" style="margin:0">Zeigt beide Fassungen nebeneinander. Entfernter Text ist rot, neuer grün markiert, mit Liste aller Änderungen.</p>
+    <div class="radios">${opts.map(([k, l], i) => `<label class="chkrow"><input type="radio" name="cmpw" value="${k}" ${i === (S.dirty || hasAnyCE() ? 0 : 1) ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+    <label class="fld" id="cmpLibW" hidden><span>Dokument</span><select class="field" id="cmpLib"></select></label>`, 'Vergleichen', b => {
+    const w = $('[name=cmpw]:checked', b).value;
+    if (w === 'file') { closeDlg(); const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'application/pdf,.pdf'; inp.onchange = async () => { const f = inp.files[0]; if (f) runCompare({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }, true); }; inp.click(); return false; }
+    closeDlg();
+    (async () => {
+      if (w === 'orig') { if (!first) return; runCompare({ name: 'Original', bytes: first.bytes }, true, S.pages.filter(p => p.src === first.id)); }
+      else if (w === 'cloud') { const f = await WBCloud.pick({ mode: 'open', accept: ['pdf'] }); if (f && f[0]) runCompare({ name: f[0].name, bytes: f[0].bytes }, true); }
+      else if (w === 'lib') { const id = $('#cmpLib', b).value, it = await LIB.get(id); busy(true, 'Dokument wird geladen …'); try { const bytes = await window.WBDrive.pdfOf(it); busy(false); runCompare({ name: it.name, bytes }, true); } catch (e) { busy(false); toast('Laden fehlgeschlagen: ' + (e.message || e)); } }
+    })();
+    return false;
+  });
+  const b = $('#dlgBody');
+  if (LIB && opts.some(o => o[0] === 'lib')) {
+    const items = (await LIB.all()).filter(i => i.kind === 'doc' && !i.trashed && !i.deleted && (!S.lib || i.id !== S.lib.id)).sort((x, y) => (y.updated || 0) - (x.updated || 0));
+    $('#cmpLib', b).innerHTML = items.map(i => `<option value="${esc(i.id)}">${esc(i.name)}</option>`).join('');
+  }
+  b.onchange = () => { $('#cmpLibW', b).hidden = $('[name=cmpw]:checked', b).value !== 'lib'; };
+}
+const hasAnyCE = () => S.pages.some(p => hasCE(p) || p.annots.length);
+/* other = ältere/andere Fassung (links), aktuelles Dokument rechts */
+async function runCompare(other, mineRight, pages = S.pages) {
+  busy(true, 'Vergleich wird vorbereitet …');
+  try {
+    const mine = await buildPdf(pages);
+    busy(false);
+    await WBCompare.open(mineRight ? { a: other, b: { name: S.docName.replace(/\.pdf$/i, '') + ' (aktuell)', bytes: mine } } : { a: { name: S.docName, bytes: mine }, b: other });
+  } catch (e) { console.error(e); busy(false); toast('Vergleichen fehlgeschlagen: ' + (e.message || e)); }
+}
+
+/* ---------- Cloud: öffnen und speichern ---------- */
+async function cloudOpen() {
+  if (!window.WBCloud) return;
+  const f = await WBCloud.pick({ mode: 'open', accept: ['pdf', 'werkbank'] });
+  if (!f || !f[0]) return;
+  await openFiles([new File([f[0].bytes], f[0].name, { type: /\.pdf$/i.test(f[0].name) ? 'application/pdf' : 'application/octet-stream' })], 'replace');
+}
+async function cloudSaveDoc() {
+  if (!window.WBCloud) return;
+  if (!WBCloud.anyEnabled()) { if (LIB) { if (await ask('Noch kein Cloud-Dienst verbunden', 'OneDrive, Dropbox, iCloud Drive oder Nextcloud verbindest du in der Bibliothek unten links unter „Cloud-Dienste“.', 'Zur Bibliothek', 'Abbrechen', false)) goLibrary(); } else toast('Noch kein Cloud-Dienst verbunden.'); return; }
+  commitEdit();
+  const r = await WBCloud.pick({ mode: 'save', name: baseName() + '.pdf', ext: '.pdf', make: () => buildPdf(S.pages) });
+  if (r) toast(`In ${r.label} gespeichert: ${r.path.join(' › ')}`);
+}
+
+/* ---------- Alle Werkzeuge (Übersicht wie in Acrobat) ---------- */
+const HUB = [
+  ['Bearbeiten', [['objects', 'Inhalte bearbeiten', 'Texte, Bilder und Flächen der PDF verschieben, löschen, ändern', 'objects', 'tool'], ['edittext', 'Text ändern', 'Vorhandenen Text direkt umschreiben', 'edittext', 'tool'], ['redact', 'Schwärzen', 'Bereich schwärzen, Text wird gelöscht', 'redact', 'tool'], ['redactsearch', 'Suchen und schwärzen', 'Namen, E-Mails, IBANs im ganzen Dokument', 'redact'], ['wm', 'Wasserzeichen', 'Text quer über die Seiten', 'stamp'], ['pn', 'Seitenzahlen', 'Nummerieren in vielen Formaten', 'list']]],
+  ['Einfügen', [['field', 'Formularfeld', 'Textfeld, Kästchen, Auswahl, Unterschrift', 'field'], ['detectfields', 'Formular erkennen', 'Linien und Kästchen werden zu Feldern', 'field'], ['table', 'Tabelle', 'Aus Excel einfügen oder eintippen', 'grid'], ['calc', 'Rechner und Live-Graphen', 'Formeln, Funktionen, Statistik', 'calc'], ['qr', 'QR-Code', 'Link oder Text als QR-Code', 'qr'], ['photos', 'Fotos oder Scans', 'Bilder als neue Seiten', 'image']]],
+  ['Seiten', [['organize', 'Seitenübersicht', 'Alle Seiten sortieren, drehen, löschen', 'grid'], ['blank', 'Neue Seite / Notizpapier', 'Leer, liniert, kariert, punktiert', 'blank'], ['merge', 'PDF anhängen', 'Weitere PDF ans Ende', 'add'], ['extract', 'Seiten extrahieren', 'Auswahl als eigene PDF', 'extract']]],
+  ['Werkzeuge', [['ocr', 'Texterkennung (OCR)', 'Scans durchsuchbar machen', 'scan'], ['compress', 'PDF verkleinern', 'Fotos und Scans komprimieren', 'compress'], ['compare', 'Vergleichen', 'Zwei Fassungen Wort für Wort', 'compare'], ['stats', 'Dokument-Statistik', 'Wörter, Lesezeit, Elemente', 'list'], ['dictate', 'Diktieren', 'Sprache in ein Textfeld', 'comment'], ['speak', 'Vorlesen', 'Ab dieser Seite vorlesen', 'book']]],
+  ['Speichern und teilen', [['cloudsave', 'In der Cloud speichern', 'OneDrive, Dropbox, iCloud, Nextcloud', 'cloud'], ['cloudopen', 'Aus der Cloud öffnen', 'PDF aus deinem Cloud-Speicher', 'cloud'], ['collab', 'Gemeinsam bearbeiten', 'Link für Live-Zusammenarbeit', 'users'], ['werkbank', 'Werkbank-Datei', 'Bearbeitbar weitergeben (.werkbank)', 'save'], ['secure', 'Mit Passwort', 'AES-256 verschlüsselt speichern', 'lock'], ['marks', 'Kommentare als Text', 'Alle Markierungen mit Seitenzahl', 'note']]],
+];
+function toolsHub() {
+  commitEdit(); closeMenu();
+  const can = k => { const m = $(`#menu [data-act="${k}"]`); if (!m) return true; const h = m.closest('[hidden]'); return !(m.hidden || (h && h.id !== 'menu')); };
+  dialog('Alle Werkzeuge', `<input class="field" id="hubQ" type="search" placeholder="Werkzeug suchen …" autocomplete="off" style="height:36px">
+    <div class="hub">${HUB.map(([g, list]) => `<section><h4>${g}</h4><div class="hubg">${list.filter(([k, , , , kind]) => kind === 'tool' ? !!$(`[data-tool="${k}"]`) || TOOL_NAMES[k] : (ACTS_REF[k] || k === 'organize') && can(k)).map(([k, l, d, ic, kind]) => `<button type="button" class="hubt" data-h="${k}" data-kind="${kind || ''}" data-s="${esc((l + ' ' + d + ' ' + g).toLowerCase())}"><span class="hi">${icon(ic)}</span><span><b>${l}</b><small>${d}</small></span></button>`).join('')}</div></section>`).join('')}</div>`, 'Schließen', () => true);
+  $('#dlgCancel').hidden = true;
+  const b = $('#dlgBody'); $('#dlg .card').classList.add('wide');
+  const q = $('#hubQ', b); if (!COARSE) setTimeout(() => q.focus(), 40);
+  q.oninput = () => { const s = q.value.trim().toLowerCase(); $$('.hubt', b).forEach(t => { t.hidden = !!s && !t.dataset.s.includes(s); }); $$('.hub section', b).forEach(sec => { sec.hidden = !$$('.hubt', sec).some(t => !t.hidden); }); };
+  q.onkeydown = e => { if (e.key === 'Enter') { const t = $$('.hubt', b).find(x => !x.hidden); if (t) t.click(); } };
+  b.onclick = e => {
+    const t = e.target.closest('[data-h]'); if (!t) return;
+    closeDlg(); $('#dlg .card').classList.remove('wide');
+    if (t.dataset.kind === 'tool') setTool(t.dataset.h); else ACTS_REF[t.dataset.h]();
+  };
+  $('#dlgOk').addEventListener('click', () => $('#dlg .card').classList.remove('wide'), { once: true });
+}
+let ACTS_REF = {};
+
 /* ---------- Bedienelemente verbinden ---------- */
 { const sb = $('#shareBar'); if (sb) sb.addEventListener('click', () => collabDialog()); }
 function bindUI() {
@@ -5274,7 +5777,9 @@ function bindUI() {
     open: () => $('#fileOpen').click(), fit: fitWidth, merge: () => $('#fileMerge').click(), rotl: () => rotatePages(-90), rotr: () => rotatePages(90), blank: insertBlank, extract: extractPages, del: deletePages,
     tolib: toLibrary, lib: () => goLibrary(),
     read: () => setReading(true), night: () => setNight(!S.night), pencil: () => setPencilOnly(!S.pencil.only), bm: addBookmark, share: sharePdf, calc: () => window.toggleCalc(),
-    saveas: () => saveToFile(true), werkbank: saveWerkbank, collab: collabDialog, toolbar: toolbarDialog, keys: shortcutsDialog, present: () => setPresent(true), speak: () => speakDoc(), dictate, table: () => tableDialog(), qr: qrDialog, versions: versionsDialog, sepia: () => setSepia(!S.sepia), stats: statsDialog, marks: exportMarks, secure: secureDialog, photos: photosDialog, libpages: libPagesDialog };
+    saveas: () => saveToFile(true), werkbank: saveWerkbank, collab: collabDialog, toolbar: toolbarDialog, keys: shortcutsDialog, present: () => setPresent(true), speak: () => speakDoc(), dictate, table: () => tableDialog(), qr: qrDialog, versions: versionsDialog, sepia: () => setSepia(!S.sepia), stats: statsDialog, marks: exportMarks, secure: secureDialog, photos: photosDialog, libpages: libPagesDialog,
+    tools: toolsHub, organize: () => organizer(true), ocr: ocrDialog, compress: compressDialog, redactsearch: redactSearchDialog, field: () => fieldDialog(), detectfields: detectFields, compare: compareDialog, cloudopen: cloudOpen, cloudsave: cloudSaveDoc };
+  ACTS_REF = ACTS;
   $('[data-act="share"]').hidden = !canShareFiles();
   $('#mPencil').hidden = !COARSE;
   setNight(lsGet('pdfwb.night') === '1'); if (lsGet('pdfwb.sepia') === '1') setSepia(true);
@@ -5345,6 +5850,13 @@ function bindUI() {
     const end = () => { if (st) { st = null; calc && calc.redraw(); } };
     head.addEventListener('pointerup', end); head.addEventListener('pointercancel', end);
   })();
+  // ⋯-Menü als aufklappbare Gruppen (eine offen, gemerkt)
+  const openGroup = g => { $$('#menu .mg').forEach(x => { const on = x.dataset.g === g && !x.classList.contains('open'); x.classList.toggle('open', on); $('.mgh', x).setAttribute('aria-expanded', String(on)); }); lsSet('pdfwb.menu.g', $('#menu .mg.open') ? g : ''); };
+  { const g0 = lsGet('pdfwb.menu.g'); openGroup(g0 == null ? 'file' : g0); }
+  $('#menu').addEventListener('click', e => { const h = e.target.closest('.mgh'); if (h) { e.stopPropagation(); openGroup(h.parentElement.dataset.g); } });
+  if (!window.WBCloud) { $('#mCloudOpen').hidden = true; $('#mCloudSave').hidden = true; }
+  if (!window.WBTools) ['ocr', 'compress'].forEach(k => { const m = $(`#menu [data-act="${k}"]`); if (m) m.hidden = true; });
+  if (!window.WBCompare) { const m = $('#menu [data-act="compare"]'); if (m) m.hidden = true; }
   $('#menu').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (!b) return; closeMenu(); const f = ACTS[b.dataset.act]; if (f) f(); });
   $('#menu').addEventListener('keydown', e => {
     const items = $$('[data-act]', $('#menu')).filter(x => x.offsetParent), i = items.indexOf(document.activeElement);
@@ -5598,10 +6110,12 @@ async function libSave() {
 }
 /* Google-Drive-Backup des offenen Dokuments: kurz nach dem Sichern die PDF erzeugen und hochladen */
 let driveT = 0, driveBusy = false;
+const gdWants = () => !!(window.WBDrive && window.WBDrive.enabled() && (!window.WBDrive.wants || window.WBDrive.wants('change')));
+const clWants = () => !!(window.WBCloud && window.WBCloud.wants());
 function scheduleDrive(ms = 10000) {
-  if (!S.lib || S.renderMode || !window.WBDrive || !window.WBDrive.enabled()) return;
+  if (!S.lib || S.renderMode) return;
   // im Modus „beim Schließen“, „täglich“ oder „manuell“ sichert die Bibliothek, nicht jede Speicherung hier
-  if (window.WBDrive.wants && !window.WBDrive.wants('change')) return;
+  if (!gdWants() && !clWants()) return;
   clearTimeout(driveT); driveT = setTimeout(driveBackup, ms);
 }
 async function driveBackup() {
@@ -5609,9 +6123,14 @@ async function driveBackup() {
   if (!S.lib || S.dirty) { scheduleDrive(4000); return; }
   driveBusy = true;
   try {
-    const id = S.lib.id, bytes = await buildPdf(S.pages);
-    if (await window.WBDrive.backupNow(id, bytes)) { const el = $('#libState'); if (el && el.dataset.s === 'saved') { el.textContent = 'Gesichert · Drive'; el.title = 'In der Bibliothek und in Google Drive gesichert'; } }
-    else if (window.WBDrive.info().status === 'auth') { const el = $('#libState'); if (el) el.title = 'Google Drive: Anmeldung abgelaufen, in der Bibliothek auf „Fortsetzen“ tippen'; }
+    const id = S.lib.id, bytes = await buildPdf(S.pages), done = [];
+    if (gdWants()) {
+      if (await window.WBDrive.backupNow(id, bytes)) done.push('Drive');
+      else if (window.WBDrive.info().status === 'auth') { const el = $('#libState'); if (el) el.title = 'Google Drive: Anmeldung abgelaufen, in der Bibliothek auf „Fortsetzen“ tippen'; }
+    }
+    if (clWants() && await window.WBCloud.backupNow(id, bytes)) done.push(...window.WBCloud.enabledIds().map(k => window.WBCloud.info(k).short));
+    const el = $('#libState');
+    if (done.length && el && el.dataset.s === 'saved') { el.textContent = 'Gesichert · ' + (done.length === 1 ? done[0] : 'Cloud'); el.title = 'In der Bibliothek und in ' + done.join(', ') + ' gesichert'; }
   } catch (e) { console.warn('Drive', e); }
   driveBusy = false;
 }
@@ -5718,7 +6237,8 @@ function paletteProvider(q) {
     out.push({ group: 'Werkzeug', label, hint: k ? k.toUpperCase() : '', run: () => setTool(t) });
   }
   for (const b of $$('#menu [data-act]')) {
-    if (b.hidden || b.closest('[hidden]')) continue;
+    const h = b.closest('[hidden]');
+    if (b.hidden || (h && h.id !== 'menu')) continue;
     out.push({ group: 'Aktion', label: b.textContent.replace(/…/g, '').trim(), run: () => b.click() });
   }
   const A = (label, run, hint, keys) => out.push({ group: 'Aktion', label, run, hint, keys });

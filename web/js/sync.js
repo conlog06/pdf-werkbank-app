@@ -41,7 +41,7 @@
     const c = config();
     if (!c) { set('unconfigured'); return info(); }
     if (!global.supabase || !global.supabase.createClient) { set('error', 'Die Sync-Bibliothek fehlt.'); return info(); }
-    st.client = global.supabase.createClient(c.url, c.key, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'pdfwb-auth', detectSessionInUrl: true } });
+    st.client = global.supabase.createClient(c.url, c.key, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'pdfwb-auth', detectSessionInUrl: true, ...(global.wbDesktop ? { flowType: 'pkce' } : {}) } });
     try {
       const { data } = await st.client.auth.getSession();
       st.user = data && data.session ? data.session.user : null;
@@ -102,6 +102,30 @@
     const { data, error } = await st.client.auth.signUp({ email, password, options: redirect ? { emailRedirectTo: redirect } : {} });
     if (error) throw new Error(authMsg(error));
     return { confirm: !(data && data.session) };
+  }
+  /* Anmelden mit Apple, Microsoft oder Google (Anbieter im Supabase-Dashboard einschalten, siehe README) */
+  const OAUTH_NAMES = { apple: 'Apple', azure: 'Microsoft', google: 'Google' };
+  const oauthProviders = () => ((global.WB_CONFIG || {}).authProviders || []).filter(p => OAUTH_NAMES[p]);
+  async function signInOAuth(provider) {
+    await init();
+    if (!st.client) throw new Error('Sync ist noch nicht eingerichtet.');
+    const DESK = global.wbDesktop;
+    const scopes = provider === 'azure' ? 'email openid profile' : undefined;
+    if (DESK && DESK.oauthLoopback) {
+      const redirectTo = 'http://localhost:53682/';
+      const { data, error } = await st.client.auth.signInWithOAuth({ provider, options: { redirectTo, skipBrowserRedirect: true, scopes } });
+      if (error) throw new Error(authMsg(error));
+      const r = await DESK.oauthLoopback({ url: data.url, port: 53682, title: 'Angemeldet' });
+      if (!r || !r.code) throw new Error(r && r.error_description ? r.error_description : 'Anmeldung abgebrochen.');
+      const ex = await st.client.auth.exchangeCodeForSession(r.code);
+      if (ex.error) throw new Error(authMsg(ex.error));
+      if (mode() === 'manual') setTimeout(syncNow, 600);
+      return true;
+    }
+    const redirectTo = location.origin + location.pathname;
+    const { error } = await st.client.auth.signInWithOAuth({ provider, options: { redirectTo, scopes } });
+    if (error) throw new Error(authMsg(error));
+    return new Promise(() => {}); // Weiterleitung zum Anbieter
   }
   async function signOut() { if (st.client) await st.client.auth.signOut(); }
   function authMsg(e) {
@@ -327,7 +351,7 @@
   }
 
   global.WBSync = {
-    init, config, setConfig, signIn, signUp, signOut, syncNow, schedule, fetchDoc, info, share, setMode, mode, MODES,
+    init, config, setConfig, signIn, signUp, signOut, signInOAuth, oauthProviders, OAUTH_NAMES, syncNow, schedule, fetchDoc, info, share, setMode, mode, MODES,
     ready: () => !!(st.client && st.user),
     client: async () => { await init(); return st.client; }, user: () => st.user,
     onStatus: fn => { listeners.add(fn); fn(info()); return () => listeners.delete(fn); },

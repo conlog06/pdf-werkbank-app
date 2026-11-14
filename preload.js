@@ -35,6 +35,14 @@ contextBridge.exposeInMainWorld('wbDesktop', {
     return r.id;
   },
   aiAbort: id => ipcRenderer.send('ai-abort', id),
+  // Cloud-Dienste: HTTP ohne CORS, Anmeldung mit Rücksprung, verschlüsselte Zugänge, Ordner (iCloud Drive …)
+  http: req => ipcRenderer.invoke('http-request', req).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
+  oauthLoopback: o => ipcRenderer.invoke('oauth-loopback', o).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
+  cloudSecret: o => ipcRenderer.invoke('cloud-secret', o).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
+  folderPresets: () => ipcRenderer.invoke('folder-presets'),
+  folderAllow: o => ipcRenderer.invoke('folder-allow', o),
+  folderPick: () => ipcRenderer.invoke('folder-pick'),
+  fsOp: o => ipcRenderer.invoke('fs-op', o),
   // Datei über den Speichern-Dialog des Systems sichern
   saveFile: (name, bytes) => ipcRenderer.invoke('save-file', { name, bytes }).then(r => { if (r && r.error) throw new Error(r.error); return r; }),
   // automatische Updates

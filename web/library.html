@@ -104,6 +104,15 @@ svg.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;st
 .stabs2 button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
 .srow{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px}
 .srow .t{flex:1;min-width:0}.srow small{display:block;color:var(--muted);font-size:12px}
+.ordiv{display:flex;align-items:center;gap:10px;margin:14px 0 10px;color:var(--muted);font-size:12px}.ordiv::before,.ordiv::after{content:"";flex:1;height:1px;background:var(--line)}
+.oauthrow{display:flex;flex-direction:column;gap:8px}.btn.oauth{justify-content:center;width:100%}
+.cllist{display:flex;flex-direction:column;gap:8px;margin:4px 0 14px}
+.clrow{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--raise);color:var(--ink);text-align:left;cursor:pointer;font:inherit}
+.clrow:hover{border-color:var(--accent);background:var(--accent-soft)}
+.clrow .t{flex:1;min-width:0}.clrow small{display:block;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clico{flex:none;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.clbadge{flex:none;font:500 11.5px/1 var(--f-mono,monospace);padding:5px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.clbadge.on{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
 .thm{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
 .thm button{border:1px solid var(--line);border-radius:10px;background:var(--raise);padding:10px;cursor:pointer;color:var(--ink);font:500 13px var(--f-ui)}
 .thm button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);color:var(--accent)}
@@ -391,6 +400,9 @@ body{padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area
 <script src="js/store.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/gdrive.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/tools.js"></script>
+<script src="js/compare.js"></script>
 <script src="js/search.js"></script>
 <script src="js/diag.js"></script>
 <script src="js/photos.js"></script>

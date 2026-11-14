@@ -335,7 +335,7 @@
     const n = V.sel.size, trash = V.view.kind === 'trash';
     bar.innerHTML = `<b>${n ? n + ' ausgewählt' : 'Elemente antippen'}</b>` + (trash
       ? `<button class="btn" data-sa="restore"${n ? '' : ' disabled'}>${ico('restore')}Wiederherstellen</button><button class="btn" data-sa="destroy"${n ? '' : ' disabled'}>${ico('trash')}Endgültig löschen</button>`
-      : `<button class="ibtn" data-sa="all" title="Alle auswählen">${ico('select')}</button><button class="ibtn" data-sa="move" title="Verschieben"${n ? '' : ' disabled'}>${ico('move')}</button><button class="ibtn" data-sa="dup" title="Duplizieren"${n ? '' : ' disabled'}>${ico('copy')}</button><button class="ibtn" data-sa="fav" title="Favorit"${n ? '' : ' disabled'}>${ico('star')}</button><button class="ibtn" data-sa="zip" title="Als ZIP exportieren"${n ? '' : ' disabled'}>${ico('download')}</button><button class="ibtn" data-sa="trash" title="Löschen"${n ? '' : ' disabled'}>${ico('trash')}</button>`)
+      : `<button class="ibtn" data-sa="all" title="Alle auswählen">${ico('select')}</button><button class="ibtn" data-sa="move" title="Verschieben"${n ? '' : ' disabled'}>${ico('move')}</button><button class="ibtn" data-sa="dup" title="Duplizieren"${n ? '' : ' disabled'}>${ico('copy')}</button><button class="ibtn" data-sa="fav" title="Favorit"${n ? '' : ' disabled'}>${ico('star')}</button>${window.WBTools ? `<button class="ibtn" data-sa="tools" title="Werkzeuge: zusammenführen, vergleichen, verkleinern, Texterkennung"${n ? '' : ' disabled'}>${ico('grid')}</button>` : ''}<button class="ibtn" data-sa="zip" title="Als ZIP exportieren"${n ? '' : ' disabled'}>${ico('download')}</button>${CL ? `<button class="ibtn" data-sa="cloud" title="In der Cloud speichern"${n ? '' : ' disabled'}>${ico('cloud')}</button>` : ''}<button class="ibtn" data-sa="trash" title="Löschen"${n ? '' : ' disabled'}>${ico('trash')}</button>`)
       + `<button class="ibtn" data-sa="done" title="Fertig">${ico('close')}</button>`;
     bar.onclick = async e => {
       const b = e.target.closest('[data-sa]'); if (!b || b.disabled) return;
@@ -347,6 +347,8 @@
         case 'fav': { const on = !ids.every(id => V.byId.get(id).fav); for (const id of ids) await ST.update(id, { fav: on }); break; }
         case 'trash': await ST.trash(ids); toast(ids.length === 1 ? 'In den Papierkorb gelegt' : `${ids.length} Elemente in den Papierkorb gelegt`, ids); break;
         case 'zip': await exportZip(ids); return;
+        case 'cloud': await cloudSave(ids); return;
+        case 'tools': { const r = b.getBoundingClientRect(); if (await batchTools(ids, r)) { V.selecting = false; V.sel.clear(); await refresh(); } return; }
         case 'restore': await ST.restore(ids); toast('Wiederhergestellt'); break;
         case 'destroy': if (!await confirmDlg('Endgültig löschen?', `${ids.length} Element(e) werden auf allen Geräten gelöscht. Das lässt sich nicht rückgängig machen.`, 'Löschen', true)) return; await ST.destroy(ids); break;
         case 'done': break;
@@ -385,6 +387,7 @@
     else if (k === 'import') $('#fileIn').click();
     else if (k === 'notebook') notebookDialog();
     else if (k === 'folder') folderDialog(null, targetFolder());
+    else if (k === 'cloud') { if (CL && CL.anyEnabled()) cloudImport(); else cloudHub(); }
   }
   async function makeThumb(bytes) {
     if (!PDFJS) return {};
@@ -627,6 +630,11 @@
   }
 
   /* Sync: Konto, Status, Einrichtung */
+  const OA_ICO = {
+    apple: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke:none"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.1 1-4 2.4-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.1-.8 1.5 0 1.9.8 3.2.8 1.3 0 2.1-1.2 2.9-2.4.9-1.4 1.3-2.7 1.3-2.8 0 0-2.4-.9-2.4-3.9zM14 5.4c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.6 2.8-1.4z"/></svg>',
+    azure: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="stroke:none"><path fill="#f25022" d="M3 3h8.5v8.5H3z"/><path fill="#7fba00" d="M12.5 3H21v8.5h-8.5z"/><path fill="#00a4ef" d="M3 12.5h8.5V21H3z"/><path fill="#ffb900" d="M12.5 12.5H21V21h-8.5z"/></svg>',
+    google: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="stroke:none"><path fill="#4285f4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.8 3-4.4 3-7.3z"/><path fill="#34a853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#fbbc05" d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z"/><path fill="#ea4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.5l3.3 2.6C7.2 7.8 9.4 6 12 6z"/></svg>',
+  };
   async function syncDialog() {
     if (!SY) return;
     await SY.init();
@@ -649,6 +657,7 @@
         <label class="fld"><span>Passwort</span><input class="field" name="pw" type="password" autocomplete="current-password" minlength="6" required></label>
         <p class="err" id="authErr"></p>
         <div class="acts" style="justify-content:space-between">${cfg.fixed ? '<span></span>' : '<button type="button" class="btn ghost" data-x="reset">Server ändern</button>'}<span><button type="button" class="btn" data-x="0">Abbrechen</button> <button class="btn primary" id="authGo">Anmelden</button></span></div></form>
+        ${SY.oauthProviders().length ? `<div class="ordiv"><span>oder</span></div><div class="oauthrow">${SY.oauthProviders().map(p => `<button type="button" class="btn oauth" data-oa="${p}">${OA_ICO[p]}Mit ${SY.OAUTH_NAMES[p]} anmelden</button>`).join('')}</div>` : ''}
         <p class="note">Deine lokale Bibliothek wird beim ersten Anmelden in dein Konto übernommen.</p>`;
     }
     await dialog(html, {
@@ -656,6 +665,13 @@
         const sm = d.querySelector('[name=symode]');
         if (sm) sm.onchange = () => { SY.setMode(sm.value); toast('Sync: ' + I.modes[sm.value]); const n = sm.closest('.fld').nextElementSibling; if (n) n.textContent = sm.value === 'live' ? 'Änderungen erscheinen in Sekunden auf deinen anderen Geräten.' : sm.value === 'manual' ? 'Abgeglichen wird nur über „Jetzt synchronisieren“.' : 'Spart Akku und Datenvolumen; Änderungen kommen etwas später an.'; };
         d.addEventListener('click', async e => {
+          const oa = e.target.closest('[data-oa]');
+          if (oa) {
+            const err = d.querySelector('#authErr'); err.textContent = ''; oa.disabled = true;
+            try { await SY.signInOAuth(oa.dataset.oa); close(); toast('Angemeldet · Bibliothek wird abgeglichen'); }
+            catch (x) { err.style.color = ''; err.textContent = x.message || String(x); oa.disabled = false; }
+            return;
+          }
           const b = e.target.closest('[data-x]'); if (!b) return;
           if (b.dataset.x === 'now') { SY.syncNow(); close(); toast('Synchronisiere …'); }
           else if (b.dataset.x === 'out') { await SY.signOut(); close(); toast('Abgemeldet. Die Bibliothek bleibt auf diesem Gerät.'); }
@@ -765,6 +781,245 @@
     GD.setOptions({ mode: sel.value, exclude: $$('[name=ex]:checked', d).map(x => x.value), noCellular: cell ? cell.checked : undefined });
   }
 
+  /* ---------- Cloud-Dienste: OneDrive, Dropbox, iCloud Drive, WebDAV, Ordner (cloud.js) und Google Drive ---------- */
+  const CL = window.WBCloud || null;
+  const cloudIco = (id, col, sz = 22) => CL ? CL.icon(id, col).replace('width="20" height="20"', `width="${sz}" height="${sz}"`) : '';
+  function cloudSummary() {
+    const on = [];
+    let s = 'ok', sub = '';
+    if (GD) { const I = GD.info(); if (I.enabled) { on.push('Google Drive'); if (I.status === 'auth') s = 'auth'; else if (I.status === 'error') s = 'error'; else if (I.status === 'running') s = s === 'ok' ? 'running' : s; } }
+    if (CL) for (const I of CL.infoAll()) if (I.enabled) { on.push(I.short); if (I.status === 'auth' && s !== 'error') s = 'auth'; else if (I.status === 'error') s = 'error'; else if (I.status === 'running' && s === 'ok') s = 'running'; }
+    if (!on.length) return { s: 'off', title: 'Cloud-Dienste', sub: 'OneDrive, iCloud, Dropbox, Google Drive …' };
+    sub = s === 'auth' ? 'Anmeldung nötig · tippen' : s === 'error' ? 'Problem beim Sichern' : s === 'running' ? 'Sichert …' : on.join(', ');
+    return { s: s === 'ok' ? 'ok' : s, title: on.length === 1 ? on[0] : 'Cloud-Dienste', sub };
+  }
+  function renderCloud() {
+    const b = $('#driveBtn'); if (!b) return;
+    const S = cloudSummary();
+    b.dataset.s = S.s; $('#driveTitle').textContent = S.title; $('#driveSub').textContent = S.sub;
+    $('#driveIco').innerHTML = `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 19a4.5 4.5 0 0 1-.9-8.9A6 6 0 0 1 17.3 8.6 5.2 5.2 0 0 1 17.5 19z"/></svg>`;
+  }
+  const clStatus = I => !I.enabled ? (I.configured ? 'Nicht verbunden' : I.folder ? 'In diesem Browser nicht möglich' : 'Noch nicht eingerichtet')
+    : I.status === 'auth' ? (I.folder ? 'Zugriff bestätigen' : 'Anmeldung abgelaufen') : I.status === 'error' ? 'Fehler: ' + I.error : I.status === 'running' ? 'Sichert …' : I.status === 'offline' ? 'Offline, wird nachgeholt'
+    : !I.backup ? 'Verbunden · nur Öffnen und Speichern' : I.lastRun ? 'Gesichert · ' + fmtDate(I.lastRun) : 'Verbunden';
+  /* Übersicht aller Dienste */
+  async function cloudHub() {
+    const rows = [];
+    if (GD) { const I = GD.info(); rows.push({ id: 'google', name: 'Google Drive', col: '#1f9d55', sub: I.enabled ? (I.email || 'verbunden') + ' · ' + (I.status === 'auth' ? 'Anmeldung abgelaufen' : I.lastRun ? 'gesichert ' + fmtDate(I.lastRun) : 'bereit') : I.configured ? 'Nicht verbunden' : 'Noch nicht eingerichtet', on: I.enabled }); }
+    if (CL) for (const I of CL.infoAll()) rows.push({ id: I.id, name: I.label, col: I.color, sub: (I.enabled && I.account ? I.account + ' · ' : '') + clStatus(I), on: I.enabled });
+    await dialog(`<h2>Cloud-Dienste</h2><p class="lead">Die Bibliothek wird automatisch als PDFs in deine Cloud gesichert – mit allen Markierungen, in derselben Ordnerstruktur. Außerdem kannst du PDFs direkt aus der Cloud öffnen und dorthin speichern.</p>
+      <div class="cllist">${rows.map(r => `<button class="clrow" data-cl="${r.id}"><span class="clico">${cloudIco(r.id, r.col)}</span><span class="t"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small></span><span class="clbadge${r.on ? ' on' : ''}">${r.on ? 'An' : 'Verbinden'}</span></button>`).join('')}</div>
+      <p class="note">Apple iCloud bietet keine Schnittstelle für fremde Apps. Die Werkbank sichert deshalb in den <b>iCloud-Drive-Ordner</b> deines Macs bzw. PCs (Desktop-App oder Chrome/Edge); iCloud lädt die Dateien von dort hoch. Auf iPhone und iPad: ⋯ › <i>Teilen</i> › <i>In Dateien sichern</i>.</p>
+      <div class="acts">${CL && CL.anyEnabled() ? `<button class="btn" data-x="import">${ico('upload')}Aus der Cloud importieren …</button>` : ''}<button class="btn primary" data-x="0">Fertig</button></div>`, {
+      wide: true,
+      onOpen: (d, close) => d.addEventListener('click', e => {
+        const r = e.target.closest('[data-cl]');
+        if (r) { close(); if (r.dataset.cl === 'google') driveDialog(); else cloudDialog(r.dataset.cl); return; }
+        const x = e.target.closest('[data-x]'); if (!x) return;
+        close(); if (x.dataset.x === 'import') cloudImport();
+      }),
+    });
+  }
+  function backupOptsHtml(I) {
+    const rows = [];
+    const walk = (pid, lvl) => folders().filter(f => (f.parent || null) === pid && alive(f)).sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true })).forEach(f => {
+      rows.push(`<label class="xrow" style="--lvl:${lvl}"><input type="checkbox" name="ex" value="${f.id}" ${I.exclude.includes(f.id) ? 'checked' : ''}><span class="ficon" style="--fc:${f.color}">${ico(f.icon || 'folder')}</span><span>${esc(f.name)}</span></label>`);
+      walk(f.id, lvl + 1);
+    });
+    walk(null, 0);
+    return `<div class="clopts">
+      <label class="chkrow"><input type="checkbox" name="clbackup" ${I.backup ? 'checked' : ''}> Bibliothek automatisch hierher sichern</label>
+      <div class="clmore" ${I.backup ? '' : 'hidden'}>
+      <label class="fld"><span>Wann sichern</span><select class="field" name="clmode">${Object.entries(I.modes).map(([k, v]) => `<option value="${k}" ${k === I.mode ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>
+      ${rows.length ? `<details ${I.exclude.length ? 'open' : ''}><summary>Ordner ausnehmen${I.exclude.length ? ` (${I.exclude.length})` : ''}</summary><div class="xlist">${rows.join('')}</div></details>` : ''}
+      </div></div>`;
+  }
+  /* ein Dienst: verbinden, Optionen, trennen */
+  async function cloudDialog(id) {
+    if (!CL) return;
+    const I = CL.info(id), P = CL.providers[id];
+    const head = `<div class="account"><span class="avatar" style="background:#fff;box-shadow:inset 0 0 0 1px var(--line)">${cloudIco(id, I.color)}</span><div style="flex:1;min-width:0"><b>${esc(I.label)}</b><div class="note">${esc(I.enabled && I.account ? I.account + ' · ' : '')}${esc(clStatus(I))}</div></div></div>`;
+    let html = `<h2>${esc(I.label)}</h2>`, wide = false;
+    const presets = id === 'icloud' || id === 'folder' ? await CL.presets() : [];
+    if (!I.enabled && !I.configured) {
+      html += head + (I.folder
+        ? `<p class="note">Dieser Browser kann keine Ordner verbinden. Das geht in der <b>Desktop-App</b> sowie in <b>Chrome</b> und <b>Edge</b> am Computer. Auf iPhone und iPad sicherst du einzelne PDFs über ⋯ › <i>Teilen</i> › <i>In Dateien sichern</i> in iCloud Drive.</p>`
+        : `<p class="note">Für ${esc(I.label)} braucht die Werkbank eine eigene App-Registrierung (kostenlos, einmalig). Die Anleitung steht im README unter <b>Cloud-Dienste einrichten</b>; danach ${id === 'onedrive' ? '<code>onedriveClientId</code>' : '<code>dropboxAppKey</code>'} in <code>js/config.js</code> eintragen.</p>`)
+        + `<div class="acts"><button class="btn primary" data-x="0">OK</button></div>`;
+    } else if (!I.enabled) {
+      html += head;
+      if (P.oauth) html += `<p class="note">${id === 'onedrive' ? 'Funktioniert mit privatem Microsoft-Konto sowie Arbeits- oder Schulkonto (Microsoft 365).' : 'Funktioniert mit jedem Dropbox-Konto, auch kostenlos.'} Die Werkbank legt ihre Sicherungen im Ordner <b>„PDF Werkbank“</b> an und kann PDFs aus deiner ${esc(I.short)} öffnen.${I.desktop ? ' Die Anmeldung öffnet sich im Browser.' : ''}</p>
+        <p class="err" id="clErr"></p><div class="acts"><button class="btn" data-x="0">Abbrechen</button><button class="btn primary" data-x="go">${id === 'onedrive' ? 'Mit Microsoft anmelden' : 'Mit Dropbox verbinden'}</button></div>`;
+      else if (id === 'webdav') {
+        wide = true;
+        html += `<p class="note">Für Nextcloud, ownCloud, MagentaCLOUD, GMX, WEB.DE, pCloud, Strato HiDrive oder ein NAS. Bei Nextcloud am besten ein <b>App-Passwort</b> verwenden (Einstellungen › Sicherheit).${I.desktop ? '' : ' Im Browser klappt das nur, wenn der Server CORS erlaubt; in der Desktop-App immer.'}</p>
+          <form id="davF"><label class="fld"><span>Anbieter</span><select class="field" name="pre">${CL.DAV_PRESETS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select></label>
+          <label class="fld"><span>WebDAV-Adresse</span><input class="field" name="url" value="${esc(CL.DAV_PRESETS[0][2])}" required></label>
+          <label class="fld"><span>Benutzername</span><input class="field" name="user" autocomplete="username" required></label>
+          <label class="fld"><span>Passwort</span><input class="field" name="pass" type="password" autocomplete="current-password" required></label>
+          <p class="err" id="clErr"></p><div class="acts"><button type="button" class="btn" data-x="0">Abbrechen</button><button class="btn primary">Verbinden</button></div></form>`;
+      } else {
+        const hasIc = presets.find(p => p.id === 'icloud');
+        html += id === 'icloud'
+          ? `<p class="note">${I.desktop ? (hasIc ? `Gefunden: <code>${esc(hasIc.path)}</code>. Die Werkbank legt dort den Ordner „PDF Werkbank“ an, iCloud lädt die PDFs hoch und zeigt sie auf iPhone, iPad und Mac in der App <i>Dateien</i>.` : 'iCloud Drive wurde auf diesem Computer nicht gefunden. Unter Windows zuerst die App „iCloud für Windows“ installieren, oder unten den iCloud-Drive-Ordner selbst wählen.') : 'Wähle im nächsten Fenster deinen <b>iCloud-Drive</b>-Ordner (am Mac in der Seitenleiste, unter Windows „iCloud Drive“ im Explorer). iCloud lädt die PDFs von dort hoch. Der Browser fragt bei jedem Start einmal nach, ob die Werkbank den Ordner weiter benutzen darf.'}</p>`
+          : `<p class="note">Sichert die Bibliothek in einen Ordner deiner Wahl, z. B. einen synchronisierten OneDrive-, Dropbox- oder Google-Drive-Ordner, einen USB-Stick oder ein Netzlaufwerk.</p>${presets.length ? `<div class="cllist">${presets.map(p => `<button class="clrow" data-pre="${esc(p.path)}"><span class="clico">${cloudIco(p.id === 'icloud' ? 'icloud' : 'folder', p.id === 'icloud' ? '#3693f3' : '#6b7280')}</span><span class="t"><b>${esc(p.label)}</b><small>${esc(p.path)}</small></span></button>`).join('')}</div>` : ''}`;
+        html += `<p class="err" id="clErr"></p><div class="acts"><button class="btn" data-x="0">Abbrechen</button>${id === 'icloud' && hasIc ? `<button class="btn" data-x="pick">Anderen Ordner …</button><button class="btn primary" data-pre="${esc(hasIc.path)}">iCloud Drive verbinden</button>` : `<button class="btn primary" data-x="pick">Ordner wählen …</button>`}</div>`;
+      }
+    } else {
+      wide = true;
+      html += head + (I.folder ? `<p class="note">Ziel: <b>${esc(I.path)}</b> › PDF Werkbank</p>` : `<p class="note">Ziel: <b>${esc(I.short)}</b> › PDF Werkbank</p>`) + backupOptsHtml(I)
+        + `<p class="err" id="clErr"></p><div class="acts" style="justify-content:space-between;flex-wrap:wrap"><button class="btn" data-x="off">Trennen</button><span style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-x="import">${ico('upload')}Importieren …</button>${P.webUrl && P.webUrl() ? `<a class="btn" href="${P.webUrl()}" target="_blank" rel="noopener">${ico('open')}Öffnen</a>` : ''}${I.status === 'auth' ? `<button class="btn primary" data-x="resume">${I.folder ? 'Zugriff erlauben' : 'Neu anmelden'}</button>` : I.backup ? `<button class="btn primary" data-x="now">${ico('refresh')}Jetzt sichern</button>` : ''}</span></div>`;
+    }
+    await dialog(html, {
+      wide,
+      onOpen: (d, close) => {
+        const err = m => { const e = d.querySelector('#clErr'); if (e) e.textContent = m; };
+        const pre = d.querySelector('[name=pre]');
+        if (pre) pre.onchange = () => { const p = CL.DAV_PRESETS.find(x => x[0] === pre.value); d.querySelector('[name=url]').value = p[2]; d.querySelector('[name=url]').focus(); };
+        const f = d.querySelector('#davF');
+        if (f) f.onsubmit = async e => {
+          e.preventDefault(); const fd = new FormData(f), b = f.querySelector('.primary'); b.disabled = true; b.textContent = 'Prüfe …'; err('');
+          try { await CL.connect('webdav', { url: fd.get('url'), user: fd.get('user'), pass: fd.get('pass') }); close(); toast('WebDAV verbunden · Backup läuft'); }
+          catch (x) { err(x.message || String(x)); b.disabled = false; b.textContent = 'Verbinden'; }
+        };
+        d.addEventListener('change', e => {
+          if (!e.target.closest('.clopts')) return;
+          const bk = d.querySelector('[name=clbackup]');
+          d.querySelector('.clmore').hidden = !bk.checked;
+          CL.setOptions(id, { backup: bk.checked, mode: d.querySelector('[name=clmode]').value, exclude: $$('[name=ex]:checked', d).map(x => x.value) });
+        });
+        d.addEventListener('click', async e => {
+          if (e.target.closest('.clopts')) return;
+          const pr = e.target.closest('[data-pre]');
+          if (pr) { try { if (await CL.connect(id, { preset: pr.dataset.pre })) { close(); toast(I.label + ' verbunden · Backup läuft'); } } catch (x) { err(x.message || String(x)); } return; }
+          const b = e.target.closest('[data-x]'); if (!b) return;
+          const k = b.dataset.x;
+          if (k === 'go') { b.disabled = true; b.textContent = 'Anmelden …'; try { await CL.connect(id); close(); toast(I.label + ' verbunden · Backup läuft'); } catch (x) { err(x.message || String(x)); b.disabled = false; b.textContent = 'Erneut versuchen'; } }
+          else if (k === 'pick') { try { if (await CL.connect(id)) { close(); toast(I.label + ' verbunden · Backup läuft'); } } catch (x) { err(x.message || String(x)); } }
+          else if (k === 'now') { CL.run(true); close(); toast('Backup gestartet'); }
+          else if (k === 'resume') { try { await CL.resume(id); close(); toast('Weiter geht’s'); } catch (x) { err(x.message || String(x)); } }
+          else if (k === 'import') { close(); cloudImport(id); }
+          else if (k === 'off') { if (await confirmDlg(I.label + ' trennen?', 'Das automatische Backup endet. Bereits gesicherte PDFs bleiben dort.', 'Trennen')) { await CL.disconnect(id); close(); toast(I.label + ' getrennt'); } }
+          else close();
+        });
+      },
+    });
+  }
+  /* PDFs aus der Cloud in die Bibliothek holen */
+  async function cloudImport(provider) {
+    if (!CL) return;
+    const files = await CL.pick({ mode: 'open', multiple: true, provider, accept: ['pdf', 'werkbank'] });
+    if (!files || !files.length) return;
+    const docs = await importFiles(files.map(f => new File([f.bytes], f.name, { type: /\.werkbank$/i.test(f.name) ? 'application/octet-stream' : 'application/pdf' })));
+    if (docs.length === 1) openDoc(docs[0].id);
+  }
+  /* PDF eines oder mehrerer Dokumente in der Cloud speichern */
+  async function cloudSave(ids) {
+    if (!CL) return;
+    if (!CL.anyEnabled()) { cloudHub(); return; }
+    const docs = ids.map(id => V.byId.get(id)).filter(i => i && i.kind === 'doc');
+    if (!docs.length) return;
+    if (docs.length === 1) {
+      const it = docs[0];
+      const r = await CL.pick({ mode: 'save', name: it.name.replace(/[\\/:*?"<>|]/g, '-') + '.pdf', ext: '.pdf', make: async () => { if (it.missing) await SY.fetchDoc(it.id); return GD.pdfOf(await ST.get(it.id)); } });
+      if (r) toast(`In ${r.label} gespeichert: ${r.path.join(' › ')}`);
+      return;
+    }
+    // mehrere: Zielordner wählen, alle hinein
+    const r = await CL.pick({ mode: 'folder', hint: docs.length + ' PDFs hierher speichern' });
+    if (!r) return;
+    const P = CL.providers[r.provider], dir = r.path;
+    busy(`Speichert 0 von ${docs.length} …`);
+    let n = 0;
+    try {
+      for (const it of docs) {
+        if (it.missing) await SY.fetchDoc(it.id);
+        await P.put([...dir, it.name.replace(/[\\/:*?"<>|]/g, '-') + '.pdf'], await GD.pdfOf(await ST.get(it.id)));
+        busy(`Speichert ${++n} von ${docs.length} …`);
+      }
+      busy(false); toast(`${n} PDFs in ${r.label} gespeichert`);
+    } catch (e) { busy(false); toast('Speichern fehlgeschlagen: ' + (e.message || e)); }
+  }
+
+  /* ---------- Stapel-Werkzeuge: mehrere Dokumente zusammenführen, vergleichen, verkleinern, Texterkennung ---------- */
+  const TL = window.WBTools || null;
+  async function batchTools(ids, r) {
+    const docs = ids.map(id => V.byId.get(id)).filter(i => i && i.kind === 'doc');
+    if (!docs.length) { toast('Bitte Dokumente auswählen (keine Ordner).'); return false; }
+    const n = docs.length, entries = [];
+    if (n >= 2) entries.push({ k: 'merge', i: 'docs', l: `${n} Dokumente zusammenführen` });
+    if (n === 2 && window.WBCompare) entries.push({ k: 'compare', i: 'search', l: 'Die beiden vergleichen' });
+    entries.push({ k: 'compress', i: 'download', l: n === 1 ? 'Verkleinern' : `${n} Dokumente verkleinern` });
+    entries.push({ k: 'ocr', i: 'search', l: n === 1 ? 'Texterkennung (OCR)' : `Texterkennung für ${n} Dokumente` });
+    const k = await showMenu(entries, r.right - 260, r.bottom + 6);
+    if (!k) return false;
+    // Reihenfolge wie in der Ansicht
+    const order = currentItems().map(i => i.id); docs.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    const pdfOf = async it => { if (it.missing) await SY.fetchDoc(it.id); return GD.pdfOf(await ST.get(it.id)); };
+    try {
+      if (k === 'merge') {
+        busy(`Führt ${n} Dokumente zusammen …`);
+        const list = []; for (const it of docs) { list.push(await pdfOf(it)); busy(`Führt zusammen (${list.length} von ${n}) …`); }
+        const doc = await importBytes(await TL.merge(list), docs[0].name + ' + ' + (n - 1) + (n === 2 ? ' weiteres' : ' weitere'), docs[0].folder || null);
+        busy(false); await refresh(); toast(`Zusammengeführt: „${doc.name}“`);
+        return true;
+      }
+      if (k === 'compare') {
+        busy('Vergleich wird vorbereitet …');
+        const [a, b] = [...docs].sort((x, y) => (x.updatedAt || x.createdAt || 0) - (y.updatedAt || y.createdAt || 0));
+        const A = await pdfOf(a), B = await pdfOf(b);
+        busy(false);
+        await window.WBCompare.open({ a: { name: a.name, bytes: A }, b: { name: b.name, bytes: B } });
+        return false;
+      }
+      let level = 'medium', langs = 'deu+eng';
+      if (k === 'compress') {
+        const v = await choiceDlg('Verkleinern', 'Fotos und Scans werden verkleinert und neu komprimiert. Text, Schriften und Markierungen bleiben unverändert.', Object.entries(TL.LEVELS).map(([key, x]) => [key, x.label]), 'medium');
+        if (!v) return false; level = v;
+      } else {
+        const v = await choiceDlg('Texterkennung', 'Seiten ohne Text (Scans, Fotos) werden durchsuchbar. Die Erkennung läuft auf diesem Gerät.', Object.entries(TL.LANGS), 'deu+eng');
+        if (!v) return false; langs = v;
+      }
+      let before = 0, after = 0, words = 0, changed = 0, i = 0;
+      for (const it of docs) {
+        i++;
+        busy(`${k === 'ocr' ? 'Texterkennung' : 'Verkleinern'}: ${it.name} (${i} von ${n}) …`);
+        const d = await ST.loadDoc(it.id);
+        let stateJson = d.state ? JSON.stringify(d.state) : null, any = false;
+        const sources = [];
+        for (const src of d.sources) {
+          let nb = null;
+          if (k === 'compress') { const x = await TL.compress(src.bytes, { level }); before += x.before; if (x.after < x.before * 0.97) { nb = x.bytes; after += x.after; } else after += x.before; }
+          else { const x = await TL.ocr(src.bytes, { langs, mode: 'auto' }); if (x.bytes) { nb = x.bytes; words += x.words; } }
+          if (nb) {
+            const sid = 's' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+            if (stateJson) stateJson = stateJson.split('"' + src.id + '"').join('"' + sid + '"');
+            sources.push({ id: sid, name: src.name, bytes: nb }); any = true;
+          } else sources.push(src);
+        }
+        if (any) {
+          changed++;
+          const state = stateJson ? JSON.parse(stateJson) : { v: 1, srcIds: sources.map(x => x.id) };
+          if (!stateJson) state.srcIds = sources.map(x => x.id);
+          await ST.saveDoc(it.id, { state: stateJson ? state : null, sources, pages: it.pages });
+        }
+      }
+      busy(false); await refresh();
+      if (k === 'compress') toast(changed ? `${changed} ${changed === 1 ? 'Dokument' : 'Dokumente'} verkleinert: ${TL.fmtMB(before)} → ${TL.fmtMB(after)}` : 'Schon gut komprimiert – nichts zu verkleinern.');
+      else toast(changed ? `${words} Wörter in ${changed} ${changed === 1 ? 'Dokument' : 'Dokumenten'} erkannt` : 'Alle Seiten haben schon Text.');
+      return true;
+    } catch (e) { console.error(e); busy(false); toast('Fehlgeschlagen: ' + (e.message || e)); return false; }
+  }
+  /* kleine Auswahl als Dialog */
+  function choiceDlg(title, text, opts, def) {
+    return new Promise(res => {
+      let val = null;
+      dialog(`<h2>${esc(title)}</h2><p class="lead">${esc(text)}</p><div class="cllist">${opts.map(([k, l]) => `<label class="chkrow"><input type="radio" name="cho" value="${esc(k)}" ${k === def ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div><div class="acts"><button class="btn" data-x="0">Abbrechen</button><button class="btn primary" data-x="ok">Starten</button></div>`, {
+        onOpen: (d, close) => d.addEventListener('click', e => { const b = e.target.closest('[data-x]'); if (!b) return; if (b.dataset.x === 'ok') val = d.querySelector('[name=cho]:checked').value; close(); }),
+      }).then(() => res(val));
+    });
+  }
+
   /* ---------- Als App installieren ---------- */
   const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -816,7 +1071,7 @@
         isF ? { k: 'edit', i: 'palette', l: 'Name, Farbe und Symbol' } : { k: 'rename', i: 'edit', l: 'Umbenennen' },
         { k: 'fav', i: 'star', l: it.fav ? 'Aus Favoriten entfernen' : 'Zu Favoriten' },
         { k: 'move', i: 'move', l: 'Verschieben …' },
-        ...(isF ? [{ k: 'sub', i: 'plus', l: 'Unterordner erstellen' }] : [{ k: 'dup', i: 'copy', l: 'Duplizieren' }, { k: 'export', i: 'download', l: 'Als PDF exportieren' }, { k: 'wbexport', i: 'file', l: 'Als Werkbank-Datei (bearbeitbar) …' }, { k: 'collab', i: 'users', l: 'Gemeinsam bearbeiten …' }, { k: 'share', i: 'link', l: 'PDF-Link teilen …' }]),
+        ...(isF ? [{ k: 'sub', i: 'plus', l: 'Unterordner erstellen' }] : [{ k: 'dup', i: 'copy', l: 'Duplizieren' }, { k: 'export', i: 'download', l: 'Als PDF exportieren' }, { k: 'wbexport', i: 'file', l: 'Als Werkbank-Datei (bearbeitbar) …' }, { k: 'collab', i: 'users', l: 'Gemeinsam bearbeiten …' }, { k: 'share', i: 'link', l: 'PDF-Link teilen …' }, ...(CL ? [{ k: 'cloudsave', i: 'cloud', l: 'In der Cloud speichern …' }] : [])]),
         '-', { k: 'trash', i: 'trash', l: 'Löschen', danger: true }];
     const k = await showMenu(entries, x, y);
     if (!k) return;
@@ -829,6 +1084,7 @@
       case 'sub': folderDialog(null, it.id); break;
       case 'dup': await ST.duplicate(it.id); await refresh(); toast('Dupliziert'); break;
       case 'share': shareLink(it); break;
+      case 'cloudsave': cloudSave([it.id]); break;
       case 'collab': if (window.WBShare) window.WBShare.ownerDialog(it, { toast, busy, dialog, esc, ico }); break;
       case 'wbexport': {
         busy('Werkbank-Datei wird erstellt …');
@@ -894,7 +1150,7 @@
       ${AI ? `<div data-p="ai" hidden><p class="lead" style="margin-top:0">Der KI-Assistent im Editor fasst zusammen, beantwortet Fragen zum PDF, erstellt Lernkarten und liest Handschrift.</p><div id="stAI"></div></div>` : ''}
       <div data-p="backup" hidden>
         <div class="srow"><span class="t"><b>Geräte synchronisieren</b><small>${sI && sI.user ? esc(sI.user.email) + ' · ' + esc((sI.modes || {})[sI.mode] || '') : 'Nicht angemeldet'}</small></span><button type="button" class="btn" data-go="sync">Öffnen</button></div>
-        <div class="srow"><span class="t"><b>Backup in Google Drive</b><small>${dI && dI.enabled ? esc(dI.email || 'verbunden') + ' · ' + esc((dI.modes || {})[dI.mode] || '') : 'Aus'}</small></span><button type="button" class="btn" data-go="drive">Öffnen</button></div>
+        <div class="srow"><span class="t"><b>Cloud-Dienste</b><small>${esc(cloudSummary().sub)}</small></span><button type="button" class="btn" data-go="cloud">Öffnen</button></div>
       </div>
       <div data-p="app" hidden>
         <div class="srow"><span class="t"><b>PDF Werkbank${ver ? ' ' + esc(ver) : ''}</b><small>${DESK ? 'Desktop-App · aktualisiert sich selbst' : 'Webseite · lädt neue Versionen automatisch'}</small></span><button type="button" class="btn" data-go="update">Nach Updates suchen</button></div>
@@ -918,7 +1174,7 @@
           if (g && g.dataset.go === 'default') { makeDefaultPdf(d); return; }
           if (g && g.dataset.go === 'diag') { WBDiag.report().then(t => navigator.clipboard.writeText(t)).then(() => toast('Fehlerprotokoll kopiert'), () => toast('Kopieren nicht möglich')); return; }
           if (g && (g.dataset.go === 'logs' || g.dataset.go === 'backups')) { DESK.showPath(g.dataset.go); return; }
-          if (g) { const k = g.dataset.go; close(); if (k === 'sync') syncDialog(); else if (k === 'drive') driveDialog(); else if (k === 'install') installDialog(); else if (k === 'update' && window.WBUpdate) WBUpdate.check(true); return; }
+          if (g) { const k = g.dataset.go; close(); if (k === 'sync') syncDialog(); else if (k === 'drive') driveDialog(); else if (k === 'cloud') cloudHub(); else if (k === 'install') installDialog(); else if (k === 'update' && window.WBUpdate) WBUpdate.check(true); return; }
           if (e.target.closest('[data-x]')) close();
         });
         d.querySelector('#stTile').oninput = e => setTile(+e.target.value);
@@ -1090,7 +1346,7 @@
     bindTileZoom();
     $('#newBtn').onclick = async e => {
       const r = e.currentTarget.getBoundingClientRect();
-      const k = await showMenu([{ k: 'notebook', i: 'notebook', l: 'Neues Notizbuch' }, { k: 'import', i: 'upload', l: 'PDF importieren …' }, { k: 'photos', i: 'camera', l: 'Aus Fotos oder Scan …' }, { k: 'folder', i: 'folder', l: 'Neuer Ordner' }], r.right - 230, r.bottom + 6);
+      const k = await showMenu([{ k: 'notebook', i: 'notebook', l: 'Neues Notizbuch' }, { k: 'import', i: 'upload', l: 'PDF importieren …' }, ...(CL ? [{ k: 'cloud', i: 'cloud', l: 'Aus der Cloud importieren …' }] : []), { k: 'photos', i: 'camera', l: 'Aus Fotos oder Scan …' }, { k: 'folder', i: 'folder', l: 'Neuer Ordner' }], r.right - 230, r.bottom + 6);
       if (k) newAction(k);
     };
     $('#fileIn').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (f.length) await importFiles(f); };
@@ -1101,7 +1357,7 @@
     $('#setIco').innerHTML = ico('gear'); $('#setBtn').onclick = () => settingsDialog(); renderAIState();
     setTimeout(askDefaultPdf, 2500);
     if (window.WBDiag) setTimeout(() => WBDiag.checkSpace(m => toast(m)), 5000);
-    if (GD) { $('#driveBtn').onclick = driveDialog; GD.onStatus(renderDrive); GD.watch(); } else $('#driveBtn').hidden = true;
+    if (GD || CL) { $('#driveBtn').onclick = () => { const sm = cloudSummary(); if (sm.s === 'auth' && GD && GD.info().status === 'auth' && !GD.info().desktop) { driveDialog(); return; } cloudHub(); }; if (GD) { GD.onStatus(renderCloud); GD.watch(); } if (CL) { CL.onStatus(renderCloud); CL.watch(); } } else $('#driveBtn').hidden = true;
 
     $('#nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (b) go({ kind: b.dataset.nav, id: null }); };
     $('#tree').onclick = e => {
@@ -1280,6 +1536,7 @@
     if (p.get('new') === 'notebook') newAction('notebook');
     if (p.get('new') || p.get('import')) history.replaceState(null, '', 'library.html');
     inbox();
+    if (CL) CL.handleRedirect().then(r => { if (!r) return; if (r.ok) toast(CL.info(r.pid).label + ' verbunden · Backup läuft'); else { toast(r.error); if (r.pid) cloudDialog(r.pid); } });
   }
   boot();
 })();

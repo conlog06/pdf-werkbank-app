@@ -1,7 +1,7 @@
 {
   "name": "pdf-werkbank-app",
   "productName": "PDF Werkbank",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "PDF Werkbank als Desktop-App für Windows und macOS: Bibliothek mit Ordnern, PDF-Editor und Abgleich mit der Webseite.",
   "main": "main.js",
   "author": "Constantin Loggen <scrabby8@gmail.com>",
@@ -20,10 +20,14 @@
     "semver": "7.7.3"
   },
   "devDependencies": {
+    "@tesseract.js-data/deu": "1.0.0",
+    "@tesseract.js-data/eng": "1.0.0",
     "electron": "43.7.5",
     "electron-builder": "26.15.3",
     "pdf-lib": "1.17.1",
-    "pdfjs-dist": "3.11.174"
+    "pdfjs-dist": "3.11.174",
+    "tesseract.js": "5.1.1",
+    "tesseract.js-core": "5.1.1"
   },
   "build": {
     "appId": "de.loggx.pdfwerkbank",

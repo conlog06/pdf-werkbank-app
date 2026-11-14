@@ -216,6 +216,43 @@ output{font:11.5px var(--f-mono);color:var(--ink);min-width:3.6em;font-variant-n
 .menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:9px 12px;border-radius:6px;font-size:13.5px;cursor:pointer;color:var(--ink)}
 .menu button:hover,.menu button:focus-visible{background:var(--accent-soft);outline:none}
 .menu button.danger{color:var(--danger)}
+.menu .mtools{display:flex;align-items:center;gap:10px;font-weight:600;color:var(--accent);margin-bottom:4px}
+.menu .mtools .ico{width:18px;height:18px}
+.menu .mgh{display:flex;align-items:center;gap:10px;font-weight:600}
+.menu .mgh .ico{width:17px;height:17px;color:var(--muted)}
+.menu .mgh span{flex:1}
+.menu .mgh .ico:last-child{width:14px;height:14px;transition:transform .15s}
+.menu .mg.open .mgh .ico:last-child{transform:rotate(90deg)}
+.menu .mgi{display:none;padding:0 0 4px 27px}
+.menu .mg.open .mgi{display:block}
+.menu .mg.open{background:color-mix(in srgb,var(--accent-soft) 45%,transparent);border-radius:8px}
+/* Alle Werkzeuge */
+.card.wide{width:min(860px,100%)}
+.hub{display:flex;flex-direction:column;gap:14px;max-height:min(62vh,640px);overflow:auto;padding:2px}
+.hub h4{margin:0 0 6px;font:600 10.5px/1 var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.hubg{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.hubt{display:flex;gap:10px;align-items:flex-start;text-align:left;border:1px solid var(--line);background:var(--raise);color:var(--ink);border-radius:10px;padding:10px;cursor:pointer;font:inherit}
+.hubt:hover,.hubt:focus-visible{border-color:var(--accent);background:var(--accent-soft);outline:none}
+.hubt .hi{flex:none;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
+.hubt .hi .ico{width:18px;height:18px}
+.hubt b{display:block;font-size:13.5px}.hubt small{display:block;color:var(--muted);font-size:12px;line-height:1.35;margin-top:2px}
+.chkgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:2px 12px}
+.radios{display:flex;flex-direction:column;gap:2px}
+.chkrow{display:flex;align-items:center;gap:8px;cursor:pointer;min-height:30px}
+/* Seitenübersicht */
+.orgv{position:fixed;inset:0;z-index:70;background:var(--desk);display:grid;grid-template-rows:auto minmax(0,1fr)}
+.orgv header{display:flex;align-items:center;gap:6px;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:var(--chrome);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.orgv header .grow{flex:1}
+.orggrid{overflow:auto;padding:18px;display:flex;flex-wrap:wrap;gap:18px;align-content:flex-start;justify-content:center}
+.orgt{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:pan-y;position:relative}
+.orgt .orgc{position:relative;background:#fff;box-shadow:0 1px 4px rgb(0 0 0/.18);border-radius:3px;overflow:hidden;outline:3px solid transparent;outline-offset:2px}
+.orgt .orgc canvas,.orgt .orgc svg{position:absolute;inset:0;width:100%;height:100%}
+.orgt span{font:500 12px var(--f-mono);color:var(--muted)}
+.orgt.on .orgc{outline-color:var(--accent)}.orgt.on span{color:var(--accent)}
+.orgt.drag{opacity:.35}
+.orgt.ghost{position:fixed;z-index:80;pointer-events:none;opacity:.85;transform:rotate(-3deg)}
+.orgt.before::before,.orgt.after::after{content:"";position:absolute;top:0;bottom:22px;width:4px;border-radius:2px;background:var(--accent)}
+.orgt.before::before{left:-11px}.orgt.after::after{right:-11px}
 .menu hr{border:0;border-top:1px solid var(--line);margin:5px 4px}
 .menu .mh{font:600 10.5px/1 var(--f-mono,monospace);letter-spacing:.07em;text-transform:uppercase;color:var(--muted);padding:12px 12px 5px}
 .menu .mh:first-child{padding-top:6px}
@@ -533,19 +570,56 @@ body:not(.present) #presNum{display:none}
     <div class="menuwrap">
       <button class="ibtn" id="btnMore" title="Weitere Funktionen" aria-label="Weitere Funktionen" aria-haspopup="menu" aria-expanded="false"><i data-i="more"></i></button>
       <div class="menu" id="menu" role="menu" hidden>
-        <div class="mh">Datei</div>
+        <button role="menuitem" data-act="tools" class="mtools"><i data-i="grid"></i><span>Alle Werkzeuge …</span></button>
+        <div class="mg" data-g="file"><button type="button" class="mgh" aria-expanded="false"><i data-i="open"></i><span>Datei</span><i data-i="chev"></i></button><div class="mgi">
         <button role="menuitem" data-act="new">Neues Dokument …</button>
         <button role="menuitem" data-act="open" class="m-only">PDF öffnen …</button>
+        <button role="menuitem" data-act="cloudopen" id="mCloudOpen">Aus der Cloud öffnen …</button>
         <button role="menuitem" data-act="merge">Weitere PDF anhängen …</button>
         <button role="menuitem" data-act="libpages" id="mLibPages" hidden>Seiten aus der Bibliothek einfügen …</button>
         <button role="menuitem" data-act="photos">Fotos oder Scans als Seiten …</button>
         <button role="menuitem" data-act="saveas" class="fm-only">Speichern unter …</button>
+        <button role="menuitem" data-act="cloudsave" id="mCloudSave">In der Cloud speichern …</button>
         <button role="menuitem" data-act="werkbank">Als Werkbank-Datei speichern (.werkbank) …</button>
-        <button role="menuitem" data-act="collab" id="mCollab">Gemeinsam bearbeiten (Link) …</button>
         <button role="menuitem" data-act="secure">Mit Passwort speichern …</button>
-        <button role="menuitem" data-act="share" hidden>Teilen …</button>
         <button role="menuitem" data-act="tolib" id="mToLib" hidden>In die Bibliothek übernehmen</button>
-        <div class="mh">Ansicht</div>
+        </div></div>
+        <div class="mg" data-g="share"><button type="button" class="mgh" aria-expanded="false"><i data-i="users"></i><span>Teilen</span><i data-i="chev"></i></button><div class="mgi">
+        <button role="menuitem" data-act="collab" id="mCollab">Gemeinsam bearbeiten (Link) …</button>
+        <button role="menuitem" data-act="share" hidden>Teilen …</button>
+        <button role="menuitem" data-act="marks">Markierungen und Kommentare als Text …</button>
+        <button role="menuitem" data-act="png">Seite als Bild speichern (PNG)</button>
+        <button role="menuitem" data-act="txt">Text exportieren (TXT)</button>
+        </div></div>
+        <div class="mg" data-g="insert"><button type="button" class="mgh" aria-expanded="false"><i data-i="insert"></i><span>Einfügen</span><i data-i="chev"></i></button><div class="mgi">
+        <button role="menuitem" data-act="field">Formularfeld …</button>
+        <button role="menuitem" data-act="detectfields">Formular automatisch erkennen</button>
+        <button role="menuitem" data-act="table">Tabelle …</button>
+        <button role="menuitem" data-act="calc">Rechner und Live-Graphen</button>
+        <button role="menuitem" data-act="qr">QR-Code …</button>
+        <button role="menuitem" data-act="wm">Wasserzeichen …</button>
+        <button role="menuitem" data-act="pn">Seitenzahlen …</button>
+        </div></div>
+        <div class="mg" data-g="page"><button type="button" class="mgh" aria-expanded="false"><i data-i="pages"></i><span>Seiten</span><i data-i="chev"></i></button><div class="mgi">
+        <button role="menuitem" data-act="organize">Seitenübersicht (sortieren, drehen) …</button>
+        <button role="menuitem" data-act="blank">Neue Seite / Notizpapier …</button>
+        <button role="menuitem" data-act="dup">Seite duplizieren</button>
+        <button role="menuitem" data-act="bm">Lesezeichen für diese Seite</button>
+        <button role="menuitem" data-act="rotl" class="m-only">Seite links drehen</button>
+        <button role="menuitem" data-act="rotr" class="m-only">Seite rechts drehen</button>
+        <button role="menuitem" data-act="extract">Seite(n) als eigene PDF speichern</button>
+        <button role="menuitem" data-act="del" class="m-only danger">Seite löschen</button>
+        </div></div>
+        <div class="mg" data-g="tools"><button type="button" class="mgh" aria-expanded="false"><i data-i="sliders"></i><span>Werkzeuge</span><i data-i="chev"></i></button><div class="mgi">
+        <button role="menuitem" data-act="ocr">Texterkennung (OCR) …</button>
+        <button role="menuitem" data-act="compress">PDF verkleinern …</button>
+        <button role="menuitem" data-act="redactsearch">Suchen und schwärzen …</button>
+        <button role="menuitem" data-act="compare">Vergleichen …</button>
+        <button role="menuitem" data-act="versions" id="mVersions" hidden>Versionsverlauf …</button>
+        <button role="menuitem" data-act="dictate">Diktieren in ein Textfeld</button>
+        <button role="menuitem" data-act="stats">Dokument-Statistik</button>
+        </div></div>
+        <div class="mg" data-g="view"><button type="button" class="mgh" aria-expanded="false"><i data-i="eye"></i><span>Ansicht</span><i data-i="chev"></i></button><div class="mgi">
         <button role="menuitem" data-act="fit" class="m-only">Auf Seitenbreite zoomen</button>
         <button role="menuitem" data-act="read">Lesemodus</button>
         <button role="menuitem" data-act="present">Präsentieren (Vollbild) …</button>
@@ -554,26 +628,7 @@ body:not(.present) #presNum{display:none}
         <button role="menuitem" data-act="night" id="mNight">Nachtmodus für Seiten</button>
         <button role="menuitem" data-act="pencil" id="mPencil">Nur Apple Pencil zeichnet</button>
         <button role="menuitem" data-act="toolbar">Werkzeugleiste anpassen …</button>
-        <div class="mh">Seite</div>
-        <button role="menuitem" data-act="bm">Lesezeichen für diese Seite</button>
-        <button role="menuitem" data-act="dup">Seite duplizieren</button>
-        <button role="menuitem" data-act="blank">Neue Seite / Notizpapier …</button>
-        <button role="menuitem" data-act="rotl" class="m-only">Seite links drehen</button>
-        <button role="menuitem" data-act="rotr" class="m-only">Seite rechts drehen</button>
-        <button role="menuitem" data-act="extract">Seite(n) als eigene PDF speichern</button>
-        <button role="menuitem" data-act="del" class="m-only danger">Seite löschen</button>
-        <div class="mh">Bearbeiten und Export</div>
-        <button role="menuitem" data-act="wm">Wasserzeichen …</button>
-        <button role="menuitem" data-act="pn">Seitenzahlen …</button>
-        <button role="menuitem" data-act="png">Seite als Bild speichern (PNG)</button>
-        <button role="menuitem" data-act="txt">Text exportieren (TXT)</button>
-        <button role="menuitem" data-act="calc">Rechner und Graphen</button>
-        <button role="menuitem" data-act="table">Tabelle einfügen …</button>
-        <button role="menuitem" data-act="qr">QR-Code einfügen …</button>
-        <button role="menuitem" data-act="dictate">Diktieren in ein Textfeld</button>
-        <button role="menuitem" data-act="marks">Markierungen und Kommentare als Text …</button>
-        <button role="menuitem" data-act="stats">Dokument-Statistik</button>
-        <button role="menuitem" data-act="versions" id="mVersions" hidden>Versionsverlauf …</button>
+        </div></div>
         <hr>
         <button role="menuitem" data-act="keys">Tastenkürzel und Gesten</button>
         <button role="menuitem" data-act="meta">Einstellungen …</button>
@@ -833,6 +888,7 @@ body:not(.present) #presNum{display:none}
 <script src="js/store.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/gdrive.js"></script>
+<script src="js/cloud.js"></script>
 <script src="js/update.js"></script>
 <script src="js/share.js"></script>
 <script src="js/content-engine.js"></script>
@@ -842,6 +898,8 @@ body:not(.present) #presNum{display:none}
 <script src="js/photos.js"></script>
 <script src="js/vendor/qrcode.js"></script>
 <script src="js/wbfile.js"></script>
+<script src="js/tools.js"></script>
+<script src="js/compare.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/app.js"></script>
 </body>

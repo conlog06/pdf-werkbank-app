@@ -310,6 +310,92 @@ ipcMain.handle('ai-request', (e, req) => {
 });
 ipcMain.on('ai-abort', (e, id) => { const c = aiReqs.get(id); if (c) c.abort(); });
 
+/* ---------- Cloud-Dienste (ab 1.7): OneDrive, Dropbox, WebDAV, iCloud Drive/Ordner ---------- */
+/* HTTP über das Hauptprogramm: kein CORS, kein Origin-Header (WebDAV-Server, Microsoft-Token für Desktop-Apps) */
+ipcMain.handle('http-request', wrapE(async (e, { url, method, headers, body }) => {
+  if (!/^https?:\/\//.test(String(url))) throw new Error('Ziel nicht erlaubt');
+  const r = await fetch(url, { method: method || 'GET', headers: headers || {}, body: body == null ? undefined : (typeof body === 'string' ? body : Buffer.from(body)), redirect: 'follow' });
+  const hd = {}; r.headers.forEach((v, k) => { hd[k] = v; });
+  return { status: r.status, headers: hd, body: new Uint8Array(await r.arrayBuffer()) };
+}));
+/* Anmeldung im System-Browser mit Rücksprung auf http://localhost:<port>/ (OneDrive, Dropbox, Apple/Microsoft/Google für Sync) */
+let loopBusy = null;
+const loopPage = (ok, title) => `<!doctype html><meta charset="utf-8"><title>PDF Werkbank</title><body style="font:16px system-ui;display:grid;place-items:center;height:90vh;color:#1b2130"><div style="text-align:center"><h2>${ok ? (title || 'Verbunden') : 'Anmeldung abgebrochen'}</h2><p>Du kannst dieses Fenster schließen und zur PDF Werkbank zurückkehren.</p></div>`;
+ipcMain.handle('oauth-loopback', wrapE(async (e, { url, port, title }) => {
+  if (!/^https:\/\//.test(String(url))) throw new Error('Ziel nicht erlaubt');
+  if (loopBusy) { try { loopBusy.close(); } catch (x) { /* egal */ } }
+  const params = await new Promise((res, rej) => {
+    const srv = http.createServer((req, resp) => {
+      const u = new URL(req.url, 'http://localhost');
+      if (u.pathname !== '/') { resp.writeHead(404); resp.end(); return; }
+      const q = Object.fromEntries(u.searchParams.entries());
+      resp.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); resp.end(loopPage(!!q.code, title));
+      clearTimeout(to); srv.close(); loopBusy = null; res(q);
+    });
+    const to = setTimeout(() => { srv.close(); loopBusy = null; rej(new Error('Zeitüberschreitung bei der Anmeldung.')); }, 5 * 60000);
+    srv.on('error', err => { clearTimeout(to); loopBusy = null; rej(new Error(err.code === 'EADDRINUSE' ? `Port ${port} ist belegt. Bitte das andere Anmeldefenster schließen und erneut versuchen.` : err.message)); });
+    srv.on('close', () => { clearTimeout(to); });
+    loopBusy = srv;
+    srv.listen(port || 53682, '127.0.0.1', () => shell.openExternal(url));
+  });
+  const w = BrowserWindow.fromWebContents(e.sender) || win; if (w) { if (w.isMinimized()) w.restore(); w.focus(); }
+  return params;
+}));
+ipcMain.handle('cloud-secret', wrap(({ name, value, set }) => {
+  if (!/^(onedrive|dropbox|webdav)$/.test(name || '')) throw new Error('unbekannt');
+  const all = readSecret('cloud.bin') || {};
+  if (set) { if (value) all[name] = value; else delete all[name]; writeSecret('cloud.bin', all); return {}; }
+  return { value: all[name] || '' };
+}));
+/* Ordner: nur Ordner, die der Nutzer gewählt oder als Vorschlag bestätigt hat */
+const home = () => app.getPath('home');
+function folderPresets() {
+  const c = [];
+  if (isMac) c.push({ id: 'icloud', label: 'iCloud Drive', path: path.join(home(), 'Library', 'Mobile Documents', 'com~apple~CloudDocs') });
+  else c.push({ id: 'icloud', label: 'iCloud Drive', path: path.join(home(), 'iCloudDrive') });
+  if (process.env.OneDrive) c.push({ id: 'onedrive', label: 'OneDrive-Ordner', path: process.env.OneDrive });
+  else c.push({ id: 'onedrive', label: 'OneDrive-Ordner', path: path.join(home(), 'OneDrive') });
+  c.push({ id: 'dropbox', label: 'Dropbox-Ordner', path: path.join(home(), 'Dropbox') });
+  if (isMac) { try { for (const d of fs.readdirSync(path.join(home(), 'Library', 'CloudStorage'))) c.push({ id: 'cs-' + d, label: d.replace(/^GoogleDrive-/, 'Google Drive · ').replace(/^OneDrive-/, 'OneDrive · ').replace(/^Dropbox/, 'Dropbox'), path: path.join(home(), 'Library', 'CloudStorage', d) }); } catch (e) { /* keiner */ } }
+  c.push({ id: 'docs', label: 'Dokumente', path: app.getPath('documents') });
+  const seen = new Set();
+  return c.filter(x => { try { if (seen.has(x.path) || !fs.statSync(x.path).isDirectory()) return false; } catch (e) { return false; } seen.add(x.path); return true; });
+}
+const allowRoot = p => { const roots = new Set(settings().cloudRoots || []); roots.add(p); saveSettings({ cloudRoots: [...roots] }); };
+ipcMain.handle('folder-presets', () => folderPresets());
+ipcMain.handle('folder-allow', wrapE(async (e, { path: p }) => {
+  if (!folderPresets().some(x => x.path === p)) throw new Error('Ordner nicht erlaubt');
+  allowRoot(p); return { path: p };
+}));
+ipcMain.handle('folder-pick', wrapE(async e => {
+  const r = await dlgOpen(BrowserWindow.fromWebContents(e.sender), { properties: ['openDirectory', 'createDirectory'], title: 'Ordner für die PDF Werkbank wählen' });
+  if (r.canceled || !r.filePaths[0]) return { path: null };
+  allowRoot(r.filePaths[0]); return { path: r.filePaths[0] };
+}));
+ipcMain.handle('fs-op', wrapE(async (e, { op, root, rel, bytes }) => {
+  if (!(settings().cloudRoots || []).includes(root)) throw new Error('Ordner nicht freigegeben, bitte neu wählen.');
+  const parts = (rel || []).map(String);
+  if (parts.some(x => !x || x === '.' || x === '..' || /[\\/\u0000]/.test(x))) throw new Error('Ungültiger Pfad');
+  const p = path.join(root, ...parts);
+  if (op === 'stat') { await fs.promises.access(root, fs.constants.W_OK); return {}; }
+  if (op === 'write') {
+    await fs.promises.mkdir(path.dirname(p), { recursive: true });
+    const tmp = p + '.wbtmp'; await fs.promises.writeFile(tmp, Buffer.from(bytes)); await fs.promises.rename(tmp, p); return {};
+  }
+  if (op === 'trash') { await fs.promises.access(p); try { await shell.trashItem(p); } catch (x) { await fs.promises.unlink(p); } return {}; }
+  if (op === 'read') return { bytes: new Uint8Array(await fs.promises.readFile(p)) };
+  if (op === 'list') {
+    const out = [];
+    for (const d of await fs.promises.readdir(p, { withFileTypes: true })) {
+      if (d.name.startsWith('.') || d.name.endsWith('.wbtmp')) continue;
+      let st = null; try { st = await fs.promises.stat(path.join(p, d.name)); } catch (x) { continue; }
+      out.push({ name: d.name, dir: st.isDirectory(), size: st.size, mtime: st.mtimeMs });
+    }
+    return { entries: out };
+  }
+  throw new Error('unbekannt');
+}));
+
 /* Speichern-Dialog des Systems für exportierte PDFs, Bilder und Texte */
 const FILTERS = { pdf: [{ name: 'PDF-Dokument', extensions: ['pdf'] }], werkbank: [{ name: 'Werkbank-Datei', extensions: ['werkbank'] }], open: [{ name: 'PDF und Werkbank-Dateien', extensions: ['pdf', 'werkbank'] }, { name: 'PDF-Dokument', extensions: ['pdf'] }, { name: 'Werkbank-Datei', extensions: ['werkbank'] }], png: [{ name: 'PNG-Bild', extensions: ['png'] }], txt: [{ name: 'Text', extensions: ['txt'] }] };
 ipcMain.handle('save-file', wrapE(async (ev, { name, bytes }) => {

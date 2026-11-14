@@ -2,3 +2,4 @@ node_modules/
 dist/
 web-src/
 .DS_Store
+web/lib/ocr/
