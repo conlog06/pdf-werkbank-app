@@ -149,7 +149,7 @@ ipcMain.on('doc-state', (e, { dirty, title }) => {
   if (title) d.win.setTitle(String(title));
   if (isMac) d.win.setDocumentEdited(!!dirty);
 });
-ipcMain.on('close-window', e => { const d = docOf(e.sender); if (d) { d.force = true; d.win.close(); } });
+ipcMain.on('close-window', e => { const d = docOf(e.sender); if (d) { d.force = true; setImmediate(() => { if (!d.win.isDestroyed()) d.win.destroy(); }); } });
 ipcMain.handle('open-library', () => { const w = win || createLibraryWindow(); if (w.isMinimized()) w.restore(); w.focus(); return true; });
 ipcMain.handle('open-dialog', async e => {
   const r = await dlgOpen(BrowserWindow.fromWebContents(e.sender), { properties: ['openFile', 'multiSelections'], filters: FILTERS.open });
@@ -439,14 +439,22 @@ function createAppWindow(url, kind = 'library') {
     wc.on('did-start-navigation', (e) => { if (e.isMainFrame && !e.isSameDocument) rendererReady = false; });
   } else {
     // ungespeicherte Änderungen: wie in Acrobat nachfragen
+    // Frage nicht blockierend (sonst hält Windows das Fenster für „reagiert nicht“)
     w.on('close', e => {
       const d = docWins.get(id);
       if (!d || d.force || !d.dirty) return;
       e.preventDefault();
-      const r = dialog.showMessageBoxSync(w, { type: 'question', buttons: ['Speichern', 'Nicht speichern', 'Abbrechen'], defaultId: 0, cancelId: 2, message: `Änderungen an „${path.basename(d.path)}“ speichern?`, detail: 'Ohne Speichern gehen die Änderungen verloren.' });
-      if (r === 0) wc.send('menu', 'save-close');
-      else if (r === 1) { d.force = true; w.close(); }
+      if (d.asking) return;
+      d.asking = true;
+      dialog.showMessageBox(w, { type: 'question', buttons: ['Speichern', 'Nicht speichern', 'Abbrechen'], defaultId: 0, cancelId: 2, noLink: true, message: `Änderungen an „${path.basename(d.path)}“ speichern?`, detail: 'Ohne Speichern gehen die Änderungen verloren.' }).then(({ response: r }) => {
+        d.asking = false;
+        if (w.isDestroyed()) return;
+        if (r === 0) wc.send('menu', 'save-close');
+        else if (r === 1) { d.force = true; w.destroy(); }
+      }).catch(() => { d.asking = false; });
     });
+    // das Hauptprogramm hat schon nachgefragt: die Rückfrage der Seite (beforeunload) darf das Schließen nicht mehr aufhalten
+    wc.on('will-prevent-unload', e => e.preventDefault());
     w.on('closed', () => docWins.delete(id));
   }
   // Stabilität: abgestürzte oder hängende Seiten wiederbeleben statt ein leeres Fenster zu zeigen
@@ -454,13 +462,18 @@ function createAppWindow(url, kind = 'library') {
     log('render-process-gone', kind, det);
     if (det.reason === 'clean-exit' || w.isDestroyed()) return;
     const r = dialog.showMessageBoxSync(w, { type: 'warning', buttons: ['Neu laden', 'Fenster schließen'], defaultId: 0, message: 'Die Ansicht ist abgestürzt.', detail: 'Deine Bibliothek ist sicher. Bei Dateien werden ungespeicherte Änderungen nach dem Neuladen angeboten.' });
-    if (r === 0) wc.reload(); else { const d = docWins.get(id); if (d) d.force = true; w.close(); }
+    if (r === 0) wc.reload(); else { const d = docWins.get(id); if (d) d.force = true; w.destroy(); }
   });
+  let hangAsk = false;
   w.on('unresponsive', () => {
     log('unresponsive', kind);
-    const r = dialog.showMessageBoxSync(w, { type: 'warning', buttons: ['Warten', 'Neu laden'], defaultId: 0, message: 'PDF Werkbank reagiert gerade nicht.', detail: 'Große Dateien brauchen manchmal etwas länger.' });
-    if (r === 1) wc.reload();
+    if (hangAsk || w.isDestroyed()) return;
+    const d = docWins.get(id);
+    if (d && d.force) { w.destroy(); return; } // wird ohnehin geschlossen
+    hangAsk = true;
+    dialog.showMessageBox(w, { type: 'warning', buttons: ['Warten', 'Neu laden'], defaultId: 0, noLink: true, message: 'PDF Werkbank reagiert gerade nicht.', detail: 'Große Dateien brauchen manchmal etwas länger.' }).then(({ response: r }) => { hangAsk = false; if (r === 1 && !w.isDestroyed()) wc.reload(); }).catch(() => { hangAsk = false; });
   });
+  w.on('responsive', () => { hangAsk = false; });
   wc.on('console-message', (e, level, message, line, source) => {
     const lv = e && e.level != null ? e.level : level, msg = e && e.message != null ? e.message : message;
     if (lv === 3 || lv === 'error') log('console', kind, msg, (e && e.sourceId) || source || '', (e && e.lineNumber) || line || '');
