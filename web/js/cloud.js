@@ -1,5 +1,5 @@
 /* PDF Werkbank – Cloud-Dienste (ab Version 1.7)
- * Microsoft OneDrive, Dropbox, iCloud Drive bzw. ein beliebiger Ordner, WebDAV (Nextcloud, ownCloud, MagentaCLOUD, GMX, WEB.DE, pCloud, HiDrive, NAS).
+ * Dropbox, iCloud Drive bzw. ein beliebiger Ordner, WebDAV (Nextcloud, ownCloud, MagentaCLOUD, GMX, WEB.DE, pCloud, HiDrive, NAS).
  * Google Drive bleibt in gdrive.js (WBDrive) und erscheint hier nur in der Übersicht.
  *
  * Jeder Dienst kann
@@ -8,7 +8,7 @@
  *   - einzelne PDFs dorthin speichern.
  *
  * Anmeldung:
- *   Webseite    – OAuth mit PKCE über eine Weiterleitung auf library.html (OneDrive, Dropbox)
+ *   Webseite    – OAuth mit PKCE über eine Weiterleitung auf library.html (Dropbox)
  *   Desktop-App – Anmeldung im System-Browser mit Rücksprung auf http://localhost:53682/, Anfragen laufen über das
  *                 Hauptprogramm (kein CORS), Zugangsdaten verschlüsselt im System-Schlüsselbund (window.wbDesktop)
  */
@@ -65,15 +65,8 @@
   const webRedirect = () => location.origin + location.pathname.replace(/[^/]*$/, '') + 'library.html';
   const form = o => Object.entries(o).filter(([, v]) => v != null).map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
 
-  /* Anbieter mit OAuth: OneDrive und Dropbox */
+  /* Anbieter mit OAuth: Dropbox */
   const OAUTH = {
-    onedrive: {
-      clientId: () => C().onedriveClientId,
-      auth: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
-      token: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
-      scope: 'Files.ReadWrite User.Read offline_access',
-      extra: { prompt: 'select_account' },
-    },
     dropbox: {
       clientId: () => C().dropboxAppKey,
       auth: 'https://www.dropbox.com/oauth2/authorize',
@@ -113,7 +106,7 @@
   /* Webseite: Rücksprung von Microsoft/Dropbox auf library.html?code=…&state=… */
   async function handleRedirect() {
     const q = new URLSearchParams(location.search);
-    const state = q.get('state'); if (!state || !/^(onedrive|dropbox)\./.test(state)) return null;
+    const state = q.get('state'); if (!state || !/^dropbox\./.test(state)) return null;
     let pend = null; try { pend = JSON.parse(sessionStorage.getItem('pdfwb.cloud.oauth') || 'null'); sessionStorage.removeItem('pdfwb.cloud.oauth'); } catch (e) { /* egal */ }
     history.replaceState(null, '', location.pathname);
     if (!pend || pend.state !== state) return { error: 'Anmeldung abgelaufen, bitte noch einmal verbinden.' };
@@ -171,38 +164,6 @@
   const kindOf = name => /\.pdf$/i.test(name) ? 'pdf' : /\.werkbank$/i.test(name) ? 'werkbank' : 'file';
 
   const P = {};
-  P.onedrive = {
-    id: 'onedrive', label: 'Microsoft OneDrive', short: 'OneDrive', color: '#0f6cbd', oauth: true,
-    configured: () => !!(C().onedriveClientId || C().cloudFake),
-    G: () => C().graphBase || 'https://graph.microsoft.com/v1.0',
-    async account() { const r = await authed('onedrive', this.G() + '/me?$select=displayName,mail,userPrincipalName'); if (!r.ok) await fail(r); const j = await r.json(); return j.mail || j.userPrincipalName || j.displayName || ''; },
-    async put(parts, bytes) {
-      const r = await authed('onedrive', `${this.G()}/me/drive/root:/${enc(parts)}:/content?@microsoft.graph.conflictBehavior=replace`, { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: bytes });
-      if (!r.ok) await fail(r, 'OneDrive');
-    },
-    async del(parts) { const r = await authed('onedrive', `${this.G()}/me/drive/root:/${enc(parts)}`, { method: 'DELETE' }); if (r.status === 404) return; if (!r.ok && r.status !== 204) await fail(r, 'OneDrive'); },
-    async list(parts) {
-      let url = parts.length ? `${this.G()}/me/drive/root:/${enc(parts)}:/children` : `${this.G()}/me/drive/root/children`;
-      url += '?$select=id,name,size,folder,file,lastModifiedDateTime&$top=500';
-      const out = [];
-      while (url) {
-        const r = await authed('onedrive', url); if (r.status === 404) throw new NotFound(); if (!r.ok) await fail(r, 'OneDrive');
-        const j = await r.json();
-        for (const it of j.value || []) out.push({ name: it.name, dir: !!it.folder, size: it.size || 0, mtime: Date.parse(it.lastModifiedDateTime) || 0, kind: it.folder ? 'dir' : kindOf(it.name) });
-        url = j['@odata.nextLink'] || '';
-      }
-      return out;
-    },
-    async get(parts) {
-      const r = await authed('onedrive', `${this.G()}/me/drive/root:/${enc(parts)}?$select=id,@microsoft.graph.downloadUrl`);
-      if (r.status === 404) throw new NotFound(); if (!r.ok) await fail(r, 'OneDrive');
-      const j = await r.json(), u = j['@microsoft.graph.downloadUrl'];
-      const d = u ? await http(u) : await authed('onedrive', `${this.G()}/me/drive/items/${j.id}/content`);
-      if (!d.ok) await fail(d, 'OneDrive');
-      return d.bytes();
-    },
-    webUrl: () => 'https://onedrive.live.com/?id=root',
-  };
   P.dropbox = {
     id: 'dropbox', label: 'Dropbox', short: 'Dropbox', color: '#0061fe', oauth: true,
     configured: () => !!(C().dropboxAppKey || C().cloudFake),
@@ -390,7 +351,7 @@
   }
   P.icloud = folderProvider('icloud', 'iCloud Drive', '#3693f3');
   P.folder = folderProvider('folder', 'Ordner auf dem Gerät', '#6b7280');
-  const ORDER = ['onedrive', 'dropbox', 'icloud', 'webdav', 'folder'];
+  const ORDER = ['dropbox', 'icloud', 'webdav', 'folder'];
 
   /* ---------- Einstellungen und Zustand je Dienst ---------- */
   const DEF = { enabled: false, account: '', mode: 'change', exclude: [], lastRun: 0, backup: true, path: '' };
@@ -704,7 +665,7 @@
         }
       }
       if (!usable.length) {
-        $('.wbc-list').innerHTML = `<div class="wbc-msg">Noch kein Cloud-Dienst verbunden.<br>In der Bibliothek unten links unter <b>Cloud-Dienste</b> OneDrive, Dropbox, iCloud Drive oder Nextcloud verbinden.</div>`;
+        $('.wbc-list').innerHTML = `<div class="wbc-msg">Noch kein Cloud-Dienst verbunden.<br>In der Bibliothek unten links unter <b>Cloud-Dienste</b> Dropbox, iCloud Drive oder Nextcloud verbinden.</div>`;
         $('.wbc-prov').hidden = true;
       } else {
         provs();

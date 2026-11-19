@@ -116,6 +116,7 @@
       ['recent', null, 'clock', 'Zuletzt geöffnet', ''],
       ['fav', null, 'starf', 'Favoriten', docs.filter(d => d.fav).length || ''],
       ['trash', null, 'trash', 'Papierkorb', V.items.filter(i => i.trashed).length || ''],
+      ...(window.WBTasks ? [['learn', null, 'check', 'Lernen und Aufgaben', V.dueN || '']] : []),
     ];
     $('#nav').innerHTML = nav.map(([k, id, ic, label, n]) => `<button class="nitem" data-nav="${k}" ${k === 'folder' ? 'data-drop=""' : ''} aria-current="${V.view.kind === k && (k !== 'folder' || !V.view.id) && !V.q}">${ico(ic)}<span>${label}</span><span class="cnt">${n}</span></button>`).join('');
   }
@@ -388,6 +389,7 @@
     else if (k === 'notebook') notebookDialog();
     else if (k === 'folder') folderDialog(null, targetFolder());
     else if (k === 'cloud') { if (CL && CL.anyEnabled()) cloudImport(); else cloudHub(); }
+    else if (k === 'template') window.WBTemplates.pick().then(async r => { if (r) { const doc = await importBytes(r.bytes, r.name, targetFolder()); openDoc(doc.id); } });
   }
   async function makeThumb(bytes) {
     if (!PDFJS) return {};
@@ -781,7 +783,7 @@
     GD.setOptions({ mode: sel.value, exclude: $$('[name=ex]:checked', d).map(x => x.value), noCellular: cell ? cell.checked : undefined });
   }
 
-  /* ---------- Cloud-Dienste: OneDrive, Dropbox, iCloud Drive, WebDAV, Ordner (cloud.js) und Google Drive ---------- */
+  /* ---------- Cloud-Dienste: Dropbox, iCloud Drive, WebDAV, Ordner (cloud.js) und Google Drive ---------- */
   const CL = window.WBCloud || null;
   const cloudIco = (id, col, sz = 22) => CL ? CL.icon(id, col).replace('width="20" height="20"', `width="${sz}" height="${sz}"`) : '';
   function cloudSummary() {
@@ -789,7 +791,7 @@
     let s = 'ok', sub = '';
     if (GD) { const I = GD.info(); if (I.enabled) { on.push('Google Drive'); if (I.status === 'auth') s = 'auth'; else if (I.status === 'error') s = 'error'; else if (I.status === 'running') s = s === 'ok' ? 'running' : s; } }
     if (CL) for (const I of CL.infoAll()) if (I.enabled) { on.push(I.short); if (I.status === 'auth' && s !== 'error') s = 'auth'; else if (I.status === 'error') s = 'error'; else if (I.status === 'running' && s === 'ok') s = 'running'; }
-    if (!on.length) return { s: 'off', title: 'Cloud-Dienste', sub: 'OneDrive, iCloud, Dropbox, Google Drive …' };
+    if (!on.length) return { s: 'off', title: 'Cloud-Dienste', sub: 'Dropbox, iCloud, Nextcloud, Google Drive …' };
     sub = s === 'auth' ? 'Anmeldung nötig · tippen' : s === 'error' ? 'Problem beim Sichern' : s === 'running' ? 'Sichert …' : on.join(', ');
     return { s: s === 'ok' ? 'ok' : s, title: on.length === 1 ? on[0] : 'Cloud-Dienste', sub };
   }
@@ -844,12 +846,12 @@
     if (!I.enabled && !I.configured) {
       html += head + (I.folder
         ? `<p class="note">Dieser Browser kann keine Ordner verbinden. Das geht in der <b>Desktop-App</b> sowie in <b>Chrome</b> und <b>Edge</b> am Computer. Auf iPhone und iPad sicherst du einzelne PDFs über ⋯ › <i>Teilen</i> › <i>In Dateien sichern</i> in iCloud Drive.</p>`
-        : `<p class="note">Für ${esc(I.label)} braucht die Werkbank eine eigene App-Registrierung (kostenlos, einmalig). Die Anleitung steht im README unter <b>Cloud-Dienste einrichten</b>; danach ${id === 'onedrive' ? '<code>onedriveClientId</code>' : '<code>dropboxAppKey</code>'} in <code>js/config.js</code> eintragen.</p>`)
+        : `<p class="note">Für ${esc(I.label)} braucht die Werkbank eine eigene App-Registrierung (kostenlos, einmalig). Die Anleitung steht im README unter <b>Cloud-Dienste einrichten</b>; danach <code>dropboxAppKey</code> in <code>js/config.js</code> eintragen.</p>`)
         + `<div class="acts"><button class="btn primary" data-x="0">OK</button></div>`;
     } else if (!I.enabled) {
       html += head;
-      if (P.oauth) html += `<p class="note">${id === 'onedrive' ? 'Funktioniert mit privatem Microsoft-Konto sowie Arbeits- oder Schulkonto (Microsoft 365).' : 'Funktioniert mit jedem Dropbox-Konto, auch kostenlos.'} Die Werkbank legt ihre Sicherungen im Ordner <b>„PDF Werkbank“</b> an und kann PDFs aus deiner ${esc(I.short)} öffnen.${I.desktop ? ' Die Anmeldung öffnet sich im Browser.' : ''}</p>
-        <p class="err" id="clErr"></p><div class="acts"><button class="btn" data-x="0">Abbrechen</button><button class="btn primary" data-x="go">${id === 'onedrive' ? 'Mit Microsoft anmelden' : 'Mit Dropbox verbinden'}</button></div>`;
+      if (P.oauth) html += `<p class="note">Funktioniert mit jedem Dropbox-Konto, auch kostenlos. Die Werkbank legt ihre Sicherungen im Ordner <b>„PDF Werkbank“</b> an und kann PDFs aus deiner ${esc(I.short)} öffnen.${I.desktop ? ' Die Anmeldung öffnet sich im Browser.' : ''}</p>
+        <p class="err" id="clErr"></p><div class="acts"><button class="btn" data-x="0">Abbrechen</button><button class="btn primary" data-x="go">Mit Dropbox verbinden</button></div>`;
       else if (id === 'webdav') {
         wide = true;
         html += `<p class="note">Für Nextcloud, ownCloud, MagentaCLOUD, GMX, WEB.DE, pCloud, Strato HiDrive oder ein NAS. Bei Nextcloud am besten ein <b>App-Passwort</b> verwenden (Einstellungen › Sicherheit).${I.desktop ? '' : ' Im Browser klappt das nur, wenn der Server CORS erlaubt; in der Desktop-App immer.'}</p>
@@ -1020,6 +1022,47 @@
     });
   }
 
+  /* ---------- Lernen und Aufgaben über alle Dokumente (ab 1.8) ---------- */
+  async function studyScan() {
+    const docs = V.items.filter(i => i.kind === 'doc' && alive(i) && !i.missing), now = Date.now(), out = { cards: [], tasks: [] };
+    for (const d of docs) {
+      let st = null; try { st = await ST.getBlob('state:' + d.id); } catch (e) { continue; }
+      if (!st) continue;
+      const due = (st.cards || []).filter(c => (c.due || 0) <= now).length;
+      if ((st.cards || []).length) out.cards.push({ doc: d, due, total: st.cards.length });
+      for (const t of window.WBTasks.fromState(st)) if (!t.done) out.tasks.push({ ...t, doc: d });
+    }
+    out.tasks.sort((a, b) => (a.due == null) - (b.due == null) || (a.due || 0) - (b.due || 0));
+    return out;
+  }
+  async function updateDue() {
+    if (!window.WBTasks) return;
+    try {
+      const r = await studyScan(), T = window.WBTasks;
+      const n = r.cards.reduce((s, c) => s + c.due, 0) + r.tasks.filter(t => t.due != null && ['late', 'today'].includes(T.urgency(t.due))).length;
+      if (n !== V.dueN) { V.dueN = n; renderNav(); }
+      T.remind(r.tasks, () => learnDialog());
+    } catch (e) { /* egal */ }
+  }
+  async function learnDialog() {
+    const r = await studyScan(), T = window.WBTasks;
+    const cards = r.cards.filter(c => c.total).sort((a, b) => b.due - a.due);
+    await dialog(`<h2>Lernen und Aufgaben</h2>
+      <h3 class="lh">Lernkarten</h3>${cards.length ? `<div class="cllist">${cards.map(c => `<button class="clrow" data-study="${c.doc.id}"><span class="t"><b>${esc(c.doc.name)}</b><small>${c.due ? `${c.due} fällig` : 'nichts fällig'} · ${c.total} Karten</small></span><span class="clbadge${c.due ? '' : ' on'}">${c.due ? 'Lernen' : 'Fertig'}</span></button>`).join('')}</div>` : '<p class="note">Noch keine Lernkarten. Im Dokument Text markieren, dann in der Seitenleiste unter „Lernkarten“ auf „Aus Markierungen“ tippen.</p>'}
+      <h3 class="lh">Offene Aufgaben</h3>${r.tasks.length ? `<div class="tlist">${r.tasks.slice(0, 80).map(t => `<button class="tline" data-task="${t.doc.id}" data-page="${t.page}"><span class="u-${T.urgency(t.due)}">${t.due != null ? esc(T.fmtDue(t.due)) : '–'}</span><span><b>${esc(t.text)}</b><small>${esc(t.doc.name)} · S. ${t.page}</small></span></button>`).join('')}</div>` : '<p class="note">Keine offenen Aufgaben. Aufgaben entstehen aus Kommentaren wie „[ ] Übungsblatt bis Freitag“.</p>'}
+      <div class="acts">${r.tasks.some(t => t.due != null) ? `<button class="btn" data-x="ics">${ico('download')}In den Kalender (.ics)</button>` : ''}${'Notification' in window && Notification.permission !== 'granted' ? `<button class="btn" data-x="bell">Erinnerungen einschalten</button>` : ''}<button class="btn primary" data-x="0">Fertig</button></div>`, {
+      wide: true,
+      onOpen: (d, close) => d.addEventListener('click', async e => {
+        const s = e.target.closest('[data-study]'); if (s) { close(); ST.markOpened(s.dataset.study); location.href = 'index.html?doc=' + encodeURIComponent(s.dataset.study) + '&study=1'; return; }
+        const t = e.target.closest('[data-task]'); if (t) { close(); openAt(t.dataset.task, +t.dataset.page); return; }
+        const x = e.target.closest('[data-x]'); if (!x) return;
+        if (x.dataset.x === 'ics') { const blob = T.ics(r.tasks.map(t => ({ ...t, doc: t.doc.name })), 'PDF Werkbank'); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'PDF Werkbank – Aufgaben.ics'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Kalenderdatei gespeichert'); }
+        else if (x.dataset.x === 'bell') { const p = await Notification.requestPermission(); toast(p === 'granted' ? 'Erinnerungen an: fällige Aufgaben werden einmal am Tag gemeldet' : 'Nicht erlaubt'); if (p === 'granted') { x.remove(); try { localStorage.removeItem('pdfwb.tasks.reminded'); } catch (er) { /* egal */ } updateDue(); } }
+        else close();
+      }),
+    });
+  }
+
   /* ---------- Als App installieren ---------- */
   const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1071,7 +1114,7 @@
         isF ? { k: 'edit', i: 'palette', l: 'Name, Farbe und Symbol' } : { k: 'rename', i: 'edit', l: 'Umbenennen' },
         { k: 'fav', i: 'star', l: it.fav ? 'Aus Favoriten entfernen' : 'Zu Favoriten' },
         { k: 'move', i: 'move', l: 'Verschieben …' },
-        ...(isF ? [{ k: 'sub', i: 'plus', l: 'Unterordner erstellen' }] : [{ k: 'dup', i: 'copy', l: 'Duplizieren' }, { k: 'export', i: 'download', l: 'Als PDF exportieren' }, { k: 'wbexport', i: 'file', l: 'Als Werkbank-Datei (bearbeitbar) …' }, { k: 'collab', i: 'users', l: 'Gemeinsam bearbeiten …' }, { k: 'share', i: 'link', l: 'PDF-Link teilen …' }, ...(CL ? [{ k: 'cloudsave', i: 'cloud', l: 'In der Cloud speichern …' }] : [])]),
+        ...(isF ? [{ k: 'sub', i: 'plus', l: 'Unterordner erstellen' }] : [{ k: 'dup', i: 'copy', l: 'Duplizieren' }, { k: 'export', i: 'download', l: 'Als PDF exportieren' }, { k: 'wbexport', i: 'file', l: 'Als Werkbank-Datei (bearbeitbar) …' }, { k: 'collab', i: 'users', l: 'Gemeinsam bearbeiten …' }, { k: 'share', i: 'link', l: 'PDF-Link teilen …' }, { k: 'study', i: 'check', l: 'Lernkarten üben' }, ...(CL ? [{ k: 'cloudsave', i: 'cloud', l: 'In der Cloud speichern …' }] : [])]),
         '-', { k: 'trash', i: 'trash', l: 'Löschen', danger: true }];
     const k = await showMenu(entries, x, y);
     if (!k) return;
@@ -1085,6 +1128,7 @@
       case 'dup': await ST.duplicate(it.id); await refresh(); toast('Dupliziert'); break;
       case 'share': shareLink(it); break;
       case 'cloudsave': cloudSave([it.id]); break;
+      case 'study': ST.markOpened(it.id); location.href = 'index.html?doc=' + encodeURIComponent(it.id) + '&study=1'; break;
       case 'collab': if (window.WBShare) window.WBShare.ownerDialog(it, { toast, busy, dialog, esc, ico }); break;
       case 'wbexport': {
         busy('Werkbank-Datei wird erstellt …');
@@ -1346,7 +1390,7 @@
     bindTileZoom();
     $('#newBtn').onclick = async e => {
       const r = e.currentTarget.getBoundingClientRect();
-      const k = await showMenu([{ k: 'notebook', i: 'notebook', l: 'Neues Notizbuch' }, { k: 'import', i: 'upload', l: 'PDF importieren …' }, ...(CL ? [{ k: 'cloud', i: 'cloud', l: 'Aus der Cloud importieren …' }] : []), { k: 'photos', i: 'camera', l: 'Aus Fotos oder Scan …' }, { k: 'folder', i: 'folder', l: 'Neuer Ordner' }], r.right - 230, r.bottom + 6);
+      const k = await showMenu([{ k: 'notebook', i: 'notebook', l: 'Neues Notizbuch' }, { k: 'import', i: 'upload', l: 'PDF importieren …' }, ...(window.WBTemplates ? [{ k: 'template', i: 'file', l: 'Aus Vorlage (Rechnung, Planer …) …' }] : []), ...(CL ? [{ k: 'cloud', i: 'cloud', l: 'Aus der Cloud importieren …' }] : []), { k: 'photos', i: 'camera', l: 'Aus Fotos oder Scan …' }, { k: 'folder', i: 'folder', l: 'Neuer Ordner' }], r.right - 230, r.bottom + 6);
       if (k) newAction(k);
     };
     $('#fileIn').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (f.length) await importFiles(f); };
@@ -1359,7 +1403,7 @@
     if (window.WBDiag) setTimeout(() => WBDiag.checkSpace(m => toast(m)), 5000);
     if (GD || CL) { $('#driveBtn').onclick = () => { const sm = cloudSummary(); if (sm.s === 'auth' && GD && GD.info().status === 'auth' && !GD.info().desktop) { driveDialog(); return; } cloudHub(); }; if (GD) { GD.onStatus(renderCloud); GD.watch(); } if (CL) { CL.onStatus(renderCloud); CL.watch(); } } else $('#driveBtn').hidden = true;
 
-    $('#nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (b) go({ kind: b.dataset.nav, id: null }); };
+    $('#nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (!b) return; if (b.dataset.nav === 'learn') { learnDialog(); closeDrawer(); return; } go({ kind: b.dataset.nav, id: null }); };
     $('#tree').onclick = e => {
       const tw = e.target.closest('[data-tw]');
       if (tw) { const id = tw.dataset.tw; if (V.open.has(id)) V.open.delete(id); else V.open.add(id); saveOpen(); renderTree(); return; }
@@ -1536,6 +1580,7 @@
     if (p.get('new') === 'notebook') newAction('notebook');
     if (p.get('new') || p.get('import')) history.replaceState(null, '', 'library.html');
     inbox();
+    setTimeout(updateDue, 2500); if (ST.onChange) ST.onChange(() => { clearTimeout(V.dueT); V.dueT = setTimeout(updateDue, 3000); });
     if (CL) CL.handleRedirect().then(r => { if (!r) return; if (r.ok) toast(CL.info(r.pid).label + ' verbunden · Backup läuft'); else { toast(r.error); if (r.pid) cloudDialog(r.pid); } });
   }
   boot();

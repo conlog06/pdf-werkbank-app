@@ -110,6 +110,12 @@
     for (const b of data.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const w of l.words || []) out.push({ ...w, baseline: w.baseline || l.baseline });
     return out;
   }
+  /* Text auf einem Bild erkennen (z. B. Handschrift als Ersatz, wenn keine KI eingerichtet ist) */
+  async function recognizeImage(canvas, langs = 'deu+eng') {
+    const w = await worker(langs, null);
+    const { data } = await w.recognize(canvas);
+    return { text: (data.text || '').trim(), confidence: data.confidence || 0 };
+  }
   async function stopOcr() { if (wk) { try { await wk.terminate(); } catch (e) { /* egal */ } wk = null; } }
 
   /* ---------- PDF verkleinern ---------- */
@@ -230,5 +236,5 @@
   }
 
   const fmtMB = n => (n / 1048576 >= 0.1 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' kB');
-  global.WBTools = { ocr, stopOcr, compress, merge, LEVELS, LANGS, fmtMB, loadTesseract };
+  global.WBTools = { ocr, recognizeImage, stopOcr, compress, merge, LEVELS, LANGS, fmtMB, loadTesseract };
 })(window);

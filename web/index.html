@@ -239,6 +239,80 @@ output{font:11.5px var(--f-mono);color:var(--ink);min-width:3.6em;font-variant-n
 .chkgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:2px 12px}
 .radios{display:flex;flex-direction:column;gap:2px}
 .chkrow{display:flex;align-items:center;gap:8px;cursor:pointer;min-height:30px}
+/* Version 1.8 */
+.recbtn[aria-pressed="true"]{color:#e5484d;background:color-mix(in srgb,#e5484d 14%,transparent)}
+.recbar,.playbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:110;display:flex;align-items:center;gap:8px;padding:6px 8px 6px 14px;border-radius:999px;background:var(--raise);border:1px solid var(--line);box-shadow:0 10px 30px rgb(0 0 0 / .22);font-size:13px;white-space:nowrap;max-width:calc(100vw - 24px)}
+.recbar .dot{width:10px;height:10px;border-radius:50%;background:#e5484d;animation:xpulse 1.2s infinite}
+.recbar.paused .dot{animation:none;opacity:.4}
+.recbar .rt{font:600 13px var(--f-mono);min-width:44px;font-variant-numeric:tabular-nums}
+.playbar{padding:6px 10px;border-radius:14px;gap:6px}
+.playbar .pt{font:12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums;min-width:38px;text-align:center}
+.playbar input[type=range]{width:min(320px,28vw)}
+.playbar .pbig{background:var(--accent);color:var(--accent-ink)}
+.playbar .pn{max-width:180px;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:12px}
+.playbar select{max-width:170px;height:30px}
+.playbar .ibtn{font:600 11px var(--f-mono)}
+@media (max-width:760px){.playbar{flex-wrap:wrap;justify-content:center;bottom:calc(64px + env(safe-area-inset-bottom,0px));border-radius:14px}.playbar input[type=range]{width:60vw}.recbar{bottom:calc(64px + env(safe-area-inset-bottom,0px))}}
+.lacts{display:flex;gap:6px;flex-wrap:wrap;padding:0 4px 8px}
+.lacts .btn{height:30px;font-size:12px;padding:0 10px}
+.tsec{font:600 10.5px/1 var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 6px 4px}
+.trow{display:flex;align-items:flex-start;gap:6px;padding:4px 4px;border-radius:6px}
+.trow:hover{background:color-mix(in srgb,var(--accent-soft) 60%,transparent)}
+.trow input{margin-top:4px;accent-color:var(--accent);flex:none}
+.trow .tx{flex:1;min-width:0;border:0;background:transparent;text-align:left;color:var(--ink);font-size:12.5px;line-height:1.35;cursor:pointer;padding:2px 0}
+.trow .tx small{display:block;font-size:11px;color:var(--muted)}
+.trow .u-late{color:var(--danger);font-weight:600}.trow .u-today{color:#c27a00;font-weight:600}
+.trow.done .tx{text-decoration:line-through;color:var(--muted)}
+.trow .pg{font:11px var(--f-mono);color:var(--muted);padding-top:3px}
+.tdone summary{cursor:pointer;color:var(--muted);font-size:12px;padding:8px 6px}
+.study{position:fixed;inset:0;z-index:90;background:rgb(8 10 16 / .55);display:grid;place-items:center;padding:16px}
+.sbox{width:min(640px,100%);max-height:92vh;overflow:auto;background:var(--raise);border-radius:16px;box-shadow:0 24px 70px rgb(0 0 0 / .35);padding:14px 18px 18px;display:flex;flex-direction:column;gap:12px}
+.sbox header{display:flex;align-items:center;gap:10px}.sbox header .grow{flex:1}
+.sprog{height:4px;border-radius:2px;background:var(--line);overflow:hidden}.sprog i{display:block;height:100%;background:var(--accent);transition:width .2s}
+.scard{min-height:180px;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--chrome);cursor:default}
+.sq{font:500 19px/1.45 var(--f-ui);white-space:pre-wrap}
+.sa{font-size:16px;line-height:1.5;padding-top:14px;border-top:1px dashed var(--line);white-space:pre-wrap;color:var(--accent)}
+.srate{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.srate .btn{height:auto;padding:8px 6px;flex-direction:column;gap:2px;justify-content:center}
+.srate .btn small{font-weight:400;font-size:11px;opacity:.8}
+.srate .sshow{grid-column:1/-1;height:44px;flex-direction:row}
+.srate kbd,.sopt kbd{font:11px var(--f-mono);border:1px solid currentColor;border-radius:4px;padding:0 4px;opacity:.6;margin:0 6px}
+.sopts{display:flex;flex-direction:column;gap:8px}
+.sopt{display:flex;align-items:flex-start;text-align:left;gap:4px;border:1px solid var(--line);background:var(--raise);color:var(--ink);border-radius:10px;padding:10px 12px;cursor:pointer;font:inherit;font-size:14px;line-height:1.4}
+.sopt:hover:not([disabled]){border-color:var(--accent)}
+.sopt.ok{border-color:#1f9d55;background:color-mix(in srgb,#1f9d55 14%,transparent)}.sopt.bad{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.snext{align-self:flex-end}
+.sdone{text-align:center;padding:24px 8px;display:flex;flex-direction:column;gap:12px;align-items:center}.sdone h2{margin:0}
+.lsres{max-height:min(56vh,560px);overflow:auto;display:flex;flex-direction:column;gap:10px}
+.lsdoc{display:flex;flex-direction:column;gap:2px}.lsdoc>b{font-size:13.5px;padding:4px 2px}
+.lshit{display:flex;gap:10px;text-align:left;border:0;background:transparent;color:var(--ink);padding:6px 8px;border-radius:8px;cursor:pointer;font:inherit;font-size:12.5px;line-height:1.4}
+.lshit:hover{background:var(--accent-soft)}.lshit .pg{font:11px var(--f-mono);color:var(--muted);flex:none;padding-top:1px}
+.lshit mark{background:#ffe066;color:inherit;border-radius:2px}
+#app.split2open .work{margin-right:var(--s2w,520px)}
+.split2{position:fixed;right:0;top:var(--s2top,96px);bottom:0;width:var(--s2w,520px);z-index:30;display:flex;flex-direction:column;background:var(--desk);border-left:1px solid var(--line);box-shadow:-6px 0 20px rgb(0 0 0 / .06)}
+.split2 header{display:flex;align-items:center;gap:4px;padding:6px 8px 6px 14px;background:var(--chrome);border-bottom:1px solid var(--line)}
+.split2 header b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:13px}.split2 header .grow{flex:1}
+.split2 .s2pg{font:11px var(--f-mono);white-space:nowrap;margin-left:6px}
+.s2body{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.s2p{position:relative;background:#fff;box-shadow:var(--paper-shadow);flex:none}.s2p canvas{display:block;width:100%;height:100%}
+.s2p .pnum{bottom:-18px}
+.s2grip{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:2}
+.s2grip:hover{background:color-mix(in srgb,var(--accent) 30%,transparent)}
+@media (max-width:900px){#app.split2open .work{margin-right:0}.split2{left:0;width:auto;top:auto;height:62vh;border-left:0;border-top:1px solid var(--line);box-shadow:0 -10px 30px rgb(0 0 0 / .18);border-radius:14px 14px 0 0;z-index:60}.s2grip{display:none}}
+.certcard{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--chrome)}
+.certcard>.ico{width:28px;height:28px;color:var(--accent)}.certcard span{flex:1;min-width:0}.certcard small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.siglist{display:flex;flex-direction:column;gap:8px}
+.sigrow{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px;border:1px solid var(--line);font-size:13px;line-height:1.45}
+.sigrow>.ico{width:22px;height:22px;flex:none;margin-top:2px}.sigrow.ok>.ico{color:#1f9d55}.sigrow.bad>.ico{color:var(--danger)}
+.sigrow small{color:var(--muted);font-size:12px}
+.convgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.convopt{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
+.convopt:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.convopt input{margin-top:3px;accent-color:var(--accent)}.convopt .ico{color:var(--accent);flex:none}.convopt small{display:block;color:var(--muted);font-size:12px}
+.hfgrid{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:6px;align-items:center}
+.hfgrid .field{height:32px;width:100%;min-width:0}
+.tocprev{max-height:40vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px}
+.tocprev>div{display:flex;justify-content:space-between;gap:12px;padding:2px 0}.tocprev .pg{font:11px var(--f-mono);color:var(--muted)}
 /* Seitenübersicht */
 .orgv{position:fixed;inset:0;z-index:70;background:var(--desk);display:grid;grid-template-rows:auto minmax(0,1fr)}
 .orgv header{display:flex;align-items:center;gap:6px;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));background:var(--chrome);border-bottom:1px solid var(--line);flex-wrap:wrap}
@@ -559,6 +633,7 @@ body:not(.present) #presNum{display:none}
       <button class="ibtn" id="btnFit" title="Seitenbreite (Strg+0)" aria-label="An Breite anpassen"><i data-i="fit"></i></button>
     </div>
     <button class="ibtn" id="btnRead" title="Lesemodus (F)" aria-label="Lesemodus"><i data-i="book"></i></button>
+    <button class="ibtn recbtn" id="btnRec" title="Vorlesung aufnehmen (Ton wird mit den Notizen verknüpft)" aria-label="Aufnehmen" aria-pressed="false"><i data-i="mic"></i></button>
     <button class="ibtn aibtn" id="btnAI" title="KI-Assistent (Y)" aria-label="KI-Assistent" aria-pressed="false"><i data-i="spark"></i></button>
     <div class="find" role="search">
       <i data-i="search" style="color:var(--muted)"></i>
@@ -573,6 +648,7 @@ body:not(.present) #presNum{display:none}
         <button role="menuitem" data-act="tools" class="mtools"><i data-i="grid"></i><span>Alle Werkzeuge …</span></button>
         <div class="mg" data-g="file"><button type="button" class="mgh" aria-expanded="false"><i data-i="open"></i><span>Datei</span><i data-i="chev"></i></button><div class="mgi">
         <button role="menuitem" data-act="new">Neues Dokument …</button>
+        <button role="menuitem" data-act="template">Neu aus Vorlage (Rechnung, Planer …) …</button>
         <button role="menuitem" data-act="open" class="m-only">PDF öffnen …</button>
         <button role="menuitem" data-act="cloudopen" id="mCloudOpen">Aus der Cloud öffnen …</button>
         <button role="menuitem" data-act="merge">Weitere PDF anhängen …</button>
@@ -582,6 +658,9 @@ body:not(.present) #presNum{display:none}
         <button role="menuitem" data-act="cloudsave" id="mCloudSave">In der Cloud speichern …</button>
         <button role="menuitem" data-act="werkbank">Als Werkbank-Datei speichern (.werkbank) …</button>
         <button role="menuitem" data-act="secure">Mit Passwort speichern …</button>
+        <button role="menuitem" data-act="convert">Umwandeln in Word, Excel, Bilder …</button>
+        <button role="menuitem" data-act="sign">Digital signieren …</button>
+        <button role="menuitem" data-act="verifysig">Signaturen prüfen …</button>
         <button role="menuitem" data-act="tolib" id="mToLib" hidden>In die Bibliothek übernehmen</button>
         </div></div>
         <div class="mg" data-g="share"><button type="button" class="mgh" aria-expanded="false"><i data-i="users"></i><span>Teilen</span><i data-i="chev"></i></button><div class="mgi">
@@ -597,6 +676,7 @@ body:not(.present) #presNum{display:none}
         <button role="menuitem" data-act="table">Tabelle …</button>
         <button role="menuitem" data-act="calc">Rechner und Live-Graphen</button>
         <button role="menuitem" data-act="qr">QR-Code …</button>
+        <button role="menuitem" data-act="headfoot">Kopf- und Fußzeilen …</button>
         <button role="menuitem" data-act="wm">Wasserzeichen …</button>
         <button role="menuitem" data-act="pn">Seitenzahlen …</button>
         </div></div>
@@ -604,6 +684,7 @@ body:not(.present) #presNum{display:none}
         <button role="menuitem" data-act="organize">Seitenübersicht (sortieren, drehen) …</button>
         <button role="menuitem" data-act="blank">Neue Seite / Notizpapier …</button>
         <button role="menuitem" data-act="dup">Seite duplizieren</button>
+        <button role="menuitem" data-act="autotoc">Inhaltsverzeichnis erstellen …</button>
         <button role="menuitem" data-act="bm">Lesezeichen für diese Seite</button>
         <button role="menuitem" data-act="rotl" class="m-only">Seite links drehen</button>
         <button role="menuitem" data-act="rotr" class="m-only">Seite rechts drehen</button>
@@ -611,6 +692,12 @@ body:not(.present) #presNum{display:none}
         <button role="menuitem" data-act="del" class="m-only danger">Seite löschen</button>
         </div></div>
         <div class="mg" data-g="tools"><button type="button" class="mgh" aria-expanded="false"><i data-i="sliders"></i><span>Werkzeuge</span><i data-i="chev"></i></button><div class="mgi">
+        <button role="menuitem" data-act="record">Vorlesung aufnehmen</button>
+        <button role="menuitem" data-act="recordings">Aufnahmen …</button>
+        <button role="menuitem" data-act="learn">Lernkarten und Quiz</button>
+        <button role="menuitem" data-act="tasks">Aufgaben</button>
+        <button role="menuitem" data-act="searchlib" id="mSearchLib" hidden>In allen Dokumenten suchen …</button>
+        <button role="menuitem" data-act="hw2text">Handschrift in Text …</button>
         <button role="menuitem" data-act="ocr">Texterkennung (OCR) …</button>
         <button role="menuitem" data-act="compress">PDF verkleinern …</button>
         <button role="menuitem" data-act="redactsearch">Suchen und schwärzen …</button>
@@ -621,6 +708,7 @@ body:not(.present) #presNum{display:none}
         </div></div>
         <div class="mg" data-g="view"><button type="button" class="mgh" aria-expanded="false"><i data-i="eye"></i><span>Ansicht</span><i data-i="chev"></i></button><div class="mgi">
         <button role="menuitem" data-act="fit" class="m-only">Auf Seitenbreite zoomen</button>
+        <button role="menuitem" data-act="split">Zweites Dokument daneben …</button>
         <button role="menuitem" data-act="read">Lesemodus</button>
         <button role="menuitem" data-act="present">Präsentieren (Vollbild) …</button>
         <button role="menuitem" data-act="speak">Vorlesen ab dieser Seite</button>
@@ -746,10 +834,14 @@ body:not(.present) #presNum{display:none}
         <button role="tab" data-tab="pages" aria-selected="true" title="Seiten" aria-label="Seiten"><i data-i="pages"></i></button>
         <button role="tab" data-tab="marks" aria-selected="false" title="Lesezeichen" aria-label="Lesezeichen"><i data-i="bookmark"></i></button>
         <button role="tab" data-tab="notes" aria-selected="false" title="Kommentare" aria-label="Kommentare"><i data-i="note"></i><span class="badge" id="noteBadge" hidden></span></button>
+        <button role="tab" data-tab="tasks" aria-selected="false" title="Aufgaben" aria-label="Aufgaben"><i data-i="tasks"></i><span class="badge" id="taskBadge" hidden></span></button>
+        <button role="tab" data-tab="learn" aria-selected="false" title="Lernkarten" aria-label="Lernkarten"><i data-i="cards"></i><span class="badge" id="learnBadge" hidden></span></button>
       </div>
       <div class="thumbs" id="thumbs" role="tabpanel" aria-label="Seitenübersicht"></div>
       <div class="spanel" id="marksPanel" role="tabpanel" aria-label="Lesezeichen" hidden></div>
       <div class="spanel" id="notesPanel" role="tabpanel" aria-label="Kommentare" hidden></div>
+      <div class="spanel" id="tasksPanel" role="tabpanel" aria-label="Aufgaben" hidden></div>
+      <div class="spanel" id="learnPanel" role="tabpanel" aria-label="Lernkarten" hidden></div>
     </aside>
     <section class="viewer" id="viewer"><div class="pages" id="pages"></div></section>
   </main>
@@ -889,6 +981,7 @@ body:not(.present) #presNum{display:none}
 <script src="js/sync.js"></script>
 <script src="js/gdrive.js"></script>
 <script src="js/cloud.js"></script>
+<script src="js/search.js"></script>
 <script src="js/update.js"></script>
 <script src="js/share.js"></script>
 <script src="js/content-engine.js"></script>
@@ -900,6 +993,10 @@ body:not(.present) #presNum{display:none}
 <script src="js/wbfile.js"></script>
 <script src="js/tools.js"></script>
 <script src="js/compare.js"></script>
+<script src="js/tasks.js"></script>
+<script src="js/convert.js"></script>
+<script src="js/templates.js"></script>
+<script src="js/sign.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/app.js"></script>
 </body>

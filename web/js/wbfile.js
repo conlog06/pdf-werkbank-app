@@ -63,7 +63,7 @@
   const isZip = u8 => u8 && u8.length > 4 && u8[0] === 0x50 && u8[1] === 0x4b && u8[2] === 3 && u8[3] === 4;
   const isWerkbank = (u8, name) => (name ? /\.werkbank$/i.test(name) : false) || (isZip(u8) && !(name && /\.zip$/i.test(name)));
   /* state: Bearbeitungsstand (docState), sources: [{ id, name, bytes }], preview: Uint8Array (optional) */
-  function pack({ name, state, sources, preview }) {
+  function pack({ name, state, sources, preview, audio }) {
     const files = [
       { name: 'werkbank.json', bytes: enc.encode(JSON.stringify({ format: 'pdf-werkbank', version: 1, name: name || state.docName || 'Dokument', created: new Date().toISOString(), app: 'PDF Werkbank' }, null, 1)) },
       { name: 'state.json', bytes: enc.encode(JSON.stringify(state)) },
@@ -72,6 +72,7 @@
       files.push({ name: `sources/${s.id}.pdf`, bytes: s.bytes });
       files.push({ name: `sources/${s.id}.json`, bytes: enc.encode(JSON.stringify({ name: s.name || s.id + '.pdf' })) });
     }
+    for (const a of audio || []) { files.push({ name: `audio/${a.id}.bin`, bytes: a.bytes }); files.push({ name: `audio/${a.id}.json`, bytes: enc.encode(JSON.stringify({ mime: a.mime || 'audio/webm' })) }); }
     if (preview) files.push({ name: 'preview.pdf', bytes: preview });
     return zip(files, MIME);
   }
@@ -90,7 +91,13 @@
       let meta = {}; try { meta = JSON.parse(dec.decode(files.get(`sources/${m[1]}.json`) || enc.encode('{}'))); } catch (e) { meta = {}; }
       sources.set(m[1], { id: m[1], name: meta.name || m[1] + '.pdf', bytes: data });
     }
-    return { manifest, state, sources, preview: files.get('preview.pdf') || null };
+    const audio = new Map();
+    for (const [n, data] of files) {
+      const m = /^audio\/([^/]+)\.bin$/.exec(n); if (!m) continue;
+      let meta = {}; try { meta = JSON.parse(dec.decode(files.get(`audio/${m[1]}.json`) || enc.encode('{}'))); } catch (e) { meta = {}; }
+      audio.set(m[1], { bytes: data, mime: meta.mime || 'audio/webm' });
+    }
+    return { manifest, state, sources, audio, preview: files.get('preview.pdf') || null };
   }
   global.WBFile = { pack, unpack, zip, unzip, isWerkbank, isZip, MIME, EXT };
 })(window);

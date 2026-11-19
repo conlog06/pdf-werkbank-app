@@ -272,6 +272,15 @@
       check(await B().upload(`${d}/src/${sid}.pdf`, new Blob([s.bytes], { type: 'application/pdf' }), { upsert: true, contentType: 'application/pdf' }));
     }
     const state = await S().getBlob('state:' + it.id);
+    // Tonaufnahmen (ab 1.8): einmal hochladen, Kennung ändert sich nie
+    for (const r of (state && state.recs) || []) {
+      const flag = 'pdfwb.audup.' + r.id;
+      try { if (localStorage.getItem(flag)) continue; } catch (e) { /* egal */ }
+      const a = await S().getBlob(`aud:${it.id}:${r.id}`);
+      if (!a || !a.blob) continue;
+      check(await B().upload(`${d}/aud/${r.id}`, a.blob, { upsert: true, contentType: a.mime || r.mime || 'audio/webm' }));
+      try { localStorage.setItem(flag, '1'); } catch (e) { /* egal */ }
+    }
     if (state) check(await B().upload(`${d}/state-${it.rev}.json`, new Blob([JSON.stringify(state)], { type: 'application/json' }), { upsert: true, contentType: 'application/json' }));
     const thumb = await S().getBlob('thumb:' + it.id);
     if (thumb) check(await B().upload(`${d}/thumb-${it.rev}.jpg`, thumb, { upsert: true, contentType: thumb.type || 'image/jpeg' }));
@@ -292,7 +301,8 @@
         const d = dir(it.id);
         const top = check(await B().list(d, { limit: 1000 })) || [];
         const srcs = check(await B().list(d + '/src', { limit: 1000 })) || [];
-        const paths = top.filter(f => f.id).map(f => `${d}/${f.name}`).concat(srcs.map(f => `${d}/src/${f.name}`));
+        const auds = (await B().list(d + '/aud', { limit: 1000 })).data || [];
+        const paths = top.filter(f => f.id).map(f => `${d}/${f.name}`).concat(srcs.map(f => `${d}/src/${f.name}`), auds.map(f => `${d}/aud/${f.name}`));
         if (paths.length) await B().remove(paths);
       } catch (e) { /* egal */ }
     }
@@ -322,6 +332,10 @@
       if (await S().getBlob(`src:${id}:${sid}`)) continue;
       const blob = await dl(`${d}/src/${sid}.pdf`);
       await S().putBlob(`src:${id}:${sid}`, { name: it.name + '.pdf', bytes: new Uint8Array(await blob.arrayBuffer()) });
+    }
+    for (const r of (state && state.recs) || []) {
+      if (await S().getBlob(`aud:${id}:${r.id}`)) continue;
+      try { const blob = await dl(`${d}/aud/${r.id}`); await S().putBlob(`aud:${id}:${r.id}`, { blob, mime: r.mime }); try { localStorage.setItem('pdfwb.audup.' + r.id, '1'); } catch (e) { /* egal */ } } catch (e) { /* Aufnahme kommt später */ }
     }
     if (state) await S().putBlob('state:' + id, state); else await S().delBlob('state:' + id);
     try { await S().putBlob('thumb:' + id, await dl(`${d}/thumb-${it.rev}.jpg`)); } catch (e) { /* keine Vorschau */ }

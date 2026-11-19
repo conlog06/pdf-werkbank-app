@@ -141,7 +141,7 @@
   const delBlob = k => run('blobs', 'readwrite', tx => { tx.objectStore('blobs').delete(k); });
   async function dropBlobs(docId) {
     const keys = await run('blobs', 'readonly', (tx, done) => req(tx.objectStore('blobs').getAllKeys()).then(done));
-    const mine = keys.filter(k => k === 'state:' + docId || k === 'thumb:' + docId || k === 'text:' + docId || String(k).startsWith('src:' + docId + ':') || String(k).startsWith('textsrc:' + docId + ':'));
+    const mine = keys.filter(k => k === 'state:' + docId || k === 'thumb:' + docId || k === 'text:' + docId || String(k).startsWith('src:' + docId + ':') || String(k).startsWith('aud:' + docId + ':') || String(k).startsWith('textsrc:' + docId + ':'));
     if (mine.length) await run('blobs', 'readwrite', tx => { const s = tx.objectStore('blobs'); mine.forEach(k => s.delete(k)); });
   }
   const kvGet = k => run('kv', 'readonly', (tx, done) => req(tx.objectStore('kv').get(k)).then(done));
@@ -172,12 +172,15 @@
     if (!wb.state) return doc;
     const state = { ...wb.state, docName: name + '.pdf', dirty: false };
     const ids = state.srcIds || srcs.map(x => x.id);
+    for (const [rid, a] of wb.audio || []) await putBlob(`aud:${doc.id}:${rid}`, { blob: new Blob([a.bytes], { type: a.mime || 'audio/webm' }), mime: a.mime });
     return saveDoc(doc.id, { state, sources: ids.map(id => wb.sources.get(id)).filter(Boolean), pages: (state.pages || []).length, name });
   }
   /* Dokument als .werkbank-Datei (Blob) */
   async function exportWerkbank(id) {
     const { item, state, sources } = await loadDoc(id);
-    return global.WBFile.pack({ name: item.name, state: state || null, sources });
+    const audio = [];
+    for (const r of (state && state.recs) || []) { const a = await getBlob(`aud:${id}:${r.id}`); if (a && a.blob) audio.push({ id: r.id, mime: a.mime || r.mime, bytes: new Uint8Array(await a.blob.arrayBuffer()) }); }
+    return global.WBFile.pack({ name: item.name, state: state || null, sources, audio });
   }
   /* alles zum Öffnen im Editor: { item, state, sources:[{id,name,bytes}] } */
   async function loadDoc(id) {

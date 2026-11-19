@@ -106,6 +106,11 @@ svg.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;st
 .srow .t{flex:1;min-width:0}.srow small{display:block;color:var(--muted);font-size:12px}
 .ordiv{display:flex;align-items:center;gap:10px;margin:14px 0 10px;color:var(--muted);font-size:12px}.ordiv::before,.ordiv::after{content:"";flex:1;height:1px;background:var(--line)}
 .oauthrow{display:flex;flex-direction:column;gap:8px}.btn.oauth{justify-content:center;width:100%}
+.lh{margin:16px 0 8px;font:600 10.5px/1 var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.tlist{display:flex;flex-direction:column;gap:2px;max-height:40vh;overflow:auto}
+.tline{display:flex;gap:12px;align-items:flex-start;text-align:left;border:0;background:transparent;color:var(--ink);padding:8px;border-radius:8px;cursor:pointer;font:inherit}
+.tline:hover{background:var(--accent-soft)}.tline>span:first-child{flex:none;width:96px;font-size:12px;color:var(--muted)}
+.tline small{display:block;color:var(--muted);font-size:12px}.tline .u-late{color:var(--danger);font-weight:600}.tline .u-today{color:#c27a00;font-weight:600}
 .cllist{display:flex;flex-direction:column;gap:8px;margin:4px 0 14px}
 .clrow{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--raise);color:var(--ink);text-align:left;cursor:pointer;font:inherit}
 .clrow:hover{border-color:var(--accent);background:var(--accent-soft)}
@@ -403,6 +408,8 @@ body{padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area
 <script src="js/cloud.js"></script>
 <script src="js/tools.js"></script>
 <script src="js/compare.js"></script>
+<script src="js/tasks.js"></script>
+<script src="js/templates.js"></script>
 <script src="js/search.js"></script>
 <script src="js/diag.js"></script>
 <script src="js/photos.js"></script>
