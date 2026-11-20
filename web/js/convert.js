@@ -215,5 +215,56 @@
     pdf.destroy();
     return out.join('\n\n\f');
   }
-  global.WBConvert = { toDocx, toXlsx, toImages, toText, _linesOf: linesOf };
+
+  /* Tabelle lesen (CSV, TSV oder Excel .xlsx) → { cols: [..], rows: [{ Spalte: Wert }] } – für Serienbriefe */
+  function parseCsv(text) {
+    text = text.replace(/^\uFEFF/, '');
+    const first = text.split(/\r?\n/)[0] || '';
+    const sep = [';', '\t', ',', '|'].map(c => [c, first.split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const rows = []; let row = [], cell = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; continue; }
+      if (ch === '"' && !cell) q = true;
+      else if (ch === sep) { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cell); cell = ''; if (row.some(c => c.trim())) rows.push(row); row = []; }
+      else cell += ch;
+    }
+    row.push(cell); if (row.some(c => c.trim())) rows.push(row);
+    return rows;
+  }
+  async function parseXlsx(u8) {
+    const files = await global.WBFile.unzip(u8), dec = new TextDecoder();
+    const xml = n => (files.get(n) ? new DOMParser().parseFromString(dec.decode(files.get(n)), 'application/xml') : null);
+    const ss = xml('xl/sharedStrings.xml'), strings = ss ? [...ss.getElementsByTagName('si')].map(si => [...si.getElementsByTagName('t')].map(t => t.textContent).join('')) : [];
+    const wb = xml('xl/workbook.xml'), rels = xml('xl/_rels/workbook.xml.rels');
+    let sheet = 'xl/worksheets/sheet1.xml';
+    try { const first = wb.getElementsByTagName('sheet')[0], rid = first.getAttribute('r:id') || first.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id'); const rel = [...rels.getElementsByTagName('Relationship')].find(r => r.getAttribute('Id') === rid); if (rel) sheet = 'xl/' + rel.getAttribute('Target').replace(/^\/?xl\//, ''); } catch (e) { /* Standardblatt */ }
+    const sh = xml(sheet); if (!sh) throw new Error('Kein Tabellenblatt gefunden.');
+    const colIdx = ref => { const m = /^([A-Z]+)/.exec(ref || ''); if (!m) return -1; let n = 0; for (const c of m[1]) n = n * 26 + c.charCodeAt(0) - 64; return n - 1; };
+    const rows = [];
+    for (const r of sh.getElementsByTagName('row')) {
+      const row = [];
+      for (const c of r.getElementsByTagName('c')) {
+        const i = colIdx(c.getAttribute('r')), t = c.getAttribute('t'), v = c.getElementsByTagName('v')[0], is = c.getElementsByTagName('is')[0];
+        let val = t === 's' ? strings[+(v && v.textContent)] : t === 'inlineStr' ? (is ? is.textContent : '') : v ? v.textContent : '';
+        if (t !== 's' && t !== 'inlineStr' && t !== 'str' && /^-?\d+(\.\d+)?(E-?\d+)?$/i.test(val)) { const n = +val; val = Number.isInteger(n) ? String(n) : n.toLocaleString('de-DE', { maximumFractionDigits: 6 }); }
+        row[i >= 0 ? i : row.length] = val == null ? '' : String(val);
+      }
+      for (let k = 0; k < row.length; k++) if (row[k] == null) row[k] = '';
+      if (row.some(c => String(c).trim())) rows.push(row);
+    }
+    return rows;
+  }
+  async function readTable(file) {
+    const u8 = new Uint8Array(await file.arrayBuffer());
+    let grid;
+    if (/\.xlsx$/i.test(file.name) || (u8[0] === 0x50 && u8[1] === 0x4b)) grid = await parseXlsx(u8);
+    else { let t = new TextDecoder('utf-8', { fatal: true }); let text; try { text = t.decode(u8); } catch (e) { text = new TextDecoder('windows-1252').decode(u8); } grid = parseCsv(text); }
+    if (grid.length < 2) throw new Error('Die Tabelle braucht eine Kopfzeile und mindestens eine Datenzeile.');
+    const cols = grid[0].map((c, i) => String(c || '').trim() || `Spalte ${i + 1}`);
+    const rows = grid.slice(1).map(r => Object.fromEntries(cols.map((c, i) => [c, String(r[i] == null ? '' : r[i]).trim()])));
+    return { cols, rows };
+  }
+  global.WBConvert = { toDocx, toXlsx, toImages, toText, readTable, parseCsv, _linesOf: linesOf };
 })(window);

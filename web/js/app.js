@@ -131,6 +131,9 @@ const ICONS = {
   cards: 'M7 4h11a2 2 0 0 1 2 2v9M4 8h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM7 13h5M7 16h3', tasks: 'M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17M11 6h9M11 12h9M11 18h9',
   split: 'M3 5h18v14H3zM12 5v14', sig: 'M4 17c3-1 4-7 6-7s1 6 3 6 2-3 4-3 2 2 3 2M4 21h16', warn: 'M12 4l9 16H3zM12 10v4M12 17h.01',
   convert: 'M4 7h12l-3-3M20 17H8l3 3', template: 'M5 3h14v18H5zM8 7h8M8 11h8M8 15h5', toc: 'M4 6h2M9 6h11M4 12h2M11 12h9M4 18h2M11 18h9', hf: 'M4 3h16v18H4zM4 7h16M4 17h16',
+  quote: 'M7 7h4v4c0 3-1.5 5-4 6M15 7h4v4c0 3-1.5 5-4 6', exam: 'M6 3h9l4 4v14H6zM9 9h6M9 13h6M9 17h3M15 3v4h4', mindmap: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 5h4v3H4zM16 5h4v3h-4zM4 16h4v3H4zM16 16h4v3h-4zM8 7l2 3M16 7l-2 3M8 17l2-3M16 17l-2-3',
+  chart: 'M4 20h16M7 16v-5M12 16V7M17 16v-8', sigma: 'M18 5H6l6 7-6 7h12', receipt: 'M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21zM9 8h6M9 12h6M9 16h3', mail: 'M3 6h18v12H3zM3 7l9 6 9-6',
+  layers: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5', archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4', access: 'M12 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM5 9l7 1.5L19 9M12 10.5V15l-3 5M12 15l3 5', xml: 'M6 3h9l4 4v14H6zM10 12l-2 2 2 2M14 12l2 2-2 2M15 3v4h4', timer: 'M12 7a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM12 10v4l2 2M9 3h6',
   calendar: 'M4 5h16v15H4zM4 9h16M8 3v4M16 3v4', bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', scan: 'M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M7 9h10M7 12h10M7 15h6',
   compress: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5', compare: 'M4 4h7v16H4zM13 4h7v16h-7zM6.5 8h2M15.5 8h2M6.5 12h2M15.5 12h2',
@@ -198,6 +201,7 @@ const S = {
   pencil: { seen: false, only: false }, forms: new Map(), formVals: {}, formTouched: new Set(), bookmarks: [], paperSrc: new Map(),
   sideTab: 'pages', reading: false, night: false, msel: null, prefs: null,
   recs: [], audio: new Map(), cards: [], player: null,
+  cite: null, exams: [], receipts: [], einv: null,
 };
 /* Einheiten fürs Messen: Faktor von PDF-Punkt (1/72 Zoll) */
 const UNITS = { mm: [25.4 / 72, 'mm', 'Millimeter'], cm: [2.54 / 72, 'cm', 'Zentimeter'], m: [0.0254 / 72, 'm', 'Meter'], in: [1 / 72, 'in', 'Zoll'], ft: [1 / 864, 'ft', 'Fuß'], pt: [1, 'pt', 'Punkt'] };
@@ -970,6 +974,8 @@ function commitCEdit() {
   });
 }
 async function openFiles(files, mode, noAsk) {
+  const xmlf = [...files].find(f => /\.xml$/i.test(f.name));
+  if (xmlf && window.WBEInvoice && ![...files].some(f => /\.pdf$/i.test(f.name))) { await openEInvoiceXml(xmlf); return; }
   const wbf = [...files].find(f => /\.werkbank$/i.test(f.name));
   if (wbf && window.WBFile) { await openWerkbank(wbf, mode, noAsk); return; }
   const pdfs = [...files].filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
@@ -997,7 +1003,7 @@ async function openFiles(files, mode, noAsk) {
     if (mode === 'replace') {
       oldIds.forEach(dropSource);
       S.blankSrc = null; S.paperSrc.clear();
-      S.bookmarks = marks; S.formVals = {}; S.formTouched.clear(); S.recs = []; S.cards = []; S.audio = new Map(); if (S.player) closePlayer();
+      S.bookmarks = marks; S.formVals = {}; S.formTouched.clear(); S.recs = []; S.cards = []; S.audio = new Map(); if (S.player) closePlayer(); S.cite = null; S.exams = []; S.receipts = []; S.einv = null;
       S.pages = added; S.docName = pdfs[0].name; S.sample = false;
       S.hist = []; S.fut = []; S.dirty = false; S.cur = 0; S.sel = null; S.selPages.clear(); S.find = null;
       $('#findInput').value = ''; $('#findCount').textContent = '';
@@ -1008,7 +1014,7 @@ async function openFiles(files, mode, noAsk) {
         S.meta = { title: info.Title || '', author: info.Author || '', subject: info.Subject || '', keywords: info.Keywords || '' };
       } catch (e) { /* keine Metadaten */ }
       buildViewer(); viewer.scrollTop = 0;
-      scheduleAutosave();
+      scheduleAutosave(); setTimeout(einvoiceCheck, 400);
     } else {
       pushHist();
       const at = S.pages.length;
@@ -2782,7 +2788,7 @@ function ask(title, text, yes = 'Verwerfen', no = 'Abbrechen', danger = true) {
 function dialog(title, html, okLabel, onOk) {
   commitEdit(); closeMenu();
   $('#dlgTitle').textContent = title; $('#dlgBody').innerHTML = html; $('#dlgOk').textContent = okLabel; $('#dlgCancel').hidden = false; $('#dlgOk').disabled = false; $('#dlgCancel').textContent = 'Abbrechen'; $('#dlg .card').classList.remove('wide');
-  $('#dlgBody').onclick = $('#dlgBody').onchange = null;
+  $('#dlgBody').onclick = $('#dlgBody').onchange = $('#dlgBody').oninput = null;
   const m = $('#dlg'); m.hidden = false;
   const first = $('input:not([type=checkbox]):not([type=color]),select', $('#dlgBody'));
   if (first && !COARSE) setTimeout(() => first.focus(), 30);
@@ -3365,7 +3371,7 @@ function docState(imgIds) {
     v: 1, savedAt: Date.now(), docName: S.docName, meta: S.meta, pages: S.pages, srcIds: [...S.sources.keys()],
     images: [...S.images].filter(([id]) => imgIds.has(id)), uidN, blankSrc: S.blankSrc, dirty: S.dirty,
     bookmarks: S.bookmarks, formVals: S.formVals, formTouched: [...S.formTouched], paperSrc: [...S.paperSrc],
-    recs: S.recs || [], cards: S.cards || [],
+    recs: S.recs || [], cards: S.cards || [], cite: S.cite || null, exams: S.exams || [], receipts: S.receipts || [],
   };
 }
 /* gespeicherten Stand in den Editor laden (Sitzung oder Bibliothek) */
@@ -3380,6 +3386,7 @@ async function applyState(sess, sourceOf) {
   S.images = new Map(sess.images || []);
   S.pages = sess.pages; S.docName = sess.docName; S.meta = sess.meta || S.meta; S.blankSrc = sess.blankSrc || null;
   S.recs = sess.recs || []; S.cards = sess.cards || []; S.audio = new Map(); savedAud.clear();
+  S.cite = sess.cite || null; S.exams = sess.exams || []; S.receipts = sess.receipts || []; S.einv = null;
   S.bookmarks = sess.bookmarks || []; S.formVals = sess.formVals || {}; S.formTouched = new Set(sess.formTouched || []); S.paperSrc = new Map(sess.paperSrc || []);
   S.sample = false; S.dirty = !!sess.dirty; S.hist = []; S.fut = []; S.cur = 0;
   await Promise.all(S.pages.filter(hasCE).map(ensureDerived));
@@ -3690,7 +3697,8 @@ async function buildPdfInner(pageList) {
   writeOutline(out, pageList);
   out.setProducer('PDF Werkbank'); out.setCreator('PDF Werkbank'); out.setModificationDate(new Date());
   const m = S.meta;
-  if (m.title) out.setTitle(m.title);
+  if (m.title) out.setTitle(m.title, { showInWindowTitleBar: true });
+  if (m.lang) out.catalog.set(PL.PDFName.of('Lang'), PL.PDFString.of(m.lang));
   if (m.author) out.setAuthor(m.author);
   if (m.subject) out.setSubject(m.subject);
   if (m.keywords) out.setKeywords(m.keywords.split(/[,;]\s*/).filter(Boolean));
@@ -4452,7 +4460,7 @@ function drawQbar(p, e) {
   q.style.top = Math.max(44, b.y * z) + 'px';
   const kiBtns = AIX ? `<span class="qs"></span><button data-qa="explain" title="Mit KI erklären">${icon('spark')}Erklären</button><button data-qa="translate" title="Mit KI übersetzen">${icon('translate')}</button>` : '';
   q.innerHTML = a.t === 'mark'
-    ? QCOLORS.map(c => `<button class="qc" data-qc="${c}" style="background:${c}" title="Farbe" aria-label="Farbe ${c}"></button>`).join('') + `<span class="qs"></span><button data-qa="comment" title="Kommentar">${icon('comment')}</button><button data-qa="copy" title="Text kopieren">${icon('copy')}</button>${kiBtns}<span class="qs"></span><button data-qa="del" title="Entfernen">${icon('trash')}</button>`
+    ? QCOLORS.map(c => `<button class="qc" data-qc="${c}" style="background:${c}" title="Farbe" aria-label="Farbe ${c}"></button>`).join('') + `<span class="qs"></span><button data-qa="comment" title="Kommentar">${icon('comment')}</button><button data-qa="copy" title="Text kopieren">${icon('copy')}</button>${window.WBCite ? `<button data-qa="cite" title="Zitieren (mit Quelle und Seite)">${icon('quote')}</button>` : ''}${kiBtns}<span class="qs"></span><button data-qa="del" title="Entfernen">${icon('trash')}</button>`
     : `<button data-qa="copy" title="Text kopieren">${icon('copy')}</button>${AIX ? `<button data-qa="fix" title="Rechtschreibung mit KI korrigieren">${icon('spark')}Korrigieren</button><button data-qa="translate" title="Mit KI übersetzen">${icon('translate')}</button>` : ''}<span class="qs"></span><button data-qa="del" title="Löschen">${icon('trash')}</button>`;
   e.wrap.appendChild(q);
 }
@@ -4472,6 +4480,7 @@ function bindQbar() {
     else if (k === 'comment') editComment(p, a);
     else if (k === 'del') { pushHist(); p.annots = p.annots.filter(x => x.id !== a.id); if (S.sel && S.sel.aid === a.id) S.sel = null; S.qbar = null; drawAnnots(p); markDirty(); renderProps(); }
     else if (k === 'fix') aiFixText(p, a);
+    else if (k === 'cite') citeQuote(p, a);
     else aiForAnnot(p, a, k);
   });
 }
@@ -5692,8 +5701,8 @@ const HUB = [
   ['Bearbeiten', [['objects', 'Inhalte bearbeiten', 'Texte, Bilder und Flächen der PDF verschieben, löschen, ändern', 'objects', 'tool'], ['edittext', 'Text ändern', 'Vorhandenen Text direkt umschreiben', 'edittext', 'tool'], ['redact', 'Schwärzen', 'Bereich schwärzen, Text wird gelöscht', 'redact', 'tool'], ['redactsearch', 'Suchen und schwärzen', 'Namen, E-Mails, IBANs im ganzen Dokument', 'redact'], ['wm', 'Wasserzeichen', 'Text quer über die Seiten', 'stamp'], ['pn', 'Seitenzahlen', 'Nummerieren in vielen Formaten', 'list']]],
   ['Einfügen', [['field', 'Formularfeld', 'Textfeld, Kästchen, Auswahl, Unterschrift', 'field'], ['detectfields', 'Formular erkennen', 'Linien und Kästchen werden zu Feldern', 'field'], ['table', 'Tabelle', 'Aus Excel einfügen oder eintippen', 'grid'], ['calc', 'Rechner und Live-Graphen', 'Formeln, Funktionen, Statistik', 'calc'], ['qr', 'QR-Code', 'Link oder Text als QR-Code', 'qr'], ['photos', 'Fotos oder Scans', 'Bilder als neue Seiten', 'image']]],
   ['Seiten', [['organize', 'Seitenübersicht', 'Alle Seiten sortieren, drehen, löschen', 'grid'], ['blank', 'Neue Seite / Notizpapier', 'Leer, liniert, kariert, punktiert', 'blank'], ['merge', 'PDF anhängen', 'Weitere PDF ans Ende', 'add'], ['extract', 'Seiten extrahieren', 'Auswahl als eigene PDF', 'extract']]],
-  ['Lernen und Uni', [['record', 'Vorlesung aufnehmen', 'Ton mit deinen Notizen verknüpft', 'mic'], ['learn', 'Lernkarten und Quiz', 'Aus Markierungen oder mit KI', 'cards'], ['tasks', 'Aufgaben', 'Aus Kommentaren, mit Fristen', 'tasks'], ['searchlib', 'In allen Dokumenten suchen', 'Ein Begriff, alle Skripte', 'search'], ['split', 'Zweites Dokument daneben', 'Skript neben Übungsblatt', 'split'], ['hw2text', 'Handschrift in Text', 'Geschriebenes wird tippbar', 'text']]],
-  ['Büro', [['template', 'Neu aus Vorlage', 'Rechnung, Angebot, Planer', 'template'], ['sign', 'Digital signieren', 'Mit Zertifikat, prüfbar', 'sig'], ['verifysig', 'Signaturen prüfen', 'Wer, wann, unverändert?', 'check'], ['convert', 'Umwandeln', 'Word, Excel, Bilder, Text', 'convert'], ['autotoc', 'Inhaltsverzeichnis', 'Aus Überschriften, als Lesezeichen', 'toc'], ['headfoot', 'Kopf- und Fußzeilen', 'Titel, Datum, Seitenzahlen', 'hf']]],
+  ['Lernen und Uni', [['record', 'Vorlesung aufnehmen', 'Ton mit deinen Notizen verknüpft', 'mic'], ['learn', 'Lernkarten und Quiz', 'Aus Markierungen oder mit KI', 'cards'], ['tasks', 'Aufgaben', 'Aus Kommentaren, mit Fristen', 'tasks'], ['searchlib', 'In allen Dokumenten suchen', 'Ein Begriff, alle Skripte', 'search'], ['split', 'Zweites Dokument daneben', 'Skript neben Übungsblatt', 'split'], ['hw2text', 'Handschrift in Text', 'Geschriebenes wird tippbar', 'text'], ['cite', 'Zitieren', 'Quelle mit Seitenzahl, BibTeX', 'quote'], ['exam', 'Probeklausur', 'KI stellt und korrigiert', 'exam'], ['mindmap', 'Mindmap', 'Kapitel und Markierungen', 'mindmap'], ['studystats', 'Lernstatistik', 'Zeit, Serie, Pomodoro', 'chart'], ['formula', 'Formel als LaTeX', 'Für Word, Notion, LaTeX', 'sigma']]],
+  ['Büro', [['template', 'Neu aus Vorlage', 'Rechnung, Angebot, Planer', 'template'], ['sign', 'Digital signieren', 'Mit Zertifikat, prüfbar', 'sig'], ['verifysig', 'Signaturen prüfen', 'Wer, wann, unverändert?', 'check'], ['convert', 'Umwandeln', 'Word, Excel, Bilder, Text', 'convert'], ['autotoc', 'Inhaltsverzeichnis', 'Aus Überschriften, als Lesezeichen', 'toc'], ['headfoot', 'Kopf- und Fußzeilen', 'Titel, Datum, Seitenzahlen', 'hf'], ['einvoice', 'E-Rechnung ansehen', 'ZUGFeRD und XRechnung lesen', 'xml'], ['receipts', 'Belege scannen', 'Kassenbons erfassen, CSV', 'receipt'], ['mailmerge', 'Serienbrief', 'Platzhalter plus Tabelle', 'mail'], ['batch', 'Stapelverarbeitung', 'Viele PDFs auf einmal', 'layers'], ['pdfa', 'PDF/A speichern', 'Archivformat für Behörden', 'archive'], ['a11y', 'Barrierefreiheit', 'Prüfen und verbessern', 'access']]],
   ['Werkzeuge', [['ocr', 'Texterkennung (OCR)', 'Scans durchsuchbar machen', 'scan'], ['compress', 'PDF verkleinern', 'Fotos und Scans komprimieren', 'compress'], ['compare', 'Vergleichen', 'Zwei Fassungen Wort für Wort', 'compare'], ['stats', 'Dokument-Statistik', 'Wörter, Lesezeit, Elemente', 'list'], ['dictate', 'Diktieren', 'Sprache in ein Textfeld', 'comment'], ['speak', 'Vorlesen', 'Ab dieser Seite vorlesen', 'book']]],
   ['Speichern und teilen', [['cloudsave', 'In der Cloud speichern', 'Dropbox, iCloud, Nextcloud, Ordner', 'cloud'], ['cloudopen', 'Aus der Cloud öffnen', 'PDF aus deinem Cloud-Speicher', 'cloud'], ['collab', 'Gemeinsam bearbeiten', 'Link für Live-Zusammenarbeit', 'users'], ['werkbank', 'Werkbank-Datei', 'Bearbeitbar weitergeben (.werkbank)', 'save'], ['secure', 'Mit Passwort', 'AES-256 verschlüsselt speichern', 'lock'], ['marks', 'Kommentare als Text', 'Alle Markierungen mit Seitenzahl', 'note']]],
 ];
@@ -6002,6 +6011,7 @@ function studyOverlay(mode = 'learn') {
   const rate = q => {
     const c = queue[i], idx = S.cards.findIndex(x => x.id === c.id);
     if (idx >= 0) { S.cards[idx] = srs(S.cards[idx], q); markDirty(); }
+    if (window.WBStats) WBStats.card(q > 1);
     if (q === 1) { again++; queue.push(c); }
     i++; shown = false; render();
   };
@@ -6011,6 +6021,7 @@ function studyOverlay(mode = 'learn') {
     const ok = curOpts[k] === c.back; if (ok) right++;
     const idx = S.cards.findIndex(x => x.id === c.id);
     if (idx >= 0) { S.cards[idx] = ok ? { ...S.cards[idx], quizOk: (S.cards[idx].quizOk || 0) + 1 } : srs(S.cards[idx], 1); markDirty(); }
+    if (window.WBStats) WBStats.card(ok);
     render();
   };
   const next = () => { i++; pick = null; curOpts = null; render(); };
@@ -6528,6 +6539,827 @@ function bindPlayerSeek() {
   }, true);
 }
 
+/* ======================= Version 1.9 ======================= */
+const dlTo = (bytes, name, type = 'application/octet-stream') => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000); };
+const cleanFile = s => String(s || '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90);
+async function docText(pages = S.pages, max = 26000) {
+  let text = '';
+  for (const p of pages) {
+    const i = S.pages.indexOf(p);
+    try { await analysisOf(p); const ps = pageString(p); if (ps && ps.s.trim()) text += `\n[Seite ${i + 1}]\n` + ps.s; } catch (e) { /* weiter */ }
+    if (text.length > max) break;
+  }
+  return text.slice(0, max);
+}
+const aiReady = () => !!(AIX && AIX.info().ready);
+const aiJson = (out, arr = true) => JSON.parse((String(out).match(arr ? /\[[\s\S]*\]/ : /\{[\s\S]*\}/) || [arr ? '[]' : '{}'])[0]);
+
+/* ---------- 1. Zitieren und Literatur ---------- */
+const citeStyle = () => lsGet('pdfwb.citestyle') || 'apa';
+const citePage = p => (S.pages.indexOf(p) + 1) + ((S.cite && +S.cite.offset) || 0);
+function citeForm(r) {
+  const T = WBCite.TYPES, f = (k, l, ph = '', w = '') => `<label class="fld"${w ? ` style="grid-column:span ${w}"` : ''}><span>${l}</span><input class="field" data-c="${k}" value="${esc(r[k] || '')}" placeholder="${esc(ph)}"></label>`;
+  return `<div class="cgrid">
+    <label class="fld"><span>Art</span><select class="field" data-c="type">${Object.entries(T).map(([k, v]) => `<option value="${k}" ${r.type === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+    ${f('year', 'Jahr', '2024')}
+    <label class="fld" style="grid-column:span 2"><span>Autorinnen und Autoren</span><input class="field" data-c="authors" value="${esc(WBCite.authorsText(r.authors))}" placeholder="Nachname, Vorname; Nachname, Vorname"></label>
+    ${f('title', 'Titel', '', 2)}
+    ${f('container', r.type === 'article' ? 'Zeitschrift' : 'Sammelband / Reihe', '', 2)}
+    ${f('publisher', 'Verlag / Hochschule')}${f('place', 'Ort')}
+    ${f('edition', 'Auflage', '3')}${f('pages', 'Seiten', '45–67')}
+    ${f('volume', 'Jahrgang / Band')}${f('issue', 'Heft / Nr.')}
+    ${f('doi', 'DOI', '10.…')}${f('isbn', 'ISBN')}
+    ${f('url', 'URL (bei Webseiten)')}${f('accessed', 'Abgerufen am', new Date().toLocaleDateString('de-DE'))}
+  </div>`;
+}
+function citeRead(b) {
+  const r = {}; $$('[data-c]', b).forEach(i => { r[i.dataset.c] = i.value.trim(); });
+  r.authors = WBCite.parseAuthors(r.authors); return r;
+}
+async function citeDialog(then) {
+  if (!window.WBCite) return;
+  commitEdit();
+  const r = (S.cite && S.cite.ref) || WBCite.fromMeta(S.meta, S.docName);
+  const st = citeStyle();
+  dialog('Quellenangabe und Zitieren', `<p class="note" style="margin:0">Einmal eintragen, dann kopiert <b>Zitieren</b> markierten Text mit Beleg und Seitenzahl. DOI oder ISBN im Dokument werden automatisch nachgeschlagen.</p>
+    <div class="row2"><button type="button" class="btn" data-cx="find">${icon('search')}Automatisch ausfüllen</button><span class="note" id="cMsg"></span></div>
+    ${citeForm(r)}
+    <div class="frow"><label class="fld"><span>Zitierstil</span><select class="field" id="cStyle">${Object.entries(WBCite.STYLES).map(([k, v]) => `<option value="${k}" ${k === st ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+    <label class="fld"><span>Erste PDF-Seite ist Buchseite</span><input class="field num" type="number" id="cOff" value="${1 + ((S.cite && +S.cite.offset) || 0)}" min="-999" max="9999"></label></div>
+    <div class="cprev" id="cPrev"></div>
+    <div class="row2"><button type="button" class="btn" data-cx="copy">${icon('copy')}Literaturangabe kopieren</button><button type="button" class="btn" data-cx="bib">BibTeX (.bib)</button><button type="button" class="btn" data-cx="ris">Zotero / Citavi (.ris)</button></div>`, 'Speichern', b => {
+    S.cite = { ref: citeRead(b), offset: (+$('#cOff', b).value || 1) - 1 };
+    lsSet('pdfwb.citestyle', $('#cStyle', b).value);
+    markDirty(); toast('Quellenangabe gespeichert');
+    if (then) setTimeout(then, 50);
+  });
+  $('#dlg .card').classList.add('wide');
+  const b = $('#dlgBody');
+  const prev = () => { const ref = citeRead(b), s = $('#cStyle', b).value; const e = WBCite.entry(ref, s, 1); const q = WBCite.quote('…', ref, s, (+$('#cOff', b).value || 1) + S.cur); $('#cPrev', b).innerHTML = `<small>Literaturverzeichnis</small><p>${e.html}</p><small>Im Text (Seite ${S.cur + 1} der PDF)</small><p>${esc(q.text)}${q.foot ? '<br>' + esc(q.foot) : ''}</p>`; };
+  b.oninput = b.onchange = prev; prev();
+  b.onclick = async e => {
+    const x = e.target.closest('[data-cx]'); if (!x) return;
+    const ref = citeRead(b), s = $('#cStyle', b).value;
+    if (x.dataset.cx === 'copy') { const en = WBCite.entry(ref, s, 1); toast(await WBCite.copy(en.text, en.html) ? 'Literaturangabe kopiert' : 'Kopieren nicht möglich'); }
+    else if (x.dataset.cx === 'bib') dlTo(WBCite.bibtex([ref]), cleanFile(baseName()) + '.bib', 'application/x-bibtex');
+    else if (x.dataset.cx === 'ris') dlTo(WBCite.ris([ref]), cleanFile(baseName()) + '.ris', 'application/x-research-info-systems');
+    else if (x.dataset.cx === 'find') {
+      const msg = $('#cMsg', b); msg.textContent = 'Sucht DOI oder ISBN …';
+      const id = WBCite.detect([ref.doi && 'doi ' + ref.doi, ref.isbn && 'ISBN ' + ref.isbn, S.meta.subject, S.meta.keywords, await docText(S.pages.slice(0, 4), 12000)].filter(Boolean).join('\n'));
+      if (ref.doi) id.doi = ref.doi; if (ref.isbn && !id.isbn) id.isbn = ref.isbn.replace(/[-\s]/g, '');
+      if (!id.doi && !id.isbn) { msg.textContent = 'Keine DOI oder ISBN gefunden. Bitte von Hand ausfüllen oder DOI eintragen.'; return; }
+      try {
+        msg.textContent = id.doi ? `Schlägt DOI ${id.doi} nach …` : `Schlägt ISBN ${id.isbn} nach …`;
+        const got = await WBCite.lookup(id);
+        $('.cgrid', b).outerHTML = citeForm({ ...ref, ...Object.fromEntries(Object.entries(got).filter(([, v]) => v && (!Array.isArray(v) || v.length))) });
+        msg.textContent = 'Gefunden ✓ Bitte kurz prüfen.'; prev();
+      } catch (er) { msg.textContent = 'Nachschlagen fehlgeschlagen: ' + (er.message || er) + (id.doi ? ` (DOI ${id.doi})` : ''); }
+    }
+  };
+}
+async function citeQuote(pp, aa) {
+  if (!window.WBCite) return;
+  const a = aa || selAnnot(), sel = pp || (S.sel && pageById(S.sel.pid));
+  const text = a && (a.text || a.comment);
+  if (!a || !text) { toast('Erst Text markieren (Textmarker), dann die Markierung auswählen und „Zitieren“ tippen.'); return; }
+  if (!S.cite || !S.cite.ref || !S.cite.ref.title) { citeDialog(() => citeQuote(sel, a)); return; }
+  const q = WBCite.quote(text, S.cite.ref, citeStyle(), citePage(sel));
+  const full = q.foot ? q.text + '\n\n' + q.foot : q.text;
+  toast(await WBCite.copy(full) ? `Zitat kopiert: ${q.cite}` : 'Kopieren nicht möglich');
+}
+
+/* ---------- 2. Probeklausur ---------- */
+const NOTEN = [[95, '1,0'], [90, '1,3'], [85, '1,7'], [80, '2,0'], [75, '2,3'], [70, '2,7'], [65, '3,0'], [60, '3,3'], [55, '3,7'], [50, '4,0']];
+const noteOf = pct => (NOTEN.find(([p]) => pct >= p) || [0, '5,0'])[1];
+function examDialog() {
+  commitEdit();
+  const cards = (S.cards || []).length, ai = aiReady();
+  if (!ai && cards < 4) { toast('Für eine Probeklausur zuerst den KI-Assistenten einrichten (Funken-Symbol) oder mindestens 4 Lernkarten anlegen.'); return; }
+  const last = (S.exams || []).slice(-3).reverse();
+  dialog('Probeklausur', `<p class="note" style="margin:0">${ai ? 'Die KI stellt aus dem Stoff eine Klausur mit Multiple Choice und offenen Fragen zusammen und korrigiert sie danach.' : 'Ohne KI entsteht die Klausur aus deinen Lernkarten (Multiple Choice).'}</p>
+    <div class="frow"><label class="fld"><span>Stoff</span><select class="field" id="exSrc">${ai ? '<option value="doc">ganzes Dokument</option><option value="range">bestimmte Seiten</option><option value="marks">meine Markierungen</option>' : ''}${cards >= 4 ? `<option value="cards">meine Lernkarten (${cards})</option>` : ''}</select></label>
+    <label class="fld" id="exRangeW" hidden><span>Seiten</span><input class="field" id="exRange" placeholder="z. B. 1-12, 15"></label></div>
+    <div class="frow"><label class="fld"><span>Fragen</span><select class="field" id="exN"><option>5</option><option selected>10</option><option>15</option><option>20</option></select></label>
+    <label class="fld"><span>Zeit</span><select class="field" id="exT"><option value="0">ohne Limit</option><option value="10">10 Min.</option><option value="20" selected>20 Min.</option><option value="30">30 Min.</option><option value="45">45 Min.</option><option value="60">60 Min.</option><option value="90">90 Min.</option></select></label>
+    ${ai ? '<label class="fld"><span>Fragen</span><select class="field" id="exMix"><option value="mix">gemischt</option><option value="mc">nur Multiple Choice</option><option value="open">nur offene Fragen</option></select></label><label class="fld"><span>Niveau</span><select class="field" id="exLvl"><option value="normal">Klausurniveau</option><option value="hard">anspruchsvoll</option><option value="easy">Grundlagen</option></select></label>' : ''}</div>
+    ${last.length ? `<p class="note" style="margin:6px 0 0">Zuletzt: ${last.map(x => `${new Date(x.at).toLocaleDateString('de-DE')} Note ${x.grade} (${x.pct} %)`).join(' · ')}</p>` : ''}`, 'Klausur erstellen', b => {
+    const src = $('#exSrc', b).value, n = +$('#exN', b).value, mins = +$('#exT', b).value, mix = $('#exMix', b) ? $('#exMix', b).value : 'mc', lvl = $('#exLvl', b) ? $('#exLvl', b).value : 'normal', range = $('#exRange', b).value;
+    closeDlg(); examBuild({ src, n, mins, mix, lvl, range }); return false;
+  });
+  $('#dlgBody').onchange = () => { $('#exRangeW').hidden = $('#exSrc').value !== 'range'; };
+}
+async function examBuild(o) {
+  let qs = [];
+  if (o.src === 'cards') {
+    const all = S.cards.filter(c => c.front && c.back);
+    qs = [...all].sort(() => Math.random() - 0.5).slice(0, o.n).map(c => {
+      const others = all.filter(x => x.id !== c.id && x.back !== c.back).sort(() => Math.random() - 0.5).slice(0, 3).map(x => x.back);
+      const opts = [...others, c.back].sort(() => Math.random() - 0.5);
+      return { t: 'mc', q: c.front, o: opts, c: opts.indexOf(c.back), pid: c.pid, pts: 1, topic: '' };
+    });
+  } else {
+    busy(true, 'Die KI stellt die Klausur zusammen …');
+    try {
+      let text = '';
+      if (o.src === 'marks') { for (const p of S.pages) { const m = p.annots.filter(a => a.t === 'mark' && a.text).map(a => a.text.trim()); if (m.length) text += `\n[Seite ${S.pages.indexOf(p) + 1}]\n` + m.join('\n'); } }
+      else text = await docText(o.src === 'range' ? parseRange(o.range, S.pages.length).map(i => S.pages[i]) : S.pages);
+      if (!text.trim()) throw new Error(o.src === 'marks' ? 'Keine Markierungen gefunden.' : 'Kein Text gefunden (bei Scans zuerst die Texterkennung ausführen).');
+      const kinds = o.mix === 'mc' ? 'nur Multiple-Choice-Fragen' : o.mix === 'open' ? 'nur offene Fragen' : 'etwa zwei Drittel Multiple Choice und ein Drittel offene Fragen (Begriffe erklären, Zusammenhänge, kleine Rechnungen)';
+      const lvl = { normal: 'auf dem Niveau einer Hochschulklausur', hard: 'anspruchsvoll, mit Transfer- und Anwendungsfragen', easy: 'zu den Grundlagen und Definitionen' }[o.lvl];
+      const out = await AIX.ask({ instructions: `Du erstellst eine Probeklausur auf Deutsch ${lvl}. ${kinds}. Nur Inhalte aus dem Text. Antworte NUR mit einem JSON-Array ohne Codeblock. Formate:
+{"t":"mc","q":"Frage","o":["A","B","C","D"],"c":Index der richtigen Antwort (0-3),"s":Seitenzahl,"topic":"Thema in 1-3 Wörtern","x":"kurze Begründung"}
+{"t":"open","q":"Frage","a":"Musterlösung mit den erwarteten Kernpunkten","pts":Punkte 2-6,"s":Seitenzahl,"topic":"Thema in 1-3 Wörtern"}
+Genau ${o.n} Fragen. Falsche Antwortoptionen plausibel, gleich lang wie die richtige, Position der richtigen zufällig.`, messages: [{ role: 'user', text }], maxTokens: 6000 });
+      qs = aiJson(out).filter(q => q && q.q && ((q.t === 'mc' && Array.isArray(q.o) && q.o.length >= 2 && q.c >= 0 && q.c < q.o.length) || (q.t === 'open' && q.a))).map(q => ({ ...q, pts: q.t === 'mc' ? 1 : Math.max(1, Math.min(10, +q.pts || 3)), pid: (S.pages[(+q.s || 1) - 1] || {}).id || null }));
+      busy(false);
+    } catch (e) { busy(false); toast(e.setup ? 'Bitte zuerst den KI-Assistenten einrichten.' : 'Klausur konnte nicht erstellt werden: ' + (e.message || e)); return; }
+  }
+  if (!qs.length) { toast('Es konnten keine Fragen erstellt werden.'); return; }
+  examOverlay({ qs, mins: o.mins, title: baseName() });
+}
+function examOverlay(ex) {
+  const el = document.createElement('div'); el.className = 'study exam'; document.body.appendChild(el);
+  const ans = ex.qs.map(() => ({ v: null, t: '' }));
+  const end = ex.mins ? Date.now() + ex.mins * 60000 : 0;
+  let res = null, tm = 0, grading = false;
+  const total = ex.qs.reduce((s, q) => s + q.pts, 0);
+  const close = () => { clearInterval(tm); el.remove(); document.removeEventListener('keydown', key, true); };
+  const clock = () => { const t = el.querySelector('[data-clock]'); if (!t || !end) return; const s = Math.max(0, Math.round((end - Date.now()) / 1000)); t.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; t.classList.toggle('warn', s < 120); if (!s && !res && !grading) submit(true); };
+  const render = () => {
+    if (!res) {
+      el.innerHTML = `<div class="sbox xbox"><header><b>Probeklausur</b><span class="note">${esc(ex.title)} · ${ex.qs.length} Aufgaben · ${total} Punkte</span><span class="grow"></span>${end ? `<span class="xclock" data-clock></span>` : ''}<button class="ibtn" data-s="close" title="Abbrechen">✕</button></header>
+        <div class="xlist">${ex.qs.map((q, i) => `<section class="xq"><div class="xh"><b>Aufgabe ${i + 1}</b><span class="note">${q.pts} ${q.pts === 1 ? 'Punkt' : 'Punkte'}</span></div><p class="xt">${esc(q.q)}</p>${q.t === 'mc'
+          ? `<div class="xopts">${q.o.map((o, k) => `<label class="xopt"><input type="radio" name="x${i}" value="${k}" ${ans[i].v === k ? 'checked' : ''}><span>${esc(o)}</span></label>`).join('')}</div>`
+          : `<textarea class="field area" data-a="${i}" rows="4" placeholder="Deine Antwort …">${esc(ans[i].t)}</textarea>`}</section>`).join('')}</div>
+        <footer class="xfoot"><span class="note">${ans.filter(a => a.v != null || a.t.trim()).length} von ${ex.qs.length} beantwortet</span><span class="grow"></span><button class="btn primary" data-s="submit">${grading ? 'Wird korrigiert …' : 'Abgeben'}</button></footer></div>`;
+      clock(); return;
+    }
+    const weak = Object.entries(res.topics).filter(([, t]) => t.max && t.got / t.max < 0.6).map(([k]) => k);
+    el.innerHTML = `<div class="sbox xbox"><header><b>Ergebnis</b><span class="grow"></span><button class="ibtn" data-s="close">✕</button></header>
+      <div class="xres"><div class="xgrade"><b>${res.grade}</b><small>Note</small></div><div><h2>${res.got.toLocaleString('de-DE')} von ${total} Punkten (${res.pct} %)</h2><p class="note">${res.pct >= 50 ? 'Bestanden.' : 'Noch nicht bestanden.'} ${weak.length ? `Noch unsicher: <b>${weak.map(esc).join(', ')}</b>.` : res.pct >= 85 ? 'Sehr gut vorbereitet.' : ''}</p>
+      <div class="row2">${res.wrong.length ? `<button class="btn primary" data-s="cards">${icon('cards')}${res.wrong.length} Fehler als Lernkarten</button>` : ''}<button class="btn" data-s="again">Neue Klausur</button><button class="btn" data-s="close">Fertig</button></div></div></div>
+      <div class="xlist">${ex.qs.map((q, i) => { const r = res.per[i]; return `<section class="xq ${r.got >= q.pts ? 'ok' : r.got > 0 ? 'part' : 'bad'}"><div class="xh"><b>Aufgabe ${i + 1}</b><span class="note">${r.got.toLocaleString('de-DE')} / ${q.pts}</span>${q.pid ? `<button class="btn sm" data-pg="${q.pid}">Seite ${pageNo(q.pid) || ''}</button>` : ''}</div><p class="xt">${esc(q.q)}</p>${q.t === 'mc'
+        ? `<div class="xopts">${q.o.map((o, k) => `<div class="xopt ${k === q.c ? 'right' : k === ans[i].v ? 'wrong' : ''}"><span>${esc(o)}</span></div>`).join('')}</div>${q.x ? `<p class="note">${esc(q.x)}</p>` : ''}`
+        : `<p class="xmy"><small>Deine Antwort</small>${esc(ans[i].t || '–')}</p><p class="xsol"><small>Musterlösung</small>${esc(q.a)}</p>${r.fb ? `<p class="note">${esc(r.fb)}</p>` : ''}`}</section>`; }).join('')}</div></div>`;
+  };
+  const submit = async auto => {
+    if (grading) return;
+    if (!auto && ans.some(a => a.v == null && !a.t.trim()) && !await ask('Wirklich abgeben?', 'Es sind noch Aufgaben offen.', 'Abgeben', 'Weiter bearbeiten', false)) return;
+    grading = true; render();
+    const per = ex.qs.map((q, i) => ({ got: q.t === 'mc' ? (ans[i].v === q.c ? q.pts : 0) : 0, fb: '' }));
+    const open = ex.qs.map((q, i) => [q, i]).filter(([q]) => q.t === 'open');
+    if (open.length) {
+      if (aiReady()) {
+        try {
+          const out = await AIX.ask({ instructions: 'Du korrigierst offene Klausurfragen fair wie eine Dozentin. Vergleiche jede Antwort mit der Musterlösung, vergib Teilpunkte. Antworte NUR mit einem JSON-Array: [{"i":Nummer,"p":Punkte,"f":"kurzes Feedback, was fehlt oder falsch ist (1-2 Sätze)"}].', messages: [{ role: 'user', text: open.map(([q, i]) => `Nummer ${i}\nFrage: ${q.q}\nMusterlösung: ${q.a}\nHöchstpunktzahl: ${q.pts}\nAntwort: ${ans[i].t.trim() || '(keine Antwort)'}`).join('\n\n') }], maxTokens: 2500 });
+          for (const g of aiJson(out)) { const k = +g.i; if (per[k] && ex.qs[k].t === 'open') { per[k].got = Math.max(0, Math.min(ex.qs[k].pts, Math.round((+g.p || 0) * 2) / 2)); per[k].fb = String(g.f || ''); } }
+        } catch (e) { toast('Die offenen Fragen konnten nicht automatisch korrigiert werden.'); }
+      }
+    }
+    const got = per.reduce((s, r) => s + r.got, 0), pct = Math.round(got / total * 100);
+    const topics = {};
+    ex.qs.forEach((q, i) => { const t = q.topic || ''; if (!t) return; topics[t] = topics[t] || { got: 0, max: 0 }; topics[t].got += per[i].got; topics[t].max += q.pts; });
+    res = { per, got, pct, grade: noteOf(pct), topics, wrong: ex.qs.filter((q, i) => per[i].got < q.pts) };
+    S.exams = [...(S.exams || []), { at: Date.now(), pct, grade: res.grade, n: ex.qs.length }].slice(-20); markDirty();
+    if (window.WBStats) WBStats.exam(pct);
+    grading = false; clearInterval(tm); render(); el.scrollTop = 0;
+  };
+  const key = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (res) close(); } };
+  document.addEventListener('keydown', key, true);
+  el.addEventListener('change', e => { const r = e.target.closest('input[type=radio]'); if (r) { ans[+r.name.slice(1)].v = +r.value; const f = el.querySelector('.xfoot .note'); if (f) f.textContent = `${ans.filter(a => a.v != null || a.t.trim()).length} von ${ex.qs.length} beantwortet`; } });
+  el.addEventListener('input', e => { const t = e.target.closest('[data-a]'); if (t) ans[+t.dataset.a].t = t.value; });
+  el.addEventListener('click', async e => {
+    const pg = e.target.closest('[data-pg]'); if (pg) { close(); scrollToPage(pageNo(pg.dataset.pg) - 1); return; }
+    const s = e.target.closest('[data-s]'); if (!s) return;
+    if (s.dataset.s === 'close') { if (res || await ask('Klausur abbrechen?', 'Deine Antworten gehen verloren.', 'Abbrechen', 'Weiter', true)) close(); }
+    else if (s.dataset.s === 'submit') submit(false);
+    else if (s.dataset.s === 'again') { close(); examDialog(); }
+    else if (s.dataset.s === 'cards') {
+      pushHist();
+      const add = res.wrong.map(q => ({ id: uid('c'), front: q.q, back: q.t === 'mc' ? q.o[q.c] + (q.x ? ' – ' + q.x : '') : q.a, pid: q.pid, ai: true, due: Date.now(), created: Date.now() }));
+      S.cards = [...(S.cards || []), ...add]; markDirty(); renderLearn(); s.disabled = true; s.textContent = `${add.length} Lernkarten angelegt ✓`;
+    }
+  });
+  render(); if (end) tm = setInterval(clock, 1000);
+}
+
+/* ---------- 3. Mindmap und Kapitel-Zusammenfassung ---------- */
+async function mindmapOverlay() {
+  commitEdit();
+  busy(true, 'Mindmap wird erstellt …');
+  let hs = []; try { hs = window.WBConvert ? await findHeadings() : []; } catch (e) { hs = []; }
+  busy(false);
+  const root = { id: 'root', text: (S.meta.title || baseName()).slice(0, 80), kids: [], lvl: 0, i: 0, y: 0 };
+  const flat = [];
+  if (hs.length) {
+    const stack = [root];
+    for (const h of hs) {
+      const n = { id: uid('m'), text: h.text.slice(0, 90), kids: [], lvl: h.lvl, i: h.i, y: h.y, pid: h.pid, head: true };
+      while (stack.length > 1 && stack[stack.length - 1].lvl >= h.lvl) stack.pop();
+      stack[stack.length - 1].kids.push(n); stack.push(n); flat.push(n);
+    }
+  } else {
+    S.pages.forEach((p, i) => { if (p.annots.some(a => (a.t === 'mark' && a.text) || (a.t === 'note' && a.text))) { const n = { id: uid('m'), text: `Seite ${i + 1}`, kids: [], lvl: 1, i, y: 0, pid: p.id, head: true }; root.kids.push(n); flat.push(n); } });
+  }
+  // Markierungen und Notizen dem passenden Abschnitt zuordnen
+  const owner = (i, y) => { let o = root; for (const n of flat) { if (n.i < i || (n.i === i && n.y <= y + 2)) o = n; else break; } return o; };
+  S.pages.forEach((p, i) => {
+    for (const a of p.annots) {
+      if (!((a.t === 'mark' && a.text) || (a.t === 'note' && a.text))) continue;
+      const b = bbox(a), o = owner(i, b.y);
+      const t = a.text.replace(/\s+/g, ' ').trim();
+      o.kids.push({ id: uid('m'), text: t.length > 70 ? t.slice(0, 68) + '…' : t, full: t, kids: [], leaf: true, note: a.t === 'note', pid: p.id, aid: a.id, color: a.color });
+    }
+  });
+  if (!root.kids.length) { toast('Keine Überschriften oder Markierungen gefunden. Markiere wichtige Stellen oder führe bei Scans die Texterkennung aus.'); return; }
+  // Layout: von links nach rechts
+  const W0 = 210, GAP = 34, LH = 15;
+  const ctx = document.createElement('canvas').getContext('2d'); ctx.font = '13px system-ui, sans-serif';
+  const lines = t => { const ws = t.split(' '), out = []; let l = ''; for (const w of ws) { const s = l ? l + ' ' + w : w; if (ctx.measureText(s).width > W0 - 22 && l) { out.push(l); l = w; } else l = s; } out.push(l); return out.slice(0, 4); };
+  let yy = 0;
+  const place = (n, d) => {
+    n.d = d; n.ls = lines(n.text); n.h = n.ls.length * LH + 14; n.x = d * (W0 + 60);
+    if (!n.kids.length) { n.y0 = yy; yy += n.h + 10; n.cy = n.y0 + n.h / 2; return; }
+    n.kids.forEach(k => place(k, d + 1));
+    n.cy = (n.kids[0].cy + n.kids[n.kids.length - 1].cy) / 2; n.y0 = n.cy - n.h / 2;
+    if (n.y0 < 0) n.y0 = 0;
+  };
+  place(root, 0);
+  const all = []; const walk = n => { all.push(n); n.kids.forEach(walk); }; walk(root);
+  const maxX = Math.max(...all.map(n => n.x)) + W0 + GAP, maxY = Math.max(yy, ...all.map(n => n.y0 + n.h)) + GAP;
+  const PAL = ['#1f4fd8', '#0f8a6a', '#b4561b', '#8a3ffc', '#c4352b', '#0072b1', '#7a6a00'];
+  let ci = 0; root.kids.forEach(k => { const c = PAL[ci++ % PAL.length]; const paint = n => { n.col = n.col || c; n.kids.forEach(paint); }; k.col = c; paint(k); });
+  const svgOf = () => `<svg xmlns="http://www.w3.org/2000/svg" class="mmsvg" viewBox="${-GAP} ${-GAP} ${maxX + GAP} ${maxY + GAP}" width="${maxX + 2 * GAP}" height="${maxY + 2 * GAP}" font-family="system-ui, sans-serif">
+    <rect x="${-GAP}" y="${-GAP}" width="${maxX + 2 * GAP}" height="${maxY + 2 * GAP}" fill="#ffffff"/>
+    ${all.filter(n => n !== root || true).flatMap(n => n.kids.map(k => `<path d="M${n.x + W0} ${n.cy} C${n.x + W0 + 30} ${n.cy} ${k.x - 30} ${k.cy} ${k.x} ${k.cy}" fill="none" stroke="${k.col || '#9aa3b2'}" stroke-opacity=".55" stroke-width="${n === root ? 2.5 : 1.6}"/>`)).join('')}
+    ${all.map(n => `<g class="mmn${n.leaf ? ' leaf' : ''}" data-n="${n.id}" style="cursor:pointer"><rect x="${n.x}" y="${n.y0}" width="${W0}" height="${n.h}" rx="${n.leaf ? 6 : 10}" fill="${n === root ? '#1b2130' : n.leaf ? (n.note ? '#fff8d6' : '#ffffff') : n.col}" fill-opacity="${n === root || n.leaf ? 1 : n.d === 1 ? 1 : 0.14}" stroke="${n.leaf ? (n.note ? '#e0c24a' : n.col || '#cfd5df') : n.col || '#1b2130'}" stroke-width="${n.leaf ? 1 : 1.4}"/>${n.ls.map((l, k) => `<text x="${n.x + 11}" y="${n.y0 + 18 + k * LH}" font-size="${n === root ? 14 : 12.5}" font-weight="${n.leaf ? 400 : 600}" fill="${n === root || (!n.leaf && n.d === 1) ? '#ffffff' : '#1b2130'}">${esc(l)}</text>`).join('')}${n.pid && !n.leaf ? `<text x="${n.x + W0 - 8}" y="${n.y0 + n.h - 6}" font-size="9.5" text-anchor="end" fill="${n.d === 1 ? '#ffffffcc' : '#5f6878'}">S. ${pageNo(n.pid) || ''}</text>` : ''}</g>`).join('')}</svg>`;
+  const el = document.createElement('div'); el.className = 'study mmap';
+  el.innerHTML = `<div class="sbox mbox"><header><b>Mindmap</b><span class="note">${hs.length ? `${hs.length} Überschriften` : 'nach Seiten'} · ${all.filter(n => n.leaf).length} Markierungen und Notizen</span><span class="grow"></span>
+    <button class="ibtn" data-m="out" title="Verkleinern">−</button><button class="ibtn" data-m="in" title="Vergrößern">+</button>
+    <button class="btn" data-m="png">${icon('image')}Als Bild</button>${aiReady() && hs.length ? `<button class="btn" data-m="sumall">${icon('spark')}Alle Kapitel zusammenfassen</button>` : ''}<button class="ibtn" data-m="close" title="Schließen (Esc)">✕</button></header>
+    <div class="mmwrap"><div class="mmstage">${svgOf()}</div><aside class="mmside" hidden></aside></div></div>`;
+  document.body.appendChild(el);
+  let z = 1; const stage = $('.mmstage', el), svg = () => $('svg', stage);
+  const zoom = f => { z = clamp(z * f, 0.3, 2.5); const s = svg(); s.style.width = (maxX + 2 * GAP) * z + 'px'; s.style.height = (maxY + 2 * GAP) * z + 'px'; };
+  zoom(Math.min(1, ($('.mmwrap', el).clientWidth - 20) / (maxX + 2 * GAP)) / 1);
+  const byId = new Map(all.map(n => [n.id, n]));
+  const close = () => { el.remove(); document.removeEventListener('keydown', key, true); };
+  const key = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+  document.addEventListener('keydown', key, true);
+  // Text eines Abschnitts: von der Überschrift bis zur nächsten gleich hohen oder höheren
+  const sectionText = async n => {
+    const k = flat.indexOf(n), next = flat.slice(k + 1).find(m => m.lvl <= n.lvl);
+    let t = '';
+    for (let i = n.i; i <= (next ? next.i : S.pages.length - 1); i++) {
+      const p = S.pages[i];
+      try {
+        const r = await WBConvert._linesOf(proxyOf(p));
+        for (const l of r.lines) { if (i === n.i && l.y < n.y - 2) continue; if (next && i === next.i && l.y >= next.y - 2) continue; t += l.text.replace(/\t/g, ' ') + '\n'; }
+      } catch (e) { /* weiter */ }
+      if (t.length > 16000) break;
+    }
+    return t.trim();
+  };
+  const side = $('.mmside', el);
+  const showSide = async n => {
+    side.hidden = false;
+    side.innerHTML = `<h3>${esc(n.leaf ? (n.note ? 'Notiz' : 'Markierung') : n.text)}</h3>${n.leaf ? `<p>${esc(n.full || n.text)}</p>` : ''}<div class="row2">${n.pid ? `<button class="btn" data-m="goto" data-id="${n.id}">Zur Seite ${pageNo(n.pid) || ''}</button>` : ''}${!n.leaf && n.head && aiReady() ? `<button class="btn primary" data-m="sum" data-id="${n.id}">${icon('spark')}Zusammenfassen</button>` : ''}</div><div class="mmsum"></div>`;
+    if (!n.leaf && n.head && !aiReady()) side.insertAdjacentHTML('beforeend', '<p class="note">Mit eingerichteter KI (Funken-Symbol) gibt es hier eine Zusammenfassung des Kapitels.</p>');
+  };
+  const summarize = async (n, box) => {
+    box.innerHTML = '<p class="note"><span class="spin"></span> Die KI fasst zusammen …</p>';
+    try {
+      const t = await sectionText(n);
+      if (!t) throw new Error('Kein Text in diesem Abschnitt.');
+      const out = await AIX.ask({ instructions: 'Fasse den Abschnitt eines Skripts für die Klausurvorbereitung auf Deutsch zusammen: 3–7 Stichpunkte mit den wichtigsten Begriffen, Definitionen und Zusammenhängen. Nur Inhalte aus dem Text. Markdown-Stichpunkte, keine Einleitung.', messages: [{ role: 'user', text: `Abschnitt: ${n.text}\n\n${t}` }], maxTokens: 900 });
+      n.sum = out.trim();
+      box.innerHTML = `<div class="tx">${aiMd(n.sum)}</div><div class="row2"><button class="btn sm" data-m="sumcopy" data-id="${n.id}">${icon('copy')}Kopieren</button><button class="btn sm" data-m="sumnote" data-id="${n.id}">${icon('note')}Als Notiz</button></div>`;
+    } catch (e) { box.innerHTML = `<p class="note">Zusammenfassen fehlgeschlagen: ${esc(e.message || e)}</p>`; }
+  };
+  el.addEventListener('click', async e => {
+    const g = e.target.closest('[data-n]');
+    if (g) { const n = byId.get(g.dataset.n); $$('.mmn.on', el).forEach(x => x.classList.remove('on')); g.classList.add('on'); if (n === root) { side.hidden = true; return; } showSide(n); return; }
+    const m = e.target.closest('[data-m]'); if (!m) return;
+    const n = m.dataset.id && byId.get(m.dataset.id);
+    if (m.dataset.m === 'close') close();
+    else if (m.dataset.m === 'in') zoom(1.2);
+    else if (m.dataset.m === 'out') zoom(1 / 1.2);
+    else if (m.dataset.m === 'goto' && n) { close(); scrollToPage(pageNo(n.pid) - 1); if (n.aid) setTimeout(() => gotoAnnot(n.aid), 150); }
+    else if (m.dataset.m === 'sum' && n) summarize(n, $('.mmsum', side));
+    else if (m.dataset.m === 'sumcopy' && n) toast(await writeSysClip(aiPlain(n.sum)) ? 'Zusammenfassung kopiert' : 'Kopieren nicht möglich');
+    else if (m.dataset.m === 'sumnote' && n) {
+      const p = pageById(n.pid) || S.pages[0], [W] = dims(p);
+      pushHist(); p.annots.push({ id: uid(), t: 'note', x: W - NOTE - 18, y: Math.max(18, (n.y || 40) - 10), color: '#ffd400', text: `Zusammenfassung: ${n.text}\n\n${aiPlain(n.sum)}` }); drawAnnots(p); markDirty(); toast('Als Notiz an der Überschrift angeheftet');
+    }
+    else if (m.dataset.m === 'png') {
+      const s = svg().cloneNode(true); s.removeAttribute('style');
+      const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(s)); await img.decode();
+      const k = Math.min(2, 8000 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = img.width * k; c.height = img.height * k;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(bl => { bl.arrayBuffer().then(ab => dlTo(new Uint8Array(ab), cleanFile(baseName()) + ' – Mindmap.png', 'image/png')); }, 'image/png');
+    }
+    else if (m.dataset.m === 'sumall') {
+      const top = flat.filter(x => x.lvl === Math.min(...flat.map(f => f.lvl))).slice(0, 14);
+      if (!await ask('Alle Kapitel zusammenfassen?', `Die KI fasst ${top.length} Kapitel zusammen und fügt das Ergebnis als neue Seite hinter der aktuellen ein. Das dauert etwas.`, 'Los', 'Abbrechen', false)) return;
+      m.disabled = true; let md = `# Zusammenfassung: ${root.text}\n`;
+      for (let k = 0; k < top.length; k++) {
+        m.textContent = `Kapitel ${k + 1} von ${top.length} …`;
+        try {
+          const t = await sectionText(top[k]); if (!t) continue;
+          const out = await AIX.ask({ instructions: 'Fasse diesen Abschnitt eines Skripts für die Klausurvorbereitung auf Deutsch in 3–6 Stichpunkten zusammen. Nur Inhalte aus dem Text. Markdown-Stichpunkte, keine Überschrift, keine Einleitung.', messages: [{ role: 'user', text: t }], maxTokens: 700 });
+          md += `\n## ${top[k].text} (S. ${top[k].i + 1})\n${out.trim()}\n`;
+        } catch (er) { md += `\n## ${top[k].text}\n- (nicht zusammengefasst)\n`; }
+      }
+      close();
+      busy(true, 'Seite wird erstellt …');
+      try { await insertPdfBytes(await aiPagePdf(md), 'Zusammenfassung.pdf'); busy(false); toast('Zusammenfassung als neue Seite eingefügt'); }
+      catch (er) { busy(false); toast('Seite konnte nicht erstellt werden.'); }
+    }
+  });
+  // Ziehen zum Verschieben
+  const wrap = $('.mmwrap', el); let dr = null;
+  wrap.addEventListener('pointerdown', e => { if (e.target.closest('[data-n],.mmside')) return; dr = { x: e.clientX, y: e.clientY, l: stage.scrollLeft, t: stage.scrollTop }; stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointermove', e => { if (!dr) return; stage.scrollLeft = dr.l - (e.clientX - dr.x); stage.scrollTop = dr.t - (e.clientY - dr.y); });
+  stage.addEventListener('pointerup', () => { dr = null; });
+  stage.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); zoom(e.deltaY < 0 ? 1.1 : 1 / 1.1); }, { passive: false });
+}
+
+/* ---------- 4. Lernstatistik und Pomodoro ---------- */
+const STU = { last: Date.now(), tick: 0 };
+function statsBind() {
+  if (!window.WBStats) return;
+  const act = () => { STU.last = Date.now(); };
+  ['pointerdown', 'keydown', 'wheel'].forEach(t => addEventListener(t, act, { passive: true, capture: true }));
+  viewer.addEventListener('scroll', act, { passive: true });
+  STU.tick = setInterval(() => {
+    if (document.hidden || S.sample || !S.pages.length || S.renderMode) return;
+    if (Date.now() - STU.last > 120000 && !(REC && REC.mr)) return;
+    WBStats.tick(S.lib ? S.lib.id : 'f:' + S.docName, baseName(), 15);
+  }, 15000);
+  pomoResume();
+}
+const POMO = { t: 0, el: null };
+const pomoState = () => { try { return JSON.parse(lsGet('pdfwb.pomo') || 'null'); } catch (e) { return null; } };
+function pomoBeep() {
+  try { const ac = new (window.AudioContext || window.webkitAudioContext)(); [0, 0.25, 0.5].forEach(d => { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = 880; g.gain.setValueAtTime(0.0001, ac.currentTime + d); g.gain.exponentialRampToValueAtTime(0.25, ac.currentTime + d + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + d + 0.2); o.connect(g).connect(ac.destination); o.start(ac.currentTime + d); o.stop(ac.currentTime + d + 0.22); }); setTimeout(() => ac.close(), 1200); } catch (e) { /* kein Ton */ }
+}
+function pomoNotify(title, body) {
+  pomoBeep(); toast(title + ' ' + body);
+  try { if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body, icon: 'icons/icon-192.png' }); } catch (e) { /* egal */ }
+}
+function pomoStart(work = 25, brk = 5) {
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {});
+  lsSet('pdfwb.pomo', JSON.stringify({ phase: 'work', end: Date.now() + work * 60000, work, brk, n: 0 }));
+  pomoResume(); toast(`Pomodoro läuft: ${work} Minuten konzentriert lernen`);
+}
+function pomoStop() { try { localStorage.removeItem('pdfwb.pomo'); } catch (e) { /* egal */ } clearInterval(POMO.t); if (POMO.el) { POMO.el.remove(); POMO.el = null; } }
+function pomoResume() {
+  const st = pomoState(); clearInterval(POMO.t);
+  if (!st) { if (POMO.el) { POMO.el.remove(); POMO.el = null; } return; }
+  if (!POMO.el) {
+    POMO.el = document.createElement('div'); POMO.el.className = 'pomochip';
+    POMO.el.innerHTML = `<span class="pdot"></span><b data-pt></b><small data-pp></small><button class="ibtn" data-pm="skip" title="Phase beenden">⏭</button><button class="ibtn" data-pm="stop" title="Pomodoro beenden">✕</button>`;
+    document.body.appendChild(POMO.el);
+    POMO.el.addEventListener('click', e => { const b = e.target.closest('[data-pm]'); if (!b) return; if (b.dataset.pm === 'stop') pomoStop(); else { const s = pomoState(); if (s) { s.end = Date.now(); lsSet('pdfwb.pomo', JSON.stringify(s)); pomoTick(); } } });
+  }
+  const pomoTick = () => {
+    const s = pomoState(); if (!s) { pomoStop(); return; }
+    let left = Math.round((s.end - Date.now()) / 1000);
+    if (left <= 0) {
+      if (s.phase === 'work') { s.n = (s.n || 0) + 1; if (window.WBStats) WBStats.pomo(); s.phase = 'break'; s.end = Date.now() + (s.n % 4 === 0 ? s.brk * 3 : s.brk) * 60000; pomoNotify('Pause!', s.n % 4 === 0 ? `${s.n} Pomodoros geschafft – jetzt eine längere Pause.` : `Pomodoro ${s.n} geschafft. ${s.brk} Minuten Pause.`); }
+      else { s.phase = 'work'; s.end = Date.now() + s.work * 60000; pomoNotify('Weiter geht’s', `Nächster Pomodoro: ${s.work} Minuten.`); }
+      lsSet('pdfwb.pomo', JSON.stringify(s)); left = Math.round((s.end - Date.now()) / 1000);
+    }
+    POMO.el.classList.toggle('brk', s.phase === 'break');
+    $('[data-pt]', POMO.el).textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    $('[data-pp]', POMO.el).textContent = s.phase === 'work' ? `Lernen · ${(s.n || 0) + 1}.` : 'Pause';
+  };
+  pomoTick(); POMO.t = setInterval(pomoTick, 1000);
+}
+function studyStatsDialog() {
+  if (!window.WBStats) return;
+  const ex = (S.exams || []).slice(-5).reverse(), due = cardsDue().length, run = pomoState();
+  dialog('Lernstatistik', `${WBStats.html()}
+    <h4 class="lh">Pomodoro</h4><p class="note" style="margin:0 0 6px">Konzentriert lernen, dann kurz Pause. Nach vier Runden gibt es eine längere Pause. Der Timer läuft weiter, auch wenn du das Dokument wechselst.</p>
+    <div class="row2">${run ? `<button class="btn" data-ps="stop">Pomodoro beenden</button>` : `<button class="btn primary" data-ps="25">${icon('timer')}25 / 5 Minuten</button><button class="btn" data-ps="50">50 / 10 Minuten</button>`}</div>
+    <h4 class="lh">Dieses Dokument</h4><p class="note" style="margin:0">${(S.cards || []).length} Lernkarten, davon ${due} fällig${ex.length ? ` · Probeklausuren: ${ex.map(x => `Note ${x.grade} (${x.pct} %, ${new Date(x.at).toLocaleDateString('de-DE')})`).join(', ')}` : ''}.</p>
+    <div class="row2" style="margin-top:8px">${due ? `<button class="btn" data-ps="learn">${icon('cards')}Fällige Karten lernen</button>` : ''}<button class="btn" data-ps="exam">${icon('exam')}Probeklausur</button></div>`, 'Schließen', () => true);
+  $('#dlgCancel').hidden = true; $('#dlg .card').classList.add('wide');
+  $('#dlgBody').onclick = e => {
+    const b = e.target.closest('[data-ps]'); if (!b) return; const k = b.dataset.ps;
+    closeDlg();
+    if (k === 'stop') pomoStop(); else if (k === '25') pomoStart(25, 5); else if (k === '50') pomoStart(50, 10); else if (k === 'learn') studyOverlay('learn'); else if (k === 'exam') examDialog();
+  };
+}
+
+/* ---------- 5. Formel als LaTeX ---------- */
+function pickArea(hint) {
+  return new Promise(resolve => {
+    const ov = document.createElement('div'); ov.className = 'areapick';
+    ov.innerHTML = `<div class="aphint">${esc(hint)} <button class="btn sm" data-ap="no">Abbrechen</button></div>`;
+    document.body.appendChild(ov);
+    let st = null, box = null;
+    const done = v => { ov.remove(); if (box) box.remove(); document.removeEventListener('keydown', key, true); resolve(v); };
+    const key = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); } };
+    document.addEventListener('keydown', key, true);
+    ov.addEventListener('click', e => { if (e.target.closest('[data-ap]')) done(null); });
+    ov.addEventListener('pointerdown', e => {
+      if (e.target.closest('.aphint')) return;
+      ov.style.pointerEvents = 'none'; const under = document.elementFromPoint(e.clientX, e.clientY); ov.style.pointerEvents = '';
+      const pg = under && under.closest('.page'); if (!pg) return;
+      const p = pageById(pg.dataset.id), el = els.get(p.id); if (!el) return;
+      const r = el.svg.getBoundingClientRect();
+      st = { p, r, x: e.clientX, y: e.clientY };
+      box = document.createElement('div'); box.className = 'apbox'; document.body.appendChild(box);
+      ov.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    ov.addEventListener('pointermove', e => {
+      if (!st) return;
+      const x0 = clamp(Math.min(st.x, e.clientX), st.r.left, st.r.right), x1 = clamp(Math.max(st.x, e.clientX), st.r.left, st.r.right);
+      const y0 = clamp(Math.min(st.y, e.clientY), st.r.top, st.r.bottom), y1 = clamp(Math.max(st.y, e.clientY), st.r.top, st.r.bottom);
+      Object.assign(box.style, { left: x0 + 'px', top: y0 + 'px', width: (x1 - x0) + 'px', height: (y1 - y0) + 'px' });
+      st.cur = { x0, y0, x1, y1 };
+    });
+    ov.addEventListener('pointerup', () => {
+      if (!st || !st.cur) return;
+      const { x0, y0, x1, y1 } = st.cur, z = S.zoom;
+      if (x1 - x0 < 8 || y1 - y0 < 8) { st = null; if (box) { box.remove(); box = null; } return; }
+      done({ p: st.p, x: (x0 - st.r.left) / z, y: (y0 - st.r.top) / z, w: (x1 - x0) / z, h: (y1 - y0) / z });
+    });
+  });
+}
+async function regionImage(p, a, maxSide = 1600) {
+  const proxy = proxyOf(p), k = clamp(maxSide / Math.max(a.w, a.h), 1, 6);
+  const vp = proxy.getViewport({ scale: k, rotation: rotOf(p), offsetX: -a.x * k, offsetY: -a.y * k });
+  const c = document.createElement('canvas'); c.width = Math.ceil(a.w * k); c.height = Math.ceil(a.h * k);
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  await proxy.render({ canvasContext: ctx, viewport: vp }).promise;
+  const own = p.annots.filter(x => { const b = bbox(x); return b.x < a.x + a.w && b.x + b.w > a.x && b.y < a.y + a.h && b.y + b.h > a.y; });
+  if (own.length) {
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}" viewBox="${a.x} ${a.y} ${a.w} ${a.h}">${own.map(annotSVG).join('')}</svg>`);
+    try { await img.decode(); ctx.drawImage(img, 0, 0); } catch (e) { /* ohne eigene Elemente */ }
+  }
+  return c;
+}
+let katexP = null;
+function loadKatex() {
+  if (window.katex) return Promise.resolve(window.katex);
+  if (!katexP) katexP = new Promise((res, rej) => { const s = document.createElement('script'); s.src = (window.WB_CONFIG && WB_CONFIG.katexScript) || 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js'; s.onload = () => res(window.katex); s.onerror = () => { katexP = null; rej(new Error('Formel-Vorschau nicht verfügbar (offline?)')); }; document.head.appendChild(s); });
+  return katexP;
+}
+async function formulaTool() {
+  commitEdit();
+  if (!aiReady()) { toast('Formeln erkennt die KI. Bitte zuerst den KI-Assistenten einrichten (Funken-Symbol oben).'); return; }
+  const area = await pickArea('Zieh einen Rahmen um die Formel (gedruckt oder handschriftlich).');
+  if (!area) return;
+  busy(true, 'Formel wird gelesen …');
+  let tex = '';
+  try {
+    const c = await regionImage(area.p, area);
+    tex = await AIX.ask({ instructions: 'Du wandelst Formeln aus Bildern in LaTeX um. Antworte NUR mit dem LaTeX-Code ohne $-Zeichen, ohne Codeblock, ohne Erklärung. Mehrere Zeilen als aligned-Umgebung. Text in Formeln mit \\text{}.', messages: [{ role: 'user', text: 'Formel als LaTeX:', images: [c.toDataURL('image/png')] }], maxTokens: 800 });
+    tex = String(tex).replace(/^```\w*\n?|```$/g, '').replace(/^\$+|\$+$/g, '').replace(/^\\\[|\\\]$/g, '').trim();
+    busy(false);
+  } catch (e) { busy(false); toast('Formel konnte nicht gelesen werden: ' + (e.message || e)); return; }
+  let K = null; try { K = await loadKatex(); } catch (e) { K = null; }
+  dialog('Formel als LaTeX', `<p class="note" style="margin:0">Bitte prüfen. Änderungen siehst du sofort in der Vorschau.</p>
+    <textarea class="field area mono" id="fxTex" rows="4" spellcheck="false">${esc(tex)}</textarea>
+    <div class="fxprev" id="fxPrev"></div>
+    <div class="row2"><button type="button" class="btn" data-fx="tex">${icon('copy')}LaTeX kopieren</button><button type="button" class="btn" data-fx="word" ${K ? '' : 'disabled'}>Für Word kopieren</button><button type="button" class="btn" data-fx="md">Für Notion/Markdown ($$)</button></div>
+    <p class="note" style="margin:4px 0 0">„Für Word“ kopiert MathML: in Word einfügen, es wird automatisch eine bearbeitbare Formel.</p>`, 'Als Text einfügen', b => {
+    const t = $('#fxTex', b).value.trim(); if (!t) return false;
+    const p = area.p; pushHist();
+    const a = { id: uid(), t: 'text', x: area.x, y: area.y + area.h + 6, text: t, color: '#1b2130', size: 10, font: 'JetBrainsMono', bold: false };
+    p.annots.push(a); drawAnnots(p); markDirty(); toast('LaTeX unter der Formel eingefügt');
+  });
+  $('#dlg .card').classList.add('wide');
+  const b = $('#dlgBody');
+  const prev = () => { const t = $('#fxTex', b).value; if (!K) { $('#fxPrev', b).innerHTML = '<span class="note">Vorschau nicht verfügbar</span>'; return; } try { $('#fxPrev', b).innerHTML = K.renderToString(t, { displayMode: true, output: 'mathml', throwOnError: true }); } catch (e) { $('#fxPrev', b).innerHTML = `<span class="note">LaTeX-Fehler: ${esc(e.message.replace(/^KaTeX parse error: /, ''))}</span>`; } };
+  b.oninput = prev; prev();
+  b.onclick = async e => {
+    const x = e.target.closest('[data-fx]'); if (!x) return; const t = $('#fxTex', b).value.trim();
+    if (x.dataset.fx === 'tex') toast(await writeSysClip(t) ? 'LaTeX kopiert' : 'Kopieren nicht möglich');
+    else if (x.dataset.fx === 'md') toast(await writeSysClip(`$$\n${t}\n$$`) ? 'Kopiert' : 'Kopieren nicht möglich');
+    else if (x.dataset.fx === 'word' && K) { try { const ml = K.renderToString(t, { output: 'mathml', displayMode: true }).replace(/^<span class="katex(-display)?">|<\/span>$/g, '').replace(/^<span class="katex">|<\/span>$/g, ''); const math = (ml.match(/<math[\s\S]*<\/math>/) || [ml])[0].replace(/<annotation[\s\S]*?<\/annotation>/, '').replace(/<semantics>|<\/semantics>/g, ''); toast(await writeSysClip(math) ? 'MathML kopiert – in Word einfügen' : 'Kopieren nicht möglich'); } catch (er) { toast('LaTeX-Fehler: ' + er.message); } }
+  };
+}
+
+/* ---------- 6. E-Rechnung ansehen ---------- */
+const EINV_NOTED = new Set();
+async function einvoiceCheck() {
+  if (!window.WBEInvoice || !S.pages.length) return;
+  const src = S.sources.get(S.pages[0].src); if (!src || !src.pdf || EINV_NOTED.has(src.id)) return;
+  EINV_NOTED.add(src.id);
+  const f = await WBEInvoice.fromPdf(src.pdf).catch(() => null);
+  if (!f) return;
+  S.einv = f;
+  pill(`${icon('xml')}<span>Diese PDF enthält eine E-Rechnung (${esc(f.name)})</span><button class="btn sm" data-x="show">Daten anzeigen</button><button class="ibtn" data-x="no" aria-label="Schließen">✕</button>`, k => { pill(null); if (k === 'show') einvoiceView(f.xml, f.name); });
+}
+function einvoiceView(xml, name) {
+  let m; try { m = WBEInvoice.parse(xml); } catch (e) { toast(e.message || String(e)); return; }
+  const epc = WBEInvoice.epc(m);
+  let qr = '';
+  if (epc && window.qrcode) { try { const q = window.qrcode(0, 'M'); q.addData(epc); q.make(); const n = q.getModuleCount(); let d = ''; for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += `M${c + 2} ${r + 2}h1v1h-1z`; qr = `<div class="einv-qr"><svg viewBox="0 0 ${n + 4} ${n + 4}" width="132" height="132"><rect width="${n + 4}" height="${n + 4}" fill="#fff"/><path d="${d}"/></svg><small>GiroCode: mit der Banking-App scannen</small></div>`; } catch (e) { qr = ''; } }
+  dialog('E-Rechnung', WBEInvoice.html(m).replace('</div>\n      <table', `</div>${qr}<table`) + `<div class="row2"><button type="button" class="btn" data-ev="pdf">${icon('save')}Lesbare PDF speichern</button><button type="button" class="btn" data-ev="open">Als Dokument öffnen</button><button type="button" class="btn" data-ev="xml">XML speichern</button><button type="button" class="btn" data-ev="csv">Für Buchhaltung (CSV)</button></div>`, 'Schließen', () => true);
+  $('#dlgCancel').hidden = true; $('#dlg .card').classList.add('wide');
+  $('#dlgBody').onclick = async e => {
+    const x = e.target.closest('[data-ev]'); if (!x) return;
+    const nm = cleanFile(`${WBEInvoice.TYPE[m.type] || 'Rechnung'} ${m.no} ${(m.seller && m.seller.name) || ''}`);
+    if (x.dataset.ev === 'xml') dlTo(new TextEncoder().encode(xml), name && /\.xml$/i.test(name) && !/^factur-x/i.test(name) ? name : nm + '.xml', 'application/xml');
+    else if (x.dataset.ev === 'pdf') saveBytes(await WBEInvoice.toPdf(m), nm + '.pdf');
+    else if (x.dataset.ev === 'open') { closeDlg(); await openFiles([new File([await WBEInvoice.toPdf(m)], nm + '.pdf', { type: 'application/pdf' })], 'replace'); }
+    else if (x.dataset.ev === 'csv') {
+      const f2 = n => (+n || 0).toFixed(2).replace('.', ',');
+      const rows = [['Belegdatum', 'Rechnungsnummer', 'Lieferant', 'USt-IdNr.', 'Netto', 'USt', 'Brutto', 'Fällig', 'IBAN', 'Verwendungszweck'], [m.date ? m.date.toLocaleDateString('de-DE') : '', m.no, (m.seller && m.seller.name) || '', (m.seller && m.seller.vatId) || '', f2(m.net), f2(m.tax), f2(m.gross), m.due ? m.due.toLocaleDateString('de-DE') : '', m.iban, m.payRef || m.no]];
+      dlTo(new TextEncoder().encode('﻿' + rows.map(r => r.map(c => /[;"\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c).join(';')).join('\r\n')), nm + '.csv', 'text/csv');
+    }
+  };
+}
+function einvoiceOpen() {
+  if (S.einv) { einvoiceView(S.einv.xml, S.einv.name); return; }
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.xml,application/xml,text/xml,.pdf,application/pdf';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    if (/\.pdf$/i.test(f.name)) {
+      const pdf = await PDFJS.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise;
+      const x = await WBEInvoice.fromPdf(pdf); pdf.destroy();
+      if (!x) { toast('In dieser PDF steckt keine E-Rechnung.'); return; }
+      einvoiceView(x.xml, x.name);
+    } else einvoiceView(await f.text(), f.name);
+  };
+  inp.click();
+}
+async function openEInvoiceXml(f) {
+  const xml = await f.text();
+  let m; try { m = WBEInvoice.parse(xml); } catch (e) { toast(e.message || String(e)); return; }
+  const nm = cleanFile(`${WBEInvoice.TYPE[m.type] || 'Rechnung'} ${m.no} ${(m.seller && m.seller.name) || ''}`);
+  await openFiles([new File([await WBEInvoice.toPdf(m)], nm + '.pdf', { type: 'application/pdf' })], 'replace');
+  S.einv = { xml, name: f.name };
+  setTimeout(() => einvoiceView(xml, f.name), 300);
+}
+
+/* ---------- 7. Serienbrief ---------- */
+const PH = /\{\{?\s*([^{}\n]{1,40}?)\s*\}?\}/g;
+function mmFill(text, row) { return String(text).replace(PH, (m, k) => { const key = Object.keys(row).find(c => c.toLowerCase() === k.toLowerCase()); return key != null ? row[key] : m; }); }
+function mmPlaceholders() {
+  const set = new Set();
+  for (const p of S.pages) for (const a of p.annots) if ((a.t === 'text' || a.t === 'note') && a.text) for (const m of a.text.matchAll(PH)) set.add(m[1].trim());
+  return [...set];
+}
+function mailMergeDialog() {
+  commitEdit();
+  let tab = null, idx = 0, prevOn = false;
+  const orig = new Map();
+  const restore = () => { for (const p of S.pages) { let ch = false; for (const a of p.annots) if (orig.has(a.id)) { a.text = orig.get(a.id); ch = true; } if (ch) drawAnnots(p); } orig.clear(); prevOn = false; };
+  const preview = () => {
+    if (!tab) return; restore(); prevOn = true;
+    const row = tab.rows[idx];
+    for (const p of S.pages) { let ch = false; for (const a of p.annots) if ((a.t === 'text' || a.t === 'note') && a.text && PH.test(a.text)) { PH.lastIndex = 0; orig.set(a.id, a.text); a.text = mmFill(a.text, row); ch = true; } PH.lastIndex = 0; if (ch) drawAnnots(p); }
+  };
+  const fieldNames = () => { const out = []; for (const f of S.forms.values()) for (const x of (f.fields || f || [])) if (x && x.name) out.push(x.name); return out; };
+  const render = () => {
+    const ph = mmPlaceholders(), fn = (() => { try { return fieldNames(); } catch (e) { return []; } })();
+    const cols = tab ? tab.cols : [];
+    const miss = ph.filter(p => !cols.some(c => c.toLowerCase() === p.toLowerCase()));
+    const fMatch = fn.filter(n => cols.some(c => c.toLowerCase() === n.toLowerCase()));
+    $('#dlgBody').innerHTML = `<p class="note" style="margin:0">Platzhalter wie <code>{Name}</code> in Textfeldern werden pro Zeile einer Tabelle (CSV oder Excel) ersetzt. Formularfelder mit gleichem Namen wie eine Spalte werden ebenfalls ausgefüllt.</p>
+      <div class="row2"><button type="button" class="btn" data-mm="file">${icon('open')}${tab ? 'Andere Tabelle …' : 'Tabelle wählen (CSV, Excel) …'}</button>${tab ? `<span class="note">${esc(tab.name)}: ${tab.rows.length} Zeilen, ${cols.length} Spalten</span>` : ''}</div>
+      ${tab ? `<div class="mmcols">${cols.map(c => `<button type="button" class="chip" data-ins="${esc(c)}" title="Als Platzhalter auf der aktuellen Seite einfügen">{${esc(c)}}</button>`).join('')}</div><p class="note" style="margin:2px 0 0">Spalte antippen fügt den Platzhalter auf der aktuellen Seite ein. Danach an die richtige Stelle ziehen.</p>` : ''}
+      <p class="note">${ph.length ? `Im Dokument: ${ph.map(p => `<code${miss.includes(p) ? ' class="bad"' : ''}>{${esc(p)}}</code>`).join(' ')}${miss.length && tab ? ` – <b>${miss.length} ohne passende Spalte</b>` : ''}` : 'Noch keine Platzhalter im Dokument.'}${fMatch.length ? ` · Formularfelder: ${fMatch.map(esc).join(', ')}` : ''}</p>
+      ${tab ? `<div class="mmnav"><label class="chkrow"><input type="checkbox" id="mmPrev" ${prevOn ? 'checked' : ''}> Vorschau im Dokument</label><button type="button" class="ibtn" data-mm="prev">‹</button><span>${idx + 1} / ${tab.rows.length}</span><button type="button" class="ibtn" data-mm="next">›</button><span class="note">${esc(Object.values(tab.rows[idx]).slice(0, 3).join(' · '))}</span></div>
+      <div class="frow"><label class="fld"><span>Ergebnis</span><select class="field" id="mmOut"><option value="one">Eine PDF mit allen Briefen</option><option value="zip">Eine PDF je Zeile (ZIP)</option></select></label>
+      <label class="fld"><span>Dateiname je Zeile</span><input class="field" id="mmName" value="${esc(lsGet('pdfwb.mmname') || `${baseName()} {${cols[0]}}`)}"></label></div>` : ''}`;
+  };
+  dialog('Serienbrief', '', 'Erstellen', () => {
+    if (!tab) { toast('Bitte zuerst eine Tabelle wählen.'); return false; }
+    const wasPrev = prevOn; restore();
+    if (!mmPlaceholders().length && !(() => { try { return fieldNames().length; } catch (e) { return 0; } })()) { toast('Im Dokument gibt es noch keine Platzhalter.'); if (wasPrev) preview(); return false; }
+    const out = $('#mmOut').value, pat = $('#mmName').value.trim() || baseName();
+    lsSet('pdfwb.mmname', pat); restore(); closeDlg();
+    mailMergeRun(tab, out, pat); return false;
+  });
+  $('#dlg .card').classList.add('wide');
+  const cancel = $('#dlgCancel'), oldCancel = cancel.onclick; cancel.onclick = () => { restore(); oldCancel(); };
+  render();
+  $('#dlgBody').onchange = e => { if (e.target.id === 'mmPrev') { if (e.target.checked) preview(); else restore(); } };
+  $('#dlgBody').onclick = async e => {
+    const ins = e.target.closest('[data-ins]');
+    if (ins) { const was = prevOn; restore(); insertTextAnnot(`{${ins.dataset.ins}}`); if (was) preview(); render(); return; }
+    const x = e.target.closest('[data-mm]'); if (!x) return;
+    if (x.dataset.mm === 'file') {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.csv,.tsv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      inp.onchange = async () => { const f = inp.files[0]; if (!f) return; try { const t = await WBConvert.readTable(f); tab = { ...t, name: f.name }; idx = 0; render(); } catch (er) { toast(er.message || String(er)); } };
+      inp.click();
+    } else if (x.dataset.mm === 'prev' || x.dataset.mm === 'next') { idx = (idx + (x.dataset.mm === 'next' ? 1 : -1) + tab.rows.length) % tab.rows.length; if (prevOn) preview(); render(); }
+  };
+}
+async function mailMergeRun(tab, out, pat) {
+  const rows = tab.rows.filter(r => Object.values(r).some(v => String(v).trim()));
+  const list = [], fv0 = S.formVals;
+  busy(true, 'Serienbrief wird erstellt …');
+  try {
+    for (let i = 0; i < rows.length; i++) {
+      setMsg(`Brief ${i + 1} von ${rows.length} …`, true);
+      const row = rows[i];
+      const pages = S.pages.map(p => ({ ...p, annots: p.annots.map(a => ((a.t === 'text' || a.t === 'note') && a.text && /\{/.test(a.text) ? { ...a, text: mmFill(a.text, row) } : a)) }));
+      const fv = {}; for (const [k, v] of Object.entries(fv0 || {})) fv[k] = typeof v === 'string' ? mmFill(v, row) : v;
+      for (const c of tab.cols) for (const f of S.forms.values()) for (const x of (f.fields || f || [])) if (x && x.name && x.name.toLowerCase() === c.toLowerCase()) fv[x.name] = row[c];
+      S.formVals = fv;
+      let bytes; try { bytes = await buildPdf(pages); } finally { S.formVals = fv0; }
+      list.push({ name: cleanFile(mmFill(pat, row)) || `Brief ${i + 1}`, bytes });
+    }
+    if (out === 'one') { const all = await WBTools.merge(list.map(l => l.bytes)); busy(false); await saveBytes(all, `${baseName()} – Serienbrief.pdf`); }
+    else { const used = new Set(); const z = await WBFile.zip(list.map(l => { let n = l.name + '.pdf', k = 2; while (used.has(n)) n = `${l.name} (${k++}).pdf`; used.add(n); return { name: n, bytes: l.bytes }; })).arrayBuffer(); busy(false); dlTo(new Uint8Array(z), `${baseName()} – Serienbrief.zip`, 'application/zip'); }
+    toast(`${list.length} Briefe erstellt`);
+  } catch (e) { busy(false); S.formVals = fv0; console.error(e); toast('Serienbrief fehlgeschlagen: ' + (e.message || e)); }
+}
+
+/* ---------- 8. Belege scannen ---------- */
+const RCATS = ['Büromaterial', 'Hardware', 'Software und Dienste', 'Telefon und Internet', 'Fahrtkosten', 'Reisekosten', 'Bewirtung', 'Porto', 'Fortbildung und Bücher', 'Werbung', 'Lebensmittel und Drogerie', 'Miete und Nebenkosten', 'Versicherung', 'Sonstiges'];
+const eur2 = n => (n == null || n === '' || isNaN(n) ? '' : (+n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+const pEur = s => { if (s == null) return null; const v = window.WBScan ? WBScan.amt(String(s)) : parseFloat(String(s).replace(',', '.')); return v == null || isNaN(v) ? null : v; };
+async function receiptRecognize(canvas, text) {
+  if (aiReady()) {
+    try {
+      const out = await AIX.ask({ instructions: `Du liest Kassenbons und Rechnungen. Antworte NUR mit JSON: {"merchant":"Händler","date":"TT.MM.JJJJ","total":Bruttobetrag als Zahl,"vatRate":19 oder 7 oder 0,"vat":Steuerbetrag als Zahl,"no":"Beleg- oder Rechnungsnummer","pay":"bar" oder "Karte" oder "Überweisung" oder "","cat":eine von ${JSON.stringify(RCATS)}}. Unbekanntes leer lassen.`, messages: [{ role: 'user', text: text ? 'Belegtext:\n' + text.slice(0, 6000) : 'Beleg:', images: canvas ? [canvas.toDataURL('image/jpeg', 0.85)] : [] }], maxTokens: 400 });
+      const j = aiJson(out, false);
+      return { merchant: String(j.merchant || ''), date: String(j.date || ''), total: pEur(j.total), vatRate: j.vatRate === '' || j.vatRate == null ? null : +j.vatRate, vat: pEur(j.vat), no: String(j.no || ''), pay: String(j.pay || ''), cat: RCATS.includes(j.cat) ? j.cat : 'Sonstiges', via: 'KI' };
+    } catch (e) { /* weiter ohne KI */ }
+  }
+  if (!text && canvas && window.WBTools) { try { text = (await Promise.race([WBTools.recognizeImage(canvas, 'deu'), new Promise((r, j) => setTimeout(() => j(new Error('Zeitüberschreitung')), 90000))])).text; } catch (e) { text = ''; } }
+  return { ...WBScan.receipt(text || ''), via: 'Texterkennung' };
+}
+async function receiptsAdd(files, check) {
+  const { PDFDocument } = PL;
+  const recs = [], pdfParts = [];
+  busy(true, 'Belege werden aufbereitet …');
+  try {
+    let k = 0;
+    for (const f of files) {
+      k++; setMsg(`Beleg ${k} von ${files.length} …`, true);
+      if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
+        const bytes = new Uint8Array(await f.arrayBuffer());
+        const pdf = await PDFJS.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const pg = await pdf.getPage(i), tc = await pg.getTextContent();
+          const text = tc.items.map(it => it.str + (it.hasEOL ? '\n' : ' ')).join('');
+          let c = null;
+          if (text.replace(/\s/g, '').length < 30 || aiReady()) { const vp = pg.getViewport({ scale: 1600 / Math.max(pg.view[2], pg.view[3]) }); c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height; const cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height); await pg.render({ canvasContext: cx, viewport: vp }).promise; }
+          recs.push(await receiptRecognize(c, text.replace(/\s/g, '').length >= 30 ? text : ''));
+        }
+        pdf.destroy(); pdfParts.push(bytes);
+      } else {
+        const src = await WBScan.load(f);
+        let { corners } = WBScan.findCorners(src);
+        if (check) { busy(false); const c2 = await WBScan.editCorners(src, corners); busy(true, 'Belege werden aufbereitet …'); if (c2) corners = c2; }
+        const flat = WBScan.enhance(WBScan.warp(src, corners), 'gray');
+        recs.push(await receiptRecognize(flat, ''));
+        const d = await PDFDocument.create(), jpg = await d.embedJpg(await (await new Promise(r => flat.toBlob(r, 'image/jpeg', 0.82))).arrayBuffer());
+        const W = Math.min(595.28, flat.width * 0.75), H = W * flat.height / flat.width;
+        d.addPage([W, H]).drawImage(jpg, { x: 0, y: 0, width: W, height: H });
+        pdfParts.push(await d.save());
+      }
+    }
+    const merged = pdfParts.length === 1 ? pdfParts[0] : await WBTools.merge(pdfParts);
+    busy(false);
+    let newPages;
+    if (S.sample || !S.pages.length) {
+      const d = new Date(), nm = `Belege ${d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}.pdf`;
+      await openFiles([new File([merged], nm, { type: 'application/pdf' })], 'replace', true);
+      newPages = S.pages.slice();
+    } else {
+      const keep = S.cur; S.cur = S.pages.length - 1;
+      const n = await insertPdfBytes(merged, 'Belege.pdf'); newPages = S.pages.slice(S.pages.length - n); S.cur = keep;
+    }
+    S.receipts = [...(S.receipts || []), ...recs.map((r, i) => ({ id: uid('r'), pid: newPages[i] ? newPages[i].id : null, ...r, total: r.total, at: Date.now() }))];
+    markDirty();
+    toast(`${recs.length} ${recs.length === 1 ? 'Beleg' : 'Belege'} erfasst${recs.some(r => r.via === 'Texterkennung') && !aiReady() ? ' (mit KI wird die Erkennung genauer)' : ''}`);
+  } catch (e) { busy(false); console.error(e); toast('Belege konnten nicht verarbeitet werden: ' + (e.message || e)); }
+}
+function receiptsDialog() {
+  if (!window.WBScan) return;
+  commitEdit();
+  const list = () => (S.receipts || []).filter(r => !r.pid || pageById(r.pid));
+  const render = () => {
+    const L = list(), sum = L.reduce((s, r) => s + (+r.total || 0), 0), vat = L.reduce((s, r) => s + (+r.vat || 0), 0);
+    const byCat = {}; L.forEach(r => { byCat[r.cat || 'Sonstiges'] = (byCat[r.cat || 'Sonstiges'] || 0) + (+r.total || 0); });
+    $('#dlgBody').innerHTML = `<p class="note" style="margin:0">Fotografiere Kassenbons und Rechnungen oder wähle Bilder und PDFs. Der Beleg wird zugeschnitten, entzerrt und als Seite abgelegt; Betrag, Datum und Händler werden erkannt.</p>
+      <div class="row2"><button type="button" class="btn primary" data-rc="cam">${icon('image')}Kamera / Bilder …</button><button type="button" class="btn" data-rc="files">PDF-Belege …</button><label class="chkrow"><input type="checkbox" id="rcCheck" ${lsGet('pdfwb.rccheck') === '1' ? 'checked' : ''}> Ecken jedes Fotos prüfen</label></div>
+      ${L.length ? `<div class="rctab"><table><thead><tr><th>S.</th><th>Datum</th><th>Händler</th><th>Kategorie</th><th class="r">Betrag €</th><th class="r">USt €</th><th>Zahlung</th><th></th></tr></thead><tbody>${L.map(r => `<tr data-r="${r.id}"><td><button type="button" class="lnk" data-pg="${r.pid || ''}">${r.pid ? pageNo(r.pid) : '–'}</button></td><td><input data-f="date" value="${esc(r.date || '')}" placeholder="TT.MM.JJJJ" size="10"></td><td><input data-f="merchant" value="${esc(r.merchant || '')}"></td><td><select data-f="cat">${RCATS.map(c => `<option ${c === r.cat ? 'selected' : ''}>${c}</option>`).join('')}</select></td><td class="r"><input data-f="total" value="${eur2(r.total)}" size="8" inputmode="decimal" class="${r.total == null ? 'bad' : ''}"></td><td class="r"><input data-f="vat" value="${eur2(r.vat)}" size="6" inputmode="decimal"></td><td><select data-f="pay">${['', 'bar', 'Karte', 'Überweisung', 'PayPal'].map(c => `<option ${c === r.pay ? 'selected' : ''}>${c}</option>`).join('')}</select></td><td><button type="button" class="ibtn" data-del="${r.id}" title="Aus der Liste entfernen">✕</button></td></tr>`).join('')}</tbody>
+        <tfoot><tr><td></td><td colspan="3"><b>${L.length} Belege</b></td><td class="r"><b>${eur2(sum)}</b></td><td class="r">${eur2(vat)}</td><td colspan="2"></td></tr></tfoot></table></div>
+        <p class="note">${Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)}: ${eur2(v)} €`).join(' · ')}</p>
+        <div class="row2"><button type="button" class="btn" data-rc="csv">${icon('save')}Für Buchhaltung (CSV)</button><span class="note">Spalten wie in DATEV und Steuerprogrammen üblich, mit Seitenverweis auf den Beleg in dieser PDF.</span></div>` : '<p class="note">Noch keine Belege in diesem Dokument.</p>'}`;
+  };
+  dialog('Belege', '', 'Fertig', () => true);
+  $('#dlgCancel').hidden = true; $('#dlg .card').classList.add('wide');
+  render();
+  const b = $('#dlgBody');
+  b.onchange = e => {
+    if (e.target.id === 'rcCheck') { lsSet('pdfwb.rccheck', e.target.checked ? '1' : '0'); return; }
+    const tr = e.target.closest('[data-r]'), f = e.target.dataset.f; if (!tr || !f) return;
+    const r = S.receipts.find(x => x.id === tr.dataset.r); if (!r) return;
+    r[f] = f === 'total' || f === 'vat' ? pEur(e.target.value) : e.target.value; markDirty();
+    if (f === 'total' || f === 'vat') render();
+  };
+  b.onclick = e => {
+    const pg = e.target.closest('[data-pg]'); if (pg && pg.dataset.pg) { closeDlg(); scrollToPage(pageNo(pg.dataset.pg) - 1); return; }
+    const del = e.target.closest('[data-del]'); if (del) { S.receipts = S.receipts.filter(r => r.id !== del.dataset.del); markDirty(); render(); return; }
+    const x = e.target.closest('[data-rc]'); if (!x) return;
+    if (x.dataset.rc === 'cam' || x.dataset.rc === 'files') {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.accept = x.dataset.rc === 'cam' ? 'image/*' : 'application/pdf,.pdf';
+      if (x.dataset.rc === 'cam' && COARSE) inp.capture = 'environment';
+      inp.onchange = async () => { const fs = [...inp.files]; if (!fs.length) return; closeDlg(); await receiptsAdd(fs, $('#rcCheck') ? lsGet('pdfwb.rccheck') === '1' : false); receiptsDialog(); };
+      inp.click();
+    } else if (x.dataset.rc === 'csv') {
+      const L = list(), f2 = n => (n == null || isNaN(n) ? '' : (+n).toFixed(2).replace('.', ','));
+      const rows = [['Belegdatum', 'Belegnummer', 'Händler', 'Kategorie', 'Brutto', 'USt-Satz', 'USt', 'Netto', 'Zahlungsart', 'Seite in PDF', 'Datei'], ...L.map(r => [r.date, r.no || '', r.merchant, r.cat, f2(r.total), r.vatRate != null ? r.vatRate + ' %' : '', f2(r.vat), r.total != null ? f2((+r.total) - (+r.vat || 0)) : '', r.pay || '', r.pid ? pageNo(r.pid) : '', S.docName])];
+      dlTo(new TextEncoder().encode('﻿' + rows.map(r => r.map(c => /[;"\n]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c).join(';')).join('\r\n')), `${baseName()} – Belege.csv`, 'text/csv');
+    }
+  };
+}
+
+/* ---------- 9. Stapelverarbeitung ---------- */
+function batchOpen() {
+  if (!window.WBBatch) return;
+  WBBatch.open({ pick: true, title: 'Stapelverarbeitung', saveLabel: 'In die Bibliothek', onSave: LIB ? async rs => { for (const r of rs) await LIB.importPdf(r.bytes, r.name.replace(/\.pdf$/i, ''), (S.lib && S.lib.folder) || null, {}); toast(`${rs.length} Dateien in der Bibliothek gespeichert`); } : null });
+}
+
+/* ---------- 10. PDF/A und Barrierefreiheit ---------- */
+async function pdfaDialog() {
+  if (!window.WBPdfA) return;
+  commitEdit();
+  busy(true, 'PDF wird geprüft …');
+  let bytes, pf;
+  try { bytes = await buildPdf(S.pages); pf = await WBPdfA.preflight(bytes); busy(false); }
+  catch (e) { busy(false); toast('Prüfung fehlgeschlagen: ' + (e.message || e)); return; }
+  const fix = pf.fonts.filter(f => f.fixable), bad = pf.fonts.filter(f => !f.embedded && !f.fixable);
+  dialog('Als PDF/A speichern', `<p class="note" style="margin:0">PDF/A ist das Archivformat für Behörden, Gerichte, Hochschulen und die Steuer: alle Schriften eingebettet, festes Farbprofil, keine aktiven Inhalte.</p>
+    <ul class="a11y">
+      <li class="ok">Farbprofil (sRGB) und Metadaten werden ergänzt</li>
+      ${fix.length ? `<li class="ok">${fix.length} Standardschrift${fix.length === 1 ? '' : 'en'} (${esc(fix.map(f => f.name).join(', '))}) werden durch maßgleiche freie Schriften ersetzt und eingebettet</li>` : '<li class="ok">Alle Schriften sind eingebettet</li>'}
+      ${bad.length ? `<li class="bad">Nicht einbettbar: ${esc(bad.map(f => f.name).join(', '))}. Prüfprogramme werden das bemängeln. Abhilfe: die Seiten neu „drucken“ oder als Bild einfügen.</li>` : ''}
+      ${pf.js ? '<li class="warn">JavaScript wird entfernt</li>' : ''}${pf.cmyk ? '<li class="warn">CMYK-Farben ohne Profil gefunden</li>' : ''}${pf.attachments ? '<li class="warn">Anhänge vorhanden: es wird PDF/A-3 statt PDF/A-2</li>' : ''}
+    </ul>
+    <div class="frow"><label class="fld"><span>Titel</span><input class="field" id="paTitle" value="${esc(S.meta.title || baseName())}"></label><label class="fld"><span>Autor</span><input class="field" id="paAuthor" value="${esc(S.meta.author || '')}"></label>
+    <label class="fld"><span>Sprache</span><select class="field" id="paLang">${[['de-DE', 'Deutsch'], ['en-US', 'Englisch'], ['fr-FR', 'Französisch'], ['es-ES', 'Spanisch']].map(([k, l]) => `<option value="${k}" ${(S.meta.lang || 'de-DE') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>`, 'PDF/A speichern', b => {
+    const o = { title: $('#paTitle', b).value.trim(), author: $('#paAuthor', b).value.trim(), lang: $('#paLang', b).value, subject: S.meta.subject || '', keywords: S.meta.keywords || '' };
+    closeDlg();
+    (async () => {
+      busy(true, 'PDF/A wird erstellt …');
+      try { const r = await WBPdfA.make(bytes, o); busy(false); await saveBytes(r.bytes, `${baseName()} (PDF-A).pdf`); toast(`Als PDF/A-${r.part}b gespeichert${r.issues.length ? ' – Hinweise: ' + r.issues.join(' ') : ''}`); }
+      catch (e) { busy(false); console.error(e); toast('PDF/A fehlgeschlagen: ' + (e.message || e)); }
+    })();
+    return false;
+  });
+}
+const lum = hex => { const h = String(hex || '#000').replace('#', ''), c = [0, 2, 4].map(i => parseInt(h.length === 3 ? h[i / 2] + h[i / 2] : h.slice(i, i + 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+const contrast = (a, b = '#ffffff') => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+async function a11yDialog() {
+  commitEdit();
+  busy(true, 'Barrierefreiheit wird geprüft …');
+  const items = [];
+  try {
+    const bytes = await buildPdf(S.pages);
+    const pdf = await PDFJS.getDocument({ data: bytes.slice(), isEvalSupported: false }).promise;
+    let noText = [];
+    for (let i = 1; i <= pdf.numPages; i++) { const tc = await (await pdf.getPage(i)).getTextContent(); if (tc.items.reduce((s, it) => s + it.str.replace(/\s/g, '').length, 0) < 20) noText.push(i); }
+    let tagged = false; try { const mi = await pdf.getMarkInfo(); tagged = !!(mi && mi.Marked); } catch (e) { tagged = false; }
+    let tree = false; try { tree = !!(await (await pdf.getPage(1)).getStructTree()); } catch (e) { tree = false; }
+    const doc = await PL.PDFDocument.load(bytes, { updateMetadata: false }), N = PL.PDFName.of;
+    let fieldsNoTip = 0, fields = 0; try { for (const f of doc.getForm().getFields()) { fields++; if (!f.acroField.dict.get(N('TU'))) fieldsNoTip++; } } catch (e) { /* kein Formular */ }
+    let noUni = new Set(); for (const [, o] of doc.context.enumerateIndirectObjects()) { if (o instanceof PL.PDFDict && o.get(N('Type')) === N('Font') && o.get(N('Subtype')) === N('Type0') && !o.get(N('ToUnicode'))) noUni.add(String(o.get(N('BaseFont'))).replace(/^\/([A-Z]{6}\+)?/, '')); }
+    pdf.destroy();
+    const lowC = []; S.pages.forEach(p => p.annots.forEach(a => { if (a.t === 'text' && a.text && contrast(a.color || '#000') < 4.5) lowC.push(a); }));
+    items.push({ ok: !!S.meta.title, t: 'Dokumenttitel', d: S.meta.title ? `„${S.meta.title}“ (wird statt des Dateinamens angezeigt)` : 'Screenreader lesen sonst nur den Dateinamen vor.', fix: 'meta' });
+    items.push({ ok: !!S.meta.lang, t: 'Sprache', d: S.meta.lang ? S.meta.lang : 'Ohne Sprachangabe liest der Screenreader eventuell mit falscher Aussprache vor.', fix: 'meta' });
+    items.push({ ok: !noText.length, t: 'Text lesbar', d: noText.length ? `Seite${noText.length > 1 ? 'n' : ''} ${noText.slice(0, 12).join(', ')}${noText.length > 12 ? ' …' : ''} ohne Text (Scan oder Bild).` : 'Alle Seiten enthalten echten Text.', fix: noText.length && window.WBTools ? 'ocr' : '' });
+    items.push({ ok: S.pages.length < 8 || S.bookmarks.length > 0, t: 'Lesezeichen', d: S.bookmarks.length ? `${S.bookmarks.length} Einträge auf oberster Ebene` : S.pages.length < 8 ? 'bei kurzen Dokumenten nicht nötig' : 'Längere Dokumente brauchen eine Gliederung zum Springen.', fix: S.bookmarks.length || S.pages.length < 8 ? '' : 'toc' });
+    items.push({ ok: tagged && tree, warn: !(tagged && tree), t: 'Struktur (Tags)', d: tagged && tree ? 'Das Dokument ist getaggt.' : 'Nicht getaggt: Überschriften, Listen und Tabellen sind für Screenreader nicht ausgezeichnet. Für volle Barrierefreiheit (PDF/UA) das Original in Word oder LibreOffice als „barrierefreies PDF“ exportieren.' });
+    if (fields) items.push({ ok: !fieldsNoTip, warn: true, t: 'Formularfelder', d: fieldsNoTip ? `${fieldsNoTip} von ${fields} Feldern ohne Beschreibung (Tooltip).` : 'Alle Felder haben eine Beschreibung.' });
+    items.push({ ok: !noUni.size, t: 'Text kopier- und vorlesbar', d: noUni.size ? `Schriften ohne Unicode-Zuordnung: ${[...noUni].slice(0, 4).join(', ')} – Text kann falsch vorgelesen werden. Abhilfe: Texterkennung.` : 'Alle Schriften haben eine Unicode-Zuordnung.' });
+    items.push({ ok: !lowC.length, t: 'Kontrast eigener Texte', d: lowC.length ? `${lowC.length} Textfeld${lowC.length > 1 ? 'er' : ''} mit zu wenig Kontrast (unter 4,5 : 1).` : 'Ausreichend (mindestens 4,5 : 1).', fix: lowC.length ? 'contrast' : '' });
+    busy(false);
+  } catch (e) { busy(false); console.error(e); toast('Prüfung fehlgeschlagen: ' + (e.message || e)); return; }
+  const okN = items.filter(i => i.ok).length;
+  dialog('Barrierefreiheit prüfen', `<p class="note" style="margin:0"><b>${okN} von ${items.length}</b> Prüfpunkten erfüllt. Geprüft wird die PDF so, wie sie gespeichert wird.</p>
+    <ul class="a11y">${items.map(i => `<li class="${i.ok ? 'ok' : i.warn ? 'warn' : 'bad'}"><b>${i.t}</b><span>${esc(i.d)}</span>${i.fix ? `<button type="button" class="btn sm" data-af="${i.fix}">${{ meta: 'Festlegen', ocr: 'Texterkennung', toc: 'Lesezeichen erzeugen', contrast: 'Farben abdunkeln' }[i.fix]}</button>` : ''}</li>`).join('')}</ul>
+    <div class="frow" id="afMeta" hidden><label class="fld"><span>Titel</span><input class="field" id="afTitle" value="${esc(S.meta.title || baseName())}"></label><label class="fld"><span>Sprache</span><select class="field" id="afLang">${[['de-DE', 'Deutsch'], ['en-US', 'Englisch'], ['fr-FR', 'Französisch'], ['es-ES', 'Spanisch']].map(([k, l]) => `<option value="${k}" ${(S.meta.lang || 'de-DE') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>`, 'Fertig', b => {
+    if (!$('#afMeta', b).hidden) { const t = $('#afTitle', b).value.trim(), l = $('#afLang', b).value; if (t !== S.meta.title || l !== S.meta.lang) { S.meta = { ...S.meta, title: t, lang: l }; markDirty(); toast('Titel und Sprache gespeichert'); } }
+  });
+  $('#dlgCancel').hidden = true; $('#dlg .card').classList.add('wide');
+  $('#dlgBody').onclick = e => {
+    const x = e.target.closest('[data-af]'); if (!x) return; const k = x.dataset.af;
+    if (k === 'meta') { $('#afMeta').hidden = false; $('#afTitle').focus(); }
+    else if (k === 'ocr') { closeDlg(); ACTS_REF.ocr && ACTS_REF.ocr(); }
+    else if (k === 'toc') { closeDlg(); autoTocDialog(); }
+    else if (k === 'contrast') {
+      pushHist(); let n = 0;
+      for (const p of S.pages) { let ch = false; for (const a of p.annots) if (a.t === 'text' && a.text && contrast(a.color || '#000') < 4.5) { let c = a.color || '#000000'; for (let s = 0; s < 20 && contrast(c) < 4.5; s++) c = '#' + [1, 3, 5].map(i => Math.round(parseInt(c.slice(i, i + 2), 16) * 0.85).toString(16).padStart(2, '0')).join(''); a.color = c; ch = true; n++; } if (ch) drawAnnots(p); }
+      markDirty(); x.closest('li').className = 'ok'; x.remove(); toast(`${n} Textfarben abgedunkelt`);
+    }
+  };
+}
+
 /* ---------- Bedienelemente verbinden ---------- */
 { const sb = $('#shareBar'); if (sb) sb.addEventListener('click', () => collabDialog()); }
 function bindUI() {
@@ -6608,7 +7440,8 @@ function bindUI() {
     read: () => setReading(true), night: () => setNight(!S.night), pencil: () => setPencilOnly(!S.pencil.only), bm: addBookmark, share: sharePdf, calc: () => window.toggleCalc(),
     saveas: () => saveToFile(true), werkbank: saveWerkbank, collab: collabDialog, toolbar: toolbarDialog, keys: shortcutsDialog, present: () => setPresent(true), speak: () => speakDoc(), dictate, table: () => tableDialog(), qr: qrDialog, versions: versionsDialog, sepia: () => setSepia(!S.sepia), stats: statsDialog, marks: exportMarks, secure: secureDialog, photos: photosDialog, libpages: libPagesDialog,
     tools: toolsHub, organize: () => organizer(true), ocr: ocrDialog, compress: compressDialog, redactsearch: redactSearchDialog, field: () => fieldDialog(), detectfields: detectFields, compare: compareDialog, cloudopen: cloudOpen, cloudsave: cloudSaveDoc,
-    record: () => (REC.mr ? recStop() : recStart()), recordings: recordingsDialog, learn: () => openSide('learn'), study: () => studyOverlay('learn'), tasks: () => openSide('tasks'), searchlib: libSearchDialog, split: () => (S2.el ? splitClose() : splitDialog()), hw2text: hwToText, sign: signDialog, verifysig: verifyDialog, cert: certDialog, convert: convertDialog, template: templateNew, autotoc: autoTocDialog, headfoot: headFootDialog };
+    record: () => (REC.mr ? recStop() : recStart()), recordings: recordingsDialog, learn: () => openSide('learn'), study: () => studyOverlay('learn'), tasks: () => openSide('tasks'), searchlib: libSearchDialog, split: () => (S2.el ? splitClose() : splitDialog()), hw2text: hwToText, sign: signDialog, verifysig: verifyDialog, cert: certDialog, convert: convertDialog, template: templateNew, autotoc: autoTocDialog, headfoot: headFootDialog,
+    cite: () => citeDialog(), citequote: () => citeQuote(), exam: examDialog, mindmap: mindmapOverlay, studystats: studyStatsDialog, pomodoro: () => (pomoState() ? pomoStop() : pomoStart()), formula: formulaTool, einvoice: einvoiceOpen, mailmerge: mailMergeDialog, receipts: receiptsDialog, batch: batchOpen, pdfa: pdfaDialog, a11y: a11yDialog };
   ACTS_REF = ACTS;
   $('[data-act="share"]').hidden = !canShareFiles();
   $('#mPencil').hidden = !COARSE;
@@ -6692,6 +7525,16 @@ function bindUI() {
   if (!window.WBSign) ['sign', 'verifysig'].forEach(hideAct);
   if (!window.WBConvert) ['convert', 'autotoc'].forEach(hideAct);
   if (!window.WBTemplates) hideAct('template');
+  // 1.9
+  if (!window.WBCite) hideAct('cite');
+  if (!window.WBStats) hideAct('studystats');
+  if (!window.WBEInvoice) hideAct('einvoice');
+  if (!window.WBConvert || !window.WBTools) hideAct('mailmerge');
+  if (!window.WBScan) hideAct('receipts');
+  if (!window.WBBatch) hideAct('batch');
+  if (!window.WBPdfA) hideAct('pdfa');
+  if (!AIX) ['formula'].forEach(hideAct);
+  statsBind();
   if (!recOk()) { hideAct('record'); $('#btnRec').hidden = true; }
   if (LIB && window.WBSearch) $('#mSearchLib').hidden = false;
   $('#btnRec').onclick = () => ACTS.record();
@@ -6994,7 +7837,7 @@ async function openLibDoc(id) {
       } catch (e) { /* keine Metadaten */ }
       S.zoom = initialZoom(); buildViewer(); updateTitle(); updateUndo();
     }
-    S.dirty = false; updateTitle();
+    S.dirty = false; updateTitle(); setTimeout(einvoiceCheck, 600);
     document.title = rec.item.name + ' · PDF Werkbank';
     const dec = rec.sources.filter(x => S.decrypted.has(x.id) && S.sources.get(x.id));
     if (dec.length && !S.renderMode) {
@@ -7134,6 +7977,7 @@ async function boot() {
     if (await openLibDoc(qp.get('doc'))) {
       taskBadge();
       if (window.WBTasks) setTimeout(() => WBTasks.remind(tasksNow(), () => openSide('tasks')), 2500);
+      if (qp.get('receipts') === '1') setTimeout(() => { history.replaceState(null, '', 'index.html?doc=' + encodeURIComponent(qp.get('doc'))); receiptsDialog(); }, 500);
       if (qp.get('study') === '1') setTimeout(() => { history.replaceState(null, '', 'index.html?doc=' + encodeURIComponent(qp.get('doc'))); if (cardsDue().length) studyOverlay('learn'); else openSide('learn'); }, 500);
       const pg = +qp.get('page') || 0, fq = qp.get('q');
       if (pg || fq) setTimeout(async () => {

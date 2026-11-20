@@ -390,6 +390,25 @@
     else if (k === 'folder') folderDialog(null, targetFolder());
     else if (k === 'cloud') { if (CL && CL.anyEnabled()) cloudImport(); else cloudHub(); }
     else if (k === 'template') window.WBTemplates.pick().then(async r => { if (r) { const doc = await importBytes(r.bytes, r.name, targetFolder()); openDoc(doc.id); } });
+    else if (k === 'receipts') receiptsFolder();
+    else if (k === 'batch') window.WBBatch.open({ pick: true, saveLabel: 'In die Bibliothek', onSave: saveBatch });
+  }
+  /* 1.9: Belegmappe – Deckblatt anlegen, dann im Editor Belege scannen */
+  async function receiptsFolder() {
+    const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+    const d = await PDFDocument.create(), f = await d.embedFont(StandardFonts.HelveticaBold), r = await d.embedFont(StandardFonts.Helvetica);
+    const month = new Date().toLocaleDateString('de-DE', { month: 'long', year: 'numeric' }), name = 'Belege ' + month;
+    const pg = d.addPage([595.28, 841.89]);
+    pg.drawText('Belege', { x: 62, y: 720, size: 30, font: f, color: rgb(0.11, 0.13, 0.19) });
+    pg.drawText(month, { x: 62, y: 690, size: 16, font: r, color: rgb(0.42, 0.45, 0.52) });
+    pg.drawText('Erstellt mit PDF Werkbank. Jeder Beleg folgt als eigene Seite.', { x: 62, y: 660, size: 10, font: r, color: rgb(0.42, 0.45, 0.52) });
+    d.setTitle(name);
+    const doc = await importBytes(await d.save(), name, targetFolder());
+    ST.markOpened(doc.id); location.href = 'index.html?doc=' + encodeURIComponent(doc.id) + '&receipts=1';
+  }
+  async function saveBatch(rs) {
+    for (const r of rs) await importBytes(r.bytes, r.name.replace(/\.pdf$/i, ''), targetFolder());
+    await refresh(); toast(`${rs.length} ${rs.length === 1 ? 'Datei' : 'Dateien'} in der Bibliothek gespeichert`);
   }
   async function makeThumb(bytes) {
     if (!PDFJS) return {};
@@ -951,6 +970,7 @@
     const n = docs.length, entries = [];
     if (n >= 2) entries.push({ k: 'merge', i: 'docs', l: `${n} Dokumente zusammenführen` });
     if (n === 2 && window.WBCompare) entries.push({ k: 'compare', i: 'search', l: 'Die beiden vergleichen' });
+    if (window.WBBatch) entries.push({ k: 'batch', i: 'docs', l: 'Stapelverarbeitung (OCR, PDF/A, Umbenennen …) …' });
     entries.push({ k: 'compress', i: 'download', l: n === 1 ? 'Verkleinern' : `${n} Dokumente verkleinern` });
     entries.push({ k: 'ocr', i: 'search', l: n === 1 ? 'Texterkennung (OCR)' : `Texterkennung für ${n} Dokumente` });
     const k = await showMenu(entries, r.right - 260, r.bottom + 6);
@@ -965,6 +985,13 @@
         const doc = await importBytes(await TL.merge(list), docs[0].name + ' + ' + (n - 1) + (n === 2 ? ' weiteres' : ' weitere'), docs[0].folder || null);
         busy(false); await refresh(); toast(`Zusammengeführt: „${doc.name}“`);
         return true;
+      }
+      if (k === 'batch') {
+        busy('Dokumente werden vorbereitet …');
+        const files = []; for (const it of docs) files.push({ name: it.name + '.pdf', bytes: await pdfOf(it) });
+        busy(false);
+        window.WBBatch.open({ files, saveLabel: 'Als neue Dokumente speichern', onSave: saveBatch });
+        return false;
       }
       if (k === 'compare') {
         busy('Vergleich wird vorbereitet …');
@@ -1048,18 +1075,50 @@
     const r = await studyScan(), T = window.WBTasks;
     const cards = r.cards.filter(c => c.total).sort((a, b) => b.due - a.due);
     await dialog(`<h2>Lernen und Aufgaben</h2>
+      ${window.WBStats ? `<h3 class="lh">Lernstatistik</h3>${window.WBStats.html()}` : ''}
       <h3 class="lh">Lernkarten</h3>${cards.length ? `<div class="cllist">${cards.map(c => `<button class="clrow" data-study="${c.doc.id}"><span class="t"><b>${esc(c.doc.name)}</b><small>${c.due ? `${c.due} fällig` : 'nichts fällig'} · ${c.total} Karten</small></span><span class="clbadge${c.due ? '' : ' on'}">${c.due ? 'Lernen' : 'Fertig'}</span></button>`).join('')}</div>` : '<p class="note">Noch keine Lernkarten. Im Dokument Text markieren, dann in der Seitenleiste unter „Lernkarten“ auf „Aus Markierungen“ tippen.</p>'}
       <h3 class="lh">Offene Aufgaben</h3>${r.tasks.length ? `<div class="tlist">${r.tasks.slice(0, 80).map(t => `<button class="tline" data-task="${t.doc.id}" data-page="${t.page}"><span class="u-${T.urgency(t.due)}">${t.due != null ? esc(T.fmtDue(t.due)) : '–'}</span><span><b>${esc(t.text)}</b><small>${esc(t.doc.name)} · S. ${t.page}</small></span></button>`).join('')}</div>` : '<p class="note">Keine offenen Aufgaben. Aufgaben entstehen aus Kommentaren wie „[ ] Übungsblatt bis Freitag“.</p>'}
-      <div class="acts">${r.tasks.some(t => t.due != null) ? `<button class="btn" data-x="ics">${ico('download')}In den Kalender (.ics)</button>` : ''}${'Notification' in window && Notification.permission !== 'granted' ? `<button class="btn" data-x="bell">Erinnerungen einschalten</button>` : ''}<button class="btn primary" data-x="0">Fertig</button></div>`, {
+      <div class="acts">${window.WBCite ? `<button class="btn" data-x="bib">Literaturliste …</button>` : ''}${r.tasks.some(t => t.due != null) ? `<button class="btn" data-x="ics">${ico('download')}In den Kalender (.ics)</button>` : ''}${'Notification' in window && Notification.permission !== 'granted' ? `<button class="btn" data-x="bell">Erinnerungen einschalten</button>` : ''}<button class="btn primary" data-x="0">Fertig</button></div>`, {
       wide: true,
       onOpen: (d, close) => d.addEventListener('click', async e => {
         const s = e.target.closest('[data-study]'); if (s) { close(); ST.markOpened(s.dataset.study); location.href = 'index.html?doc=' + encodeURIComponent(s.dataset.study) + '&study=1'; return; }
         const t = e.target.closest('[data-task]'); if (t) { close(); openAt(t.dataset.task, +t.dataset.page); return; }
         const x = e.target.closest('[data-x]'); if (!x) return;
+        if (x.dataset.x === 'bib') { close(); bibDialog(); return; }
         if (x.dataset.x === 'ics') { const blob = T.ics(r.tasks.map(t => ({ ...t, doc: t.doc.name })), 'PDF Werkbank'); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'PDF Werkbank – Aufgaben.ics'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Kalenderdatei gespeichert'); }
         else if (x.dataset.x === 'bell') { const p = await Notification.requestPermission(); toast(p === 'granted' ? 'Erinnerungen an: fällige Aufgaben werden einmal am Tag gemeldet' : 'Nicht erlaubt'); if (p === 'granted') { x.remove(); try { localStorage.removeItem('pdfwb.tasks.reminded'); } catch (er) { /* egal */ } updateDue(); } }
         else close();
       }),
+    });
+  }
+
+  /* ---------- 1.9: Literaturliste aus allen Dokumenten mit Quellenangabe ---------- */
+  async function bibDialog() {
+    const C = window.WBCite; if (!C) return;
+    const docs = V.items.filter(i => i.kind === 'doc' && alive(i) && !i.missing), refs = [];
+    for (const d of docs) { let st = null; try { st = await ST.getBlob('state:' + d.id); } catch (e) { continue; } if (st && st.cite && st.cite.ref && st.cite.ref.title) refs.push({ doc: d, ref: st.cite.ref }); }
+    let style = (() => { try { return localStorage.getItem('pdfwb.citestyle') || 'apa'; } catch (e) { return 'apa'; } })();
+    const sel = new Set(refs.map(r => r.doc.id));
+    const chosen = () => refs.filter(r => sel.has(r.doc.id)).map(r => r.ref);
+    const dl = (text, name, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
+    await dialog(`<h2>Literaturliste</h2>${refs.length ? `<p class="note">Alle Dokumente, für die du eine Quellenangabe hinterlegt hast (im Dokument: ⋯ › Werkzeuge › Zitieren).</p>
+      <label class="fld"><span>Zitierstil</span><select class="field" id="bibStyle">${Object.entries(C.STYLES).map(([k, v]) => `<option value="${k}" ${k === style ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+      <div class="tlist" style="max-height:200px">${refs.map(r => `<label class="tline" style="cursor:pointer"><input type="checkbox" data-bib="${r.doc.id}" checked><span><b>${esc(r.ref.title)}</b><small>${esc(C.authorsText(r.ref.authors))} ${esc(r.ref.year || '')}</small></span></label>`).join('')}</div>
+      <div class="bibprev" id="bibPrev"></div>` : '<p class="note">Noch keine Quellenangaben. Öffne ein Skript oder Buch und wähle ⋯ › Werkzeuge › Zitieren und Quellenangabe. DOI oder ISBN werden automatisch nachgeschlagen.</p>'}
+      <div class="acts">${refs.length ? `<button class="btn" data-x="copy">Kopieren</button><button class="btn" data-x="bibtex">BibTeX</button><button class="btn" data-x="ris">Zotero / Citavi</button>` : ''}<button class="btn primary" data-x="0">Fertig</button></div>`, {
+      wide: true,
+      onOpen: (d, close) => {
+        const prev = () => { const l = C.list(chosen(), style); const p = d.querySelector('#bibPrev'); if (p) p.innerHTML = l.html || '<p class="note">Nichts ausgewählt.</p>'; };
+        prev();
+        d.addEventListener('change', e => { if (e.target.id === 'bibStyle') { style = e.target.value; try { localStorage.setItem('pdfwb.citestyle', style); } catch (er) { /* egal */ } } const c = e.target.closest('[data-bib]'); if (c) { if (c.checked) sel.add(c.dataset.bib); else sel.delete(c.dataset.bib); } prev(); });
+        d.addEventListener('click', async e => {
+          const x = e.target.closest('[data-x]'); if (!x) return;
+          if (x.dataset.x === 'copy') { const l = C.list(chosen(), style); toast(await C.copy(l.text, l.html) ? 'Literaturliste kopiert (mit Formatierung für Word)' : 'Kopieren nicht möglich'); }
+          else if (x.dataset.x === 'bibtex') dl(C.bibtex(chosen()), 'Literatur.bib', 'application/x-bibtex');
+          else if (x.dataset.x === 'ris') dl(C.ris(chosen()), 'Literatur.ris', 'application/x-research-info-systems');
+          else close();
+        });
+      },
     });
   }
 
@@ -1390,7 +1449,7 @@
     bindTileZoom();
     $('#newBtn').onclick = async e => {
       const r = e.currentTarget.getBoundingClientRect();
-      const k = await showMenu([{ k: 'notebook', i: 'notebook', l: 'Neues Notizbuch' }, { k: 'import', i: 'upload', l: 'PDF importieren …' }, ...(window.WBTemplates ? [{ k: 'template', i: 'file', l: 'Aus Vorlage (Rechnung, Planer …) …' }] : []), ...(CL ? [{ k: 'cloud', i: 'cloud', l: 'Aus der Cloud importieren …' }] : []), { k: 'photos', i: 'camera', l: 'Aus Fotos oder Scan …' }, { k: 'folder', i: 'folder', l: 'Neuer Ordner' }], r.right - 230, r.bottom + 6);
+      const k = await showMenu([{ k: 'notebook', i: 'notebook', l: 'Neues Notizbuch' }, { k: 'import', i: 'upload', l: 'PDF importieren …' }, ...(window.WBTemplates ? [{ k: 'template', i: 'file', l: 'Aus Vorlage (Rechnung, Planer …) …' }] : []), { k: 'receipts', i: 'camera', l: 'Belegmappe (Quittungen scannen)' }, ...(window.WBBatch ? [{ k: 'batch', i: 'docs', l: 'Stapelverarbeitung …' }] : []), ...(CL ? [{ k: 'cloud', i: 'cloud', l: 'Aus der Cloud importieren …' }] : []), { k: 'photos', i: 'camera', l: 'Aus Fotos oder Scan …' }, { k: 'folder', i: 'folder', l: 'Neuer Ordner' }], r.right - 230, r.bottom + 6);
       if (k) newAction(k);
     };
     $('#fileIn').onchange = async e => { const f = [...e.target.files]; e.target.value = ''; if (f.length) await importFiles(f); };

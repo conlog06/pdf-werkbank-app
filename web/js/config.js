@@ -23,3 +23,4 @@ window.WB_CONFIG = {
 
 window.WB_CONFIG.ocr = { script: 'lib/ocr/tesseract.min.js', workerPath: 'lib/ocr/worker.min.js', corePath: 'lib/ocr/', langPath: 'lib/ocr/', localLangs: ['deu', 'eng'] };
 window.WB_CONFIG.forgeScript = 'lib/forge.min.js';
+window.WB_CONFIG.katexScript = 'lib/katex.min.js';

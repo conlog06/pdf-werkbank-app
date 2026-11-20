@@ -30,7 +30,7 @@
     d.setCreator('PDF Werkbank'); d.setProducer('PDF Werkbank');
     return { d, f, b };
   }
-  const safe = (font, s) => Array.from(String(s == null ? '' : s)).map(ch => { try { font.encodeText(ch); return ch; } catch (e) { return ch === '\t' ? ' ' : '?'; } }).join('');
+  const safe = (font, s) => Array.from(String(s == null ? '' : s)).map(ch => { if (ch === '\n') return ch; try { font.encodeText(ch); return ch; } catch (e) { return ch === '\t' ? ' ' : '?'; } }).join('');
   function wrap(font, text, size, width) {
     const out = [];
     for (const para of safe(font, text).split('\n')) {
@@ -100,7 +100,7 @@
     head();
     let net = 0;
     data.items.forEach((it, i) => {
-      const q = num(it.qty) || 0, pr = num(it.price), sum = q * pr; net += sum;
+      const q = num(it.qty) || 0, pr = num(it.price), sum = Math.round(q * pr * 100) / 100; net += sum;
       const lines = wrap(f, it.desc || '', 10, cx.qty - cx.desc - 30 * MM + 14 * MM);
       const h = lines.length * 13 + 6;
       if (y - h < 45 * MM) { newPage(false); head(); }
@@ -114,7 +114,8 @@
     if (y < 75 * MM) { newPage(false); }
     y -= 8;
     const vat = P.kleinunternehmer ? 0 : (+P.vat || 19);
-    const rows = P.kleinunternehmer ? [['Gesamtbetrag', eur(net), true]] : [['Nettobetrag', eur(net)], [`zzgl. ${vat} % USt.`, eur(net * vat / 100)], ['Gesamtbetrag', eur(net * (1 + vat / 100)), true]];
+    net = Math.round(net * 100) / 100; const tax = Math.round(net * vat) / 100;
+    const rows = P.kleinunternehmer ? [['Gesamtbetrag', eur(net), true]] : [['Nettobetrag', eur(net)], [`zzgl. ${vat} % USt.`, eur(tax)], ['Gesamtbetrag', eur(net + tax), true]];
     for (const [k, v, strong] of rows) {
       if (strong) { L(pg, right - 75 * MM, y + 12, right, y + 12, C.ink, 0.8); }
       T(pg, k, right - 75 * MM, y, strong ? 11 : 10, strong ? b : f, C.ink); T(pg, v, right, y, strong ? 11 : 10, strong ? b : f, C.ink, { align: 'right' }); y -= strong ? 22 : 15;
@@ -128,7 +129,7 @@
     notes.push(data.formal ? 'Vielen Dank für Ihren Auftrag!' : 'Vielen Dank!');
     for (const n of notes) for (const ln of wrap(f, n, 10, width)) { if (y < 35 * MM) newPage(false); T(pg, ln, left, y, 10, f, C.ink); y -= 14; }
     d.setTitle(`${title} ${data.no}`); d.setAuthor(sender);
-    return { bytes: await d.save(), name: `${title} ${data.no}${data.toName ? ' ' + data.toName : ''}`, total: P.kleinunternehmer ? net : net * (1 + vat / 100) };
+    return { bytes: await d.save(), name: `${title} ${data.no}${data.toName ? ' ' + data.toName : ''}`, total: net + tax };
   }
 
   /* ---------- Lern- und Planungsvorlagen ---------- */
@@ -319,7 +320,12 @@
         <h4>Positionen</h4><table><tbody>${item()}</tbody></table><button class="b" data-x="add">+ Position</button>
         <div class="tot"><span>Summe</span><span data-sum>0,00 €</span></div>
         <div class="row">${inv ? `<label class="f">Zahlungsziel (Tage)<input data-k="terms" value="${esc(P.terms)}" inputmode="numeric"></label>` : ''}<label class="f">Anrede<select data-k="formal"><option value="1">Sie</option><option value="">du</option></select></label></div>
-        <label class="f">Hinweis (optional)<textarea data-k="note" rows="2"></textarea></label><p class="err"></p>`,
+        <label class="f">Hinweis (optional)<textarea data-k="note" rows="2"></textarea></label>
+        ${inv && global.WBEInvoice && global.WBPdfA ? `<details ${P.einv !== false ? 'open' : ''}><summary>E-Rechnung</summary>
+          <label class="chk" style="margin-top:8px"><input type="checkbox" data-e="on" ${P.einv !== false ? 'checked' : ''}> Als E-Rechnung erstellen (ZUGFeRD 2 / EN 16931: PDF mit eingebetteten Rechnungsdaten)</label>
+          <p style="margin:4px 0 8px;font-size:12px;color:var(--muted,#5f6878)">Firmen können die Rechnung damit automatisch einlesen. Zwischen Unternehmen wird sie ab 2027 bzw. 2028 schrittweise Pflicht; Kleinunternehmer dürfen weiter Papier- oder PDF-Rechnungen schicken.</p>
+          <div class="row"><label class="f">E-Mail des Empfängers<input data-k="buyerEmail" type="email" placeholder="rechnung@firma.de"></label><label class="f">USt-IdNr. des Empfängers (optional)<input data-k="buyerVatId" placeholder="DE123456789"></label><label class="f">Leitweg-ID (nur Behörden)<input data-k="leitweg" placeholder="z. B. 04011000-12345-34"></label></div>
+          <p style="margin:0;font-size:12px;color:var(--muted,#5f6878)">Mit Leitweg-ID wird zusätzlich eine XRechnung (XML) für Behörden-Portale gespeichert.</p></details>` : ''}<p class="err"></p>`,
         `<button class="b" data-x="close">Abbrechen</button><button class="b p" data-x="go">${inv ? 'Rechnung erstellen' : 'Angebot erstellen'}</button>`);
       const $ = s => back.querySelector(s), $$ = s => [...back.querySelectorAll(s)];
       const readP = () => { const p = profile(); $$('[data-p]').forEach(i => { p[i.dataset.p] = i.type === 'checkbox' ? i.checked : i.value.trim(); }); return p; };
@@ -339,10 +345,23 @@
           if (!p.name && !p.company) return err('Bitte unter „Meine Daten“ mindestens Namen oder Firma eintragen.');
           if (!v('to').trim()) return err('Bitte den Empfänger eintragen.');
           if (!its.length) return err('Bitte mindestens eine Position eintragen.');
-          saveProfile({ ...p, terms: num(v('terms')) || p.terms });
+          const eOn = !!($('[data-e="on"]') && $('[data-e="on"]').checked);
+          const eData = { buyerEmail: v('buyerEmail').trim(), buyerVatId: v('buyerVatId').trim(), leitweg: v('leitweg').trim() };
+          if (eOn && eData.leitweg) { const miss = global.WBEInvoice.xrMissing({ profile: p, ...eData }); if (miss.length) return err('Für eine XRechnung fehlt noch: ' + miss.join(', ') + '.'); }
+          saveProfile({ ...p, terms: num(v('terms')) || p.terms, ...(inv ? { einv: eOn } : {}) });
           x.disabled = true; x.textContent = 'Wird erstellt …';
           try {
-            const r = await invoicePdf(kind, { profile: p, to: v('to'), toName: v('to').split('\n')[0].trim().slice(0, 40), no: v('no').trim() || N.no, date: v('date'), service: v('service').trim(), intro: v('intro').trim(), items: its, terms: num(v('terms')), formal: !!v('formal'), note: v('note').trim() });
+            const data = { profile: p, to: v('to'), toName: v('to').split('\n')[0].trim().slice(0, 40), no: v('no').trim() || N.no, date: v('date'), service: v('service').trim(), intro: v('intro').trim(), items: its, terms: num(v('terms')), formal: !!v('formal'), note: v('note').trim(), ...eData };
+            const r = await invoicePdf(kind, data);
+            if (inv && eOn) {
+              const E = global.WBEInvoice, xml = E.cii(data);
+              const z = await E.zugferd(r.bytes, xml, { title: `Rechnung ${data.no}`, author: p.company || p.name, subject: `Rechnung ${data.no} an ${data.toName}` });
+              r.bytes = z.bytes; r.einvoice = true; r.xml = xml;
+              if (data.leitweg) {
+                const blob = new Blob([E.cii(data, { xrechnung: true })], { type: 'application/xml' }), a = document.createElement('a');
+                a.href = URL.createObjectURL(blob); a.download = `XRechnung ${data.no}.xml`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+              }
+            }
             if ((v('no').trim() || N.no) === N.no) N.commit();
             done(r);
           } catch (er) { x.disabled = false; x.textContent = 'Erneut versuchen'; err(er.message || String(er)); }
