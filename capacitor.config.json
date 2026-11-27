@@ -1,0 +1,10 @@
+{
+  "appId": "de.loggx.pdfwerkbank",
+  "appName": "PDF Werkbank",
+  "webDir": "mobile/www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}

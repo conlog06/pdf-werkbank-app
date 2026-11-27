@@ -11,6 +11,7 @@
   "scripts": {
     "start": "electron .",
     "prepare-web": "node scripts/prepare-web.mjs",
+    "prepare-android": "node scripts/prepare-android.mjs",
     "dist": "npm run prepare-web && electron-builder",
     "dist:win": "npm run prepare-web && electron-builder --win",
     "dist:mac": "npm run prepare-web && electron-builder --mac"
@@ -20,6 +21,11 @@
     "semver": "7.7.3"
   },
   "devDependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/cli": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/share": "8.0.3",
     "@tesseract.js-data/deu": "1.0.0",
     "@tesseract.js-data/eng": "1.0.0",
     "electron": "43.7.5",

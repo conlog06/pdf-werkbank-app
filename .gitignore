@@ -3,3 +3,7 @@ dist/
 web-src/
 .DS_Store
 web/lib/ocr/
+mobile/www/
+android/
+apk/
+assets/
