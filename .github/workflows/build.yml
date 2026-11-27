@@ -117,9 +117,16 @@ jobs:
       - run: npx cap sync android
       - name: APK bauen
         run: |
-          cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon --stacktrace
+          cd android && chmod +x gradlew && (./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../gradle.log; exit ${PIPESTATUS[0]})
           cd .. && mkdir -p apk && cp android/app/build/outputs/apk/debug/app-debug.apk "apk/PDF-Werkbank-$(node -p "require('./package.json').version")-Android.apk"
           ls -la apk
+      # Testzweig: Protokoll bei Fehlern in den Zweig legen (ohne Anmeldung lesbar)
+      - name: Protokoll sichern
+        if: failure() && startsWith(github.ref, 'refs/heads/ci-')
+        run: |
+          mkdir -p ci-logs && tail -n 300 gradle.log > ci-logs/android.txt 2>/dev/null || echo "kein gradle.log" > ci-logs/android.txt
+          git config user.name ci && git config user.email ci@example.com
+          git add ci-logs/android.txt && git commit -m "CI-Protokoll" && git push
       - uses: actions/upload-artifact@v4
         with:
           name: PDF-Werkbank-Android
