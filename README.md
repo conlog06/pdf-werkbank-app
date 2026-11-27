@@ -11,9 +11,11 @@ Unter **[Releases](https://github.com/conlog06/pdf-werkbank-app/releases/latest)
 | Windows 10/11 | `PDF-Werkbank-Setup-<version>.exe` |
 | Mac mit Apple-Chip (M1–M4) | `PDF-Werkbank-<version>-mac-arm64.dmg` |
 | Mac mit Intel | `PDF-Werkbank-<version>-mac-x64.dmg` |
+| Android 8+ | `PDF-Werkbank-<version>-Android.apk` |
 
 **Erster Start:** Die App ist (noch) nicht von Microsoft bzw. Apple signiert.
 - *Windows:* Bei „Der Computer wurde durch Windows geschützt“ auf **Weitere Informationen → Trotzdem ausführen**.
+- *Android:* APK auf dem Handy öffnen und „Installation aus dieser Quelle erlauben“ bestätigen. Speichern und Exportieren laufen über „Teilen“ (Dateien, Drive, Mail). Updates: neue APK aus dem Release installieren.
 - *macOS:* App in den Programme-Ordner ziehen, dann **Rechtsklick → Öffnen → Öffnen**. Bei neueren macOS-Versionen: *Systemeinstellungen → Datenschutz & Sicherheit → Dennoch öffnen*.
 
 **Updates kommen automatisch:** Die App sucht beim Start und alle 4 Stunden nach neuen Versionen, lädt sie im Hintergrund und bietet dann „Jetzt neu starten“ an. Das gilt für Windows und macOS (auf dem Mac muss die App im Programme-Ordner liegen).
