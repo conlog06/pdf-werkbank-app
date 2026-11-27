@@ -110,10 +110,9 @@ jobs:
           sed -i "s/versionCode 1$/versionCode $CODE/; s/versionName \"1.0\"/versionName \"$V\"/" android/app/build.gradle
           grep -n "versionCode\|versionName" android/app/build.gradle
       - name: App-Symbol
-        continue-on-error: true
         run: |
-          mkdir -p assets && cp web/icons/icon-512.png assets/icon-only.png && cp web/icons/icon-maskable-512.png assets/icon-foreground.png && cp web/icons/icon-512.png assets/splash.png
-          npx --yes @capacitor/assets@3.0.5 generate --android --iconBackgroundColor '#1f4fd8' --splashBackgroundColor '#f4f6f9'
+          rm -f android/app/src/main/res/drawable*/ic_launcher_background.xml android/app/src/main/res/values/ic_launcher_background.xml
+          cp -r mobile/res/* android/app/src/main/res/
       - run: npx cap sync android
       - name: APK bauen
         run: |
