@@ -30,7 +30,7 @@
     }
     ctx.putImageData(d, 0, 0);
   }
-  async function prepare(file, mode) {
+  async function prepare(file, mode, crop) {
     const { im, url } = await loadImg(file);
     try {
       const k = Math.min(1, MAX / Math.max(im.naturalWidth, im.naturalHeight));
@@ -39,9 +39,12 @@
       const ctx = c.getContext('2d', { willReadFrequently: mode !== 'photo' });
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
       ctx.drawImage(im, 0, 0, w, h);
-      if (mode === 'scan' || mode === 'scancolor') scanify(ctx, w, h, mode === 'scancolor');
-      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', mode === 'photo' ? 0.86 : 0.8));
-      return { bytes: new Uint8Array(await blob.arrayBuffer()), w, h };
+      let out = c, ow = w, oh = h;
+      // Blatt im Foto finden, zuschneiden und perspektivisch gerade rücken
+      if (crop && global.WBScan) { try { const f = global.WBScan.findCorners(c); if (f.found) { out = global.WBScan.warp(c, f.corners); ow = out.width; oh = out.height; } } catch (e) { /* ganzes Bild */ } }
+      if (mode === 'scan' || mode === 'scancolor') scanify(out.getContext('2d', { willReadFrequently: true }), ow, oh, mode === 'scancolor');
+      const blob = await new Promise(r => out.toBlob(r, 'image/jpeg', mode === 'photo' ? 0.86 : 0.8));
+      return { bytes: new Uint8Array(await blob.arrayBuffer()), w: ow, h: oh };
     } finally { URL.revokeObjectURL(url); }
   }
   /* files: Bilder, opts.mode: photo | scan | scancolor, opts.page: 'a4' (A4, Ausrichtung nach Bild) | 'fit' (Seite = Bildgröße) */
@@ -51,7 +54,7 @@
     let n = 0;
     for (const f of files) {
       if (!/^image\//.test(f.type) && !/\.(jpe?g|png|webp|gif|heic|bmp)$/i.test(f.name || '')) continue;
-      const img = await prepare(f, mode);
+      const img = await prepare(f, mode, opts.crop);
       const jpg = await doc.embedJpg(img.bytes);
       let W, H;
       if (opts.page === 'fit') { const s = 72 / 150; W = img.w * s; H = img.h * s; } // ~150 dpi

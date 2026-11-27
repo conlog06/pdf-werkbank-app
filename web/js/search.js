@@ -120,6 +120,42 @@
     return res;
   }
 
+
+  /* Für Fragen an die ganze Bibliothek: passende Seiten nach Stichwörtern (BM25-artig) */
+  const STOP = new Set('der die das und oder ein eine einer eines einem einen ist sind war waren wird werden wie was wer wo warum welche welcher welches nicht mit von zu im in am an auf für bei aus nach über unter dem den des sich auch als noch nur so dass daß kann können muss müssen soll sollen hat haben the and for with what how why which this that are was were from into erkläre erklär bitte mir mich gib nenne beschreibe kurz einfach unterschied zwischen'.split(' '));
+  const terms = q => [...new Set(norm(q).split(/[^\p{L}\p{N}]+/u).filter(w => w.length >= 3 && !STOP.has(w)))];
+  async function passages(q, items, max = 8) {
+    const ts = terms(q); if (!ts.length) return [];
+    const pages = [];
+    for (const d of items) {
+      if (d.kind !== 'doc') continue;
+      const idx = await indexOf(d); if (!idx) continue;
+      const own = new Map(); for (const o of idx.own) own.set(o.n, (own.get(o.n) || '') + ' ' + o.t);
+      for (const p of idx.pages) { const t = (p.t + ' ' + (own.get(p.n) || '')).trim(); if (t) pages.push({ doc: d, n: p.n, t, nt: norm(t) }); }
+    }
+    if (!pages.length) return [];
+    const N = pages.length, avg = pages.reduce((s, p) => s + p.nt.length, 0) / N;
+    const df = ts.map(t => pages.filter(p => p.nt.includes(t)).length);
+    for (const p of pages) {
+      let sc = 0, hitTerms = 0;
+      ts.forEach((t, i) => {
+        if (!df[i]) return;
+        let c = 0, k = p.nt.indexOf(t); while (k >= 0 && c < 50) { c++; k = p.nt.indexOf(t, k + t.length); }
+        if (!c) return; hitTerms++;
+        const idf = Math.log(1 + (N - df[i] + 0.5) / (df[i] + 0.5));
+        sc += idf * (c * 2.2) / (c + 1.2 * (0.25 + 0.75 * p.nt.length / avg));
+      });
+      p.score = sc * (1 + hitTerms / ts.length);
+    }
+    return pages.filter(p => p.score > 0).sort((a, b) => b.score - a.score).slice(0, max).map(p => {
+      // Ausschnitt um die dichteste Stelle
+      let best = 0, bestAt = 0;
+      for (let at = 0; at < p.t.length; at += 300) { const w = p.nt.slice(at, at + 1600); const c = ts.reduce((s, t) => s + (w.split(t).length - 1), 0); if (c > best) { best = c; bestAt = at; } }
+      const a = Math.max(0, bestAt - 200);
+      return { doc: p.doc, n: p.n, score: p.score, text: (a ? '… ' : '') + p.t.slice(a, a + 1800) + (a + 1800 < p.t.length ? ' …' : '') };
+    });
+  }
+
   if (ST()) ST().onChange(() => schedule(3000));
-  global.WBSearch = { indexAll, schedule, search, progress: () => ({ ...progress, running }), onProgress: fn => { listeners.add(fn); return () => listeners.delete(fn); } };
+  global.WBSearch = { indexAll, schedule, search, passages, terms, progress: () => ({ ...progress, running }), onProgress: fn => { listeners.add(fn); return () => listeners.delete(fn); } };
 })(window);

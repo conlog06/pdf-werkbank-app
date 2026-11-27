@@ -563,7 +563,7 @@ let restoring = false;
 async function undo() { commitEdit(); if (!S.hist.length || restoring) return; restoring = true; S.fut.push(snap()); try { await restore(S.hist.pop()); } finally { restoring = false; } }
 async function redo() { commitEdit(); if (!S.fut.length || restoring) return; restoring = true; S.hist.push(snap()); try { await restore(S.fut.pop()); } finally { restoring = false; } }
 function updateUndo() { $('#btnUndo').disabled = !S.hist.length; $('#btnRedo').disabled = !S.fut.length; }
-function markDirty() { if (REC.mr) recStamp(); const was = S.dirty; S.dirty = true; updateTitle(); scheduleAutosave(); if (!was && S.file) fileState(); }
+function markDirty() { if (REC.mr) recStamp(); if (S.shareSess) mentionScan(); const was = S.dirty; S.dirty = true; updateTitle(); scheduleAutosave(); if (!was && S.file) fileState(); }
 function updateTitle() {
   const n = $('#docName');
   n.textContent = S.docName + (S.sample ? ' · Beispiel' : '') + (S.dirty && !S.sample ? ' ●' : '');
@@ -2512,22 +2512,72 @@ async function replaceTextAt(p, pt) {
 
 /* ---------- Suche ---------- */
 let findTok = 0, findT;
+/* Suche 2.0: findet Treffer über Zeilen- und Textgrenzen, trennt Silbentrennung, durchsucht eigene Notizen und Textfelder */
+const FIND_OPT = (() => { try { return JSON.parse(lsGet('pdfwb.findopt') || '{}'); } catch (e) { return {}; } })();
+const foldAcc = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ß/g, 'ss');
+function pageFlat(tc) {
+  // Text der Seite als ein String mit Zuordnung Zeichen → Textstück
+  let s = ''; const map = [];
+  const items = tc.items.filter(it => typeof it.str === 'string');
+  items.forEach((it, k) => {
+    const str = it.str;
+    if (s && !/\s$/.test(s) && str && !/^\s/.test(str)) {
+      const prev = items[k - 1], hyph = /[A-Za-zÄÖÜäöüß]-$/.test(s) && prev && (prev.hasEOL || Math.abs(prev.transform[5] - it.transform[5]) > 2);
+      if (hyph) { s = s.slice(0, -1); map.pop(); }
+      else if (prev && (prev.hasEOL || Math.abs(prev.transform[5] - it.transform[5]) > 2 || it.transform[4] - (prev.transform[4] + (prev.width || 0)) > 1.5)) { s += ' '; map.push(null); }
+    }
+    for (let j = 0; j < str.length; j++) { s += str[j]; map.push([it, j, str.length]); }
+    if (it.hasEOL && !/\s$/.test(s) && !/[A-Za-zÄÖÜäöüß]-$/.test(s)) { s += ' '; map.push(null); }
+  });
+  return { s, map };
+}
+function findRx(q) {
+  let src = foldAcc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  if (FIND_OPT.word) src = '(?<![\\p{L}\\p{N}])' + src + '(?![\\p{L}\\p{N}])';
+  return new RegExp(src, 'gu' + (FIND_OPT.case ? '' : 'i'));
+}
 async function runFind(q) {
   const tok = ++findTok;
-  q = q.trim().toLowerCase();
-  if (q.length < 2) { S.find = null; S.pages.forEach(drawHits); $('#findCount').textContent = ''; return; }
+  q = q.trim();
+  const qk = q.toLowerCase() + (FIND_OPT.case ? '|c' : '') + (FIND_OPT.word ? '|w' : '');
+  if (q.length < 2) { S.find = null; S.pages.forEach(drawHits); $('#findCount').textContent = ''; findList(false); return; }
   $('#findCount').textContent = '…';
-  const hits = [];
+  const rx = findRx(q), hits = [];
   for (const p of S.pages) {
     let tc; try { tc = await textContent(p); } catch (e) { continue; }
     if (tok !== findTok) return;
-    for (const it of tc.items) {
-      const s = (it.str || '').toLowerCase(); let k = s.indexOf(q);
-      while (k >= 0) { hits.push({ pid: p.id, it, s0: k / s.length, s1: (k + q.length) / s.length }); k = s.indexOf(q, k + q.length); }
+    const { s, map } = pageFlat(tc), fs = foldAcc(s);
+    // foldAcc kann die Länge ändern (ß → ss); dann Zuordnung über Zeichenweise Faltung
+    let idx = null;
+    if (fs.length !== s.length) { idx = []; for (let i = 0; i < s.length; i++) { const f = foldAcc(s[i]); for (let k = 0; k < f.length; k++) idx.push(i); } }
+    rx.lastIndex = 0; let m;
+    while ((m = rx.exec(fs))) {
+      if (!m[0].length) { rx.lastIndex++; continue; }
+      const a = idx ? idx[m.index] : m.index, b = idx ? idx[m.index + m[0].length - 1] + 1 : m.index + m[0].length;
+      const parts = []; let cur = null;
+      for (let i = a; i < b; i++) {
+        const c = map[i]; if (!c) continue;
+        if (cur && cur.it === c[0] && cur.e === c[1]) cur.e++;
+        else { cur = { it: c[0], b: c[1], e: c[1] + 1, n: c[2] }; parts.push(cur); }
+      }
+      if (!parts.length) continue;
+      hits.push({ pid: p.id, parts: parts.map(x => ({ it: x.it, s0: x.b / x.n, s1: x.e / x.n })), it: parts[0].it, s0: parts[0].b / parts[0].n, s1: parts[0].e / parts[0].n, ctx: [s.slice(Math.max(0, a - 40), a), s.slice(a, b), s.slice(b, b + 50)] });
+      if (hits.length > 5000) break;
+    }
+    // eigene Notizen, Textfelder, Kommentare
+    for (const an of p.annots) {
+      const t = [an.text, an.comment].filter(Boolean).join(' '); if (!t) continue;
+      const ft = foldAcc(t); rx.lastIndex = 0; const mm = rx.exec(ft); if (!mm) continue;
+      hits.push({ pid: p.id, aid: an.id, ctx: [t.slice(Math.max(0, mm.index - 30), mm.index), t.slice(mm.index, mm.index + mm[0].length), t.slice(mm.index + mm[0].length, mm.index + mm[0].length + 50)], own: an.t });
     }
   }
-  S.find = { q, hits, i: hits.length ? 0 : -1 };
+  for (const r of S.recs || []) for (const sg of r.tx || []) {
+    const ft = foldAcc(sg.text); rx.lastIndex = 0; const mm = rx.exec(ft); if (!mm) continue;
+    hits.push({ rid: r.id, t: sg.t, ctx: [sg.text.slice(Math.max(0, mm.index - 30), mm.index), sg.text.slice(mm.index, mm.index + mm[0].length), sg.text.slice(mm.index + mm[0].length, mm.index + mm[0].length + 50)] });
+  }
+  S.find = { q: q.toLowerCase(), key: qk, hits, i: hits.length ? 0 : -1 };
   S.pages.forEach(drawHits);
+  findList(document.activeElement === $('#findInput') || !$('#findList').hidden ? true : undefined);
   if (hits.length) goHit(0); else $('#findCount').textContent = 'Keine';
 }
 function hitsSVG(p) {
@@ -2535,9 +2585,8 @@ function hitsSVG(p) {
   const vp = proxyOf(p) ? proxyOf(p).getViewport({ scale: 1, rotation: rotOf(p) }) : null;
   if (!vp) return '';
   return S.find.hits.map((h, i) => {
-    if (h.pid !== p.id) return '';
-    const g = itemGeom(vp, h.it, h.s0, h.s1);
-    return `<rect class="hit${i === S.find.i ? ' on' : ''}" x="${r2(g.x)}" y="${r2(g.y)}" width="${r2(g.w)}" height="${r2(g.h)}" rx="1.5"/>`;
+    if (h.pid !== p.id || !h.parts) return '';
+    return h.parts.map(pt => { const g = itemGeom(vp, pt.it, pt.s0, pt.s1); return `<rect class="hit${i === S.find.i ? ' on' : ''}" x="${r2(g.x)}" y="${r2(g.y)}" width="${r2(g.w)}" height="${r2(g.h)}" rx="1.5"/>`; }).join('');
   }).join('');
 }
 function drawHits(p) { const e = els.get(p.id); if (e) { const g = $('.hits', e.svg); if (g) g.innerHTML = hitsSVG(p); } }
@@ -2545,13 +2594,37 @@ function goHit(i) {
   const f = S.find; if (!f || !f.hits.length) return;
   const prev = f.hits[f.i];
   f.i = (i + f.hits.length) % f.hits.length;
-  const h = f.hits[f.i], p = pageById(h.pid);
-  if (prev && prev.pid !== h.pid) drawHits(pageById(prev.pid));
+  const h = f.hits[f.i];
+  if (h.rid) { $('#findCount').textContent = `${f.i + 1}/${f.hits.length}`; openPlayer(h.rid, h.t); return; }
+  const p = pageById(h.pid);
+  if (prev && prev.pid && prev.pid !== h.pid) drawHits(pageById(prev.pid));
   drawHits(p);
   $('#findCount').textContent = `${f.i + 1}/${f.hits.length}`;
+  const lst = $('#findList'); if (lst && !lst.hidden) { $$('.fl-on', lst).forEach(x => x.classList.remove('fl-on')); const r = $(`[data-h="${f.i}"]`, lst); if (r) { r.classList.add('fl-on'); r.scrollIntoView({ block: 'nearest' }); } }
+  if (h.aid) { setCurrent(S.pages.indexOf(p)); gotoAnnot(h.aid); return; }
   const e = els.get(p.id), g = itemGeom(proxyOf(p).getViewport({ scale: 1, rotation: rotOf(p) }), h.it, h.s0, h.s1);
   viewer.scrollTo({ top: e.wrap.offsetTop + g.y * S.zoom - viewer.clientHeight * 0.35, left: Math.max(0, e.wrap.offsetLeft + g.x * S.zoom - viewer.clientWidth / 2), behavior: reduceMotion ? 'auto' : 'smooth' });
   setCurrent(S.pages.indexOf(p));
+}
+function openFind() { const f = $('.find'), fi = $('#findInput'); f.classList.add('open'); fi.focus(); fi.select(); if (S.find) findList(true); }
+/* Liste zu; im schmalen Fenster das Feld nur einklappen, wenn nichts gesucht wird */
+function closeFind(soft) {
+  findList(false);
+  const fi = $('#findInput');
+  if (!soft || !fi.value.trim()) $('.find').classList.remove('open');
+  if (!soft) fi.blur();
+}
+/* Trefferliste unter dem Suchfeld */
+function findList(show) {
+  const box = $('#findList'); if (!box) return;
+  const f = S.find;
+  if (show === false || !f) { box.hidden = true; if (!f) box.innerHTML = ''; return; }
+  const per = new Map(); f.hits.forEach(h => { if (h.pid) per.set(h.pid, (per.get(h.pid) || 0) + 1); });
+  box.innerHTML = `<div class="fl-h"><span>${f.hits.length ? `${f.hits.length} ${f.hits.length === 1 ? 'Treffer' : 'Treffer'} auf ${per.size} ${per.size === 1 ? 'Seite' : 'Seiten'}` : 'Keine Treffer'}</span>
+    <label title="Groß- und Kleinschreibung beachten"><input type="checkbox" data-fo="case" ${FIND_OPT.case ? 'checked' : ''}>Aa</label><label title="Nur ganze Wörter"><input type="checkbox" data-fo="word" ${FIND_OPT.word ? 'checked' : ''}>Wort</label></div>
+    <div class="fl-l">${f.hits.slice(0, 300).map((h, i) => `<button type="button" class="fl-r${i === f.i ? ' fl-on' : ''}" data-h="${i}"><span class="fl-p">${h.rid ? `${icon('mic')} ${fmtDur(h.t)}` : `S. ${pageNo(h.pid)}`}${h.aid ? ' · ' + ({ note: 'Notiz', text: 'Text', mark: 'Markierung' }[h.own] || 'Element') : ''}</span><span class="fl-c">${h.ctx[0] ? '…' + esc(h.ctx[0].replace(/\s+/g, ' ')) : ''}<mark>${esc(h.ctx[1])}</mark>${esc(h.ctx[2].replace(/\s+/g, ' '))}…</span></button>`).join('')}${f.hits.length > 300 ? `<p class="note" style="padding:6px 10px">… und ${f.hits.length - 300} weitere</p>` : ''}</div>
+    ${LIB && window.WBSearch ? `<button type="button" class="fl-lib" data-fl="lib">${icon('search')}„${esc(f.q)}“ in der ganzen Bibliothek suchen</button>` : ''}`;
+  if (show === true) box.hidden = false;
 }
 
 /* ---------- Seiten verwalten ---------- */
@@ -4070,14 +4143,15 @@ let photoMode = lsGet('pdfwb.photomode') || 'scan';
 function photosDialog() {
   dialog('Fotos oder Scans einfügen', `<p class="note" style="margin:0 0 10px">Jedes Bild wird eine eigene Seite hinter der aktuellen. Auf Tablet und Handy kannst du direkt die Kamera nehmen.</p>
     <div class="seg" id="phMode" role="group">${[['scan', 'Scan (S/W)'], ['scancolor', 'Scan farbig'], ['photo', 'Foto']].map(([k, l]) => `<button type="button" data-k="${k}" aria-pressed="${k === photoMode}">${l}</button>`).join('')}</div>
-    <p class="note">Scan hellt das Papier auf und verstärkt die Schrift, ideal für Arbeitsblätter und Notizen.</p>`, 'Bilder wählen …', () => { $('#filePhotos').click(); });
+    <p class="note">Scan hellt das Papier auf und verstärkt die Schrift, ideal für Arbeitsblätter und Notizen.</p>${window.WBScan ? `<label class="chkrow"><input type="checkbox" id="phCrop" ${lsGet('pdfwb.photocrop') !== '0' ? 'checked' : ''}> Blatt automatisch erkennen, zuschneiden und gerade rücken</label>` : ''}`, 'Bilder wählen …', () => { $('#filePhotos').click(); });
+  $('#dlgBody').onchange = e => { if (e.target.id === 'phCrop') lsSet('pdfwb.photocrop', e.target.checked ? '1' : '0'); };
   $('#phMode').onclick = e => { const b = e.target.closest('[data-k]'); if (!b) return; photoMode = b.dataset.k; lsSet('pdfwb.photomode', photoMode); $$('#phMode button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); };
 }
 async function insertPhotos(files) {
   if (!files.length || !window.WBPhotos) return;
   busy(true, 'Bilder werden aufbereitet …');
   try {
-    const bytes = await window.WBPhotos.toPdf(files, { mode: photoMode, onProgress: (n, t) => setMsg(`Bild ${n} von ${t} …`, true) });
+    const bytes = await window.WBPhotos.toPdf(files, { mode: photoMode, crop: lsGet('pdfwb.photocrop') !== '0', onProgress: (n, t) => setMsg(`Bild ${n} von ${t} …`, true) });
     busy(false);
     const n = await insertPdfBytes(bytes, files.length === 1 ? files[0].name.replace(/\.\w+$/, '') + '.pdf' : 'Fotos.pdf');
     toast(n === 1 ? 'Foto als Seite eingefügt' : `${n} Fotos als Seiten eingefügt`);
@@ -4778,7 +4852,7 @@ function shareHooks() {
     addSource: async (id, src) => { if (!S.sources.has(id)) await addSource(src.bytes, src.name, id); },
     apply: (st, structural) => applyRemote(st, structural),
     busy: () => !!(S.editing || drag),
-    onStatus: shareStatus, onPeers: sharePeers,
+    onStatus: shareStatus, onPeers: sharePeers, onCursor: showCursor, onMention,
   };
 }
 /* Stand der anderen übernehmen, ohne Zoom und Position zu verlieren */
@@ -5140,7 +5214,7 @@ async function versionList(id) {
   const keys = (await idbKeys()).map(String).filter(k => k.startsWith('ver:' + id + ':'));
   return keys.map(k => +k.split(':').pop()).sort((a, b) => b - a);
 }
-async function snapshotVersion(force) {
+async function snapshotVersion(force, label) {
   if (!S.lib || !S.pages.length) return;
   try {
     const id = S.lib.id, list = await versionList(id);
@@ -5148,12 +5222,14 @@ async function snapshotVersion(force) {
     const st = docState(); st.dirty = false;
     for (const sid of st.srcIds) if (!(await idbGet(`vsrc:${id}:${sid}`))) { const s = S.sources.get(sid); if (s) await idbSet(`vsrc:${id}:${sid}`, { name: s.name, bytes: s.bytes }); }
     const notes = S.pages.reduce((n, p) => n + p.annots.length, 0);
-    await idbSet(`ver:${id}:${Date.now()}`, { state: st, pages: S.pages.length, notes });
+    await idbSet(`ver:${id}:${Date.now()}`, { state: st, pages: S.pages.length, notes, label: label || '' });
     const all = await versionList(id);
-    for (const ts of all.slice(VER_MAX)) await idbDel(`ver:${id}:${ts}`);
+    // benannte Versionen bleiben (bis 30), automatische nur die letzten VER_MAX
+    let auto = 0, named = 0;
+    for (const ts of all) { const v = await idbGet(`ver:${id}:${ts}`); if (v && v.label) { if (++named > 30) await idbDel(`ver:${id}:${ts}`); } else if (++auto > VER_MAX) await idbDel(`ver:${id}:${ts}`); }
     // Quellen aufräumen, die keine Version mehr braucht
     const need = new Set();
-    for (const ts of all.slice(0, VER_MAX)) { const v = await idbGet(`ver:${id}:${ts}`); for (const sid of (v && v.state.srcIds) || []) need.add(sid); }
+    for (const ts of await versionList(id)) { const v = await idbGet(`ver:${id}:${ts}`); for (const sid of (v && v.state.srcIds) || []) need.add(sid); }
     for (const k of (await idbKeys()).map(String)) if (k.startsWith(`vsrc:${id}:`) && !need.has(k.split(':').pop())) await idbDel(k);
   } catch (e) { console.warn('Version sichern', e); }
 }
@@ -5161,13 +5237,25 @@ async function versionsDialog() {
   if (!S.lib) { toast('Den Versionsverlauf gibt es für Dokumente in der Bibliothek.'); return; }
   await snapshotVersion(false);
   const id = S.lib.id, list = await versionList(id);
-  const metas = await Promise.all(list.map(async ts => { const v = await idbGet(`ver:${id}:${ts}`); return { ts, pages: v ? v.pages : 0, notes: v ? v.notes : 0 }; }));
+  const metas = await Promise.all(list.map(async ts => { const v = await idbGet(`ver:${id}:${ts}`); return { ts, pages: v ? v.pages : 0, notes: v ? v.notes : 0, label: (v && v.label) || '' }; }));
   const fmt = ts => new Date(ts).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   dialog('Versionsverlauf', metas.length ? `<p class="note" style="margin:0 0 10px">Beim Arbeiten wird höchstens alle 10 Minuten ein Zwischenstand auf diesem Gerät gesichert (die letzten ${VER_MAX}).</p>
-    <div class="verlist">${metas.map((m, i) => `<div class="ver"><div><b>${fmt(m.ts)}</b>${i === 0 ? ' <span class="note">· neuester</span>' : ''}<div class="note">${m.pages} ${m.pages === 1 ? 'Seite' : 'Seiten'} · ${m.notes} eigene Elemente</div></div><button class="btn" data-ver="${m.ts}">Wiederherstellen</button></div>`).join('')}</div>`
+    <div class="verlist">${metas.map((m, i) => `<div class="ver${m.label ? ' named' : ''}"><div style="flex:1;min-width:0"><b>${m.label ? esc(m.label) + ' · ' : ''}${fmt(m.ts)}</b>${i === 0 ? ' <span class="note">· neuester</span>' : ''}<div class="note">${m.pages} ${m.pages === 1 ? 'Seite' : 'Seiten'} · ${m.notes} eigene Elemente</div><div class="vdiff" data-vd="${m.ts}" hidden></div></div><button class="btn" data-cmp="${m.ts}">Vergleichen</button><button class="btn" data-ver="${m.ts}">Wiederherstellen</button></div>`).join('')}</div>
+    <div class="row2"><button class="btn" data-vsave="1">${icon('save')}Jetzt Version mit Namen speichern …</button></div>`
     : '<p class="note">Noch keine Versionen. Sie entstehen automatisch beim Bearbeiten.</p>', 'Schließen', () => true);
   $('#dlgCancel').hidden = true;
   $('#dlgBody').onclick = async e => {
+    if (e.target.closest('[data-vsave]')) { closeDlg(); await saveNamedVersion(); versionsDialog(); return; }
+    const cmp = e.target.closest('[data-cmp]');
+    if (cmp) {
+      const box = $(`[data-vd="${cmp.dataset.cmp}"]`); if (!box.hidden) { box.hidden = true; return; }
+      const v = await idbGet(`ver:${id}:${cmp.dataset.cmp}`); if (!v) return;
+      const d = versionDiff(v.state, docState());
+      const parts = [d.added && `${d.added} neu`, d.changed && `${d.changed} geändert`, d.removed && `${d.removed} entfernt`, d.pagesAdded && `${d.pagesAdded} Seiten dazu`, d.pagesRemoved && `${d.pagesRemoved} Seiten weg`].filter(Boolean);
+      box.innerHTML = parts.length ? `<b>Seitdem:</b> ${parts.join(' · ')}${d.per.length ? `<br>${d.per.slice(0, 12).map(x => `<button class="lnk" data-vpg="${x.n}">S. ${x.n}</button> ${[x.ad && '+' + x.ad, x.ch && '~' + x.ch, x.rm && '−' + x.rm].filter(Boolean).join(' ')}`).join(' · ')}` : ''}` : 'Keine Unterschiede zum aktuellen Stand.';
+      box.hidden = false; return;
+    }
+    const vp = e.target.closest('[data-vpg]'); if (vp) { closeDlg(); scrollToPage(+vp.dataset.vpg - 1); return; }
     const b = e.target.closest('[data-ver]'); if (!b) return;
     const v = await idbGet(`ver:${id}:${b.dataset.ver}`); if (!v) return;
     $('#dlgOk').click();
@@ -5701,8 +5789,8 @@ const HUB = [
   ['Bearbeiten', [['objects', 'Inhalte bearbeiten', 'Texte, Bilder und Flächen der PDF verschieben, löschen, ändern', 'objects', 'tool'], ['edittext', 'Text ändern', 'Vorhandenen Text direkt umschreiben', 'edittext', 'tool'], ['redact', 'Schwärzen', 'Bereich schwärzen, Text wird gelöscht', 'redact', 'tool'], ['redactsearch', 'Suchen und schwärzen', 'Namen, E-Mails, IBANs im ganzen Dokument', 'redact'], ['wm', 'Wasserzeichen', 'Text quer über die Seiten', 'stamp'], ['pn', 'Seitenzahlen', 'Nummerieren in vielen Formaten', 'list']]],
   ['Einfügen', [['field', 'Formularfeld', 'Textfeld, Kästchen, Auswahl, Unterschrift', 'field'], ['detectfields', 'Formular erkennen', 'Linien und Kästchen werden zu Feldern', 'field'], ['table', 'Tabelle', 'Aus Excel einfügen oder eintippen', 'grid'], ['calc', 'Rechner und Live-Graphen', 'Formeln, Funktionen, Statistik', 'calc'], ['qr', 'QR-Code', 'Link oder Text als QR-Code', 'qr'], ['photos', 'Fotos oder Scans', 'Bilder als neue Seiten', 'image']]],
   ['Seiten', [['organize', 'Seitenübersicht', 'Alle Seiten sortieren, drehen, löschen', 'grid'], ['blank', 'Neue Seite / Notizpapier', 'Leer, liniert, kariert, punktiert', 'blank'], ['merge', 'PDF anhängen', 'Weitere PDF ans Ende', 'add'], ['extract', 'Seiten extrahieren', 'Auswahl als eigene PDF', 'extract']]],
-  ['Lernen und Uni', [['record', 'Vorlesung aufnehmen', 'Ton mit deinen Notizen verknüpft', 'mic'], ['learn', 'Lernkarten und Quiz', 'Aus Markierungen oder mit KI', 'cards'], ['tasks', 'Aufgaben', 'Aus Kommentaren, mit Fristen', 'tasks'], ['searchlib', 'In allen Dokumenten suchen', 'Ein Begriff, alle Skripte', 'search'], ['split', 'Zweites Dokument daneben', 'Skript neben Übungsblatt', 'split'], ['hw2text', 'Handschrift in Text', 'Geschriebenes wird tippbar', 'text'], ['cite', 'Zitieren', 'Quelle mit Seitenzahl, BibTeX', 'quote'], ['exam', 'Probeklausur', 'KI stellt und korrigiert', 'exam'], ['mindmap', 'Mindmap', 'Kapitel und Markierungen', 'mindmap'], ['studystats', 'Lernstatistik', 'Zeit, Serie, Pomodoro', 'chart'], ['formula', 'Formel als LaTeX', 'Für Word, Notion, LaTeX', 'sigma']]],
-  ['Büro', [['template', 'Neu aus Vorlage', 'Rechnung, Angebot, Planer', 'template'], ['sign', 'Digital signieren', 'Mit Zertifikat, prüfbar', 'sig'], ['verifysig', 'Signaturen prüfen', 'Wer, wann, unverändert?', 'check'], ['convert', 'Umwandeln', 'Word, Excel, Bilder, Text', 'convert'], ['autotoc', 'Inhaltsverzeichnis', 'Aus Überschriften, als Lesezeichen', 'toc'], ['headfoot', 'Kopf- und Fußzeilen', 'Titel, Datum, Seitenzahlen', 'hf'], ['einvoice', 'E-Rechnung ansehen', 'ZUGFeRD und XRechnung lesen', 'xml'], ['receipts', 'Belege scannen', 'Kassenbons erfassen, CSV', 'receipt'], ['mailmerge', 'Serienbrief', 'Platzhalter plus Tabelle', 'mail'], ['batch', 'Stapelverarbeitung', 'Viele PDFs auf einmal', 'layers'], ['pdfa', 'PDF/A speichern', 'Archivformat für Behörden', 'archive'], ['a11y', 'Barrierefreiheit', 'Prüfen und verbessern', 'access']]],
+  ['Lernen und Uni', [['record', 'Vorlesung aufnehmen', 'Ton mit deinen Notizen verknüpft', 'mic'], ['learn', 'Lernkarten und Quiz', 'Aus Markierungen oder mit KI', 'cards'], ['tasks', 'Aufgaben', 'Aus Kommentaren, mit Fristen', 'tasks'], ['searchlib', 'In allen Dokumenten suchen', 'Ein Begriff, alle Skripte', 'search'], ['split', 'Zweites Dokument daneben', 'Skript neben Übungsblatt', 'split'], ['hw2text', 'Handschrift in Text', 'Geschriebenes wird tippbar', 'text'], ['cite', 'Zitieren', 'Quelle mit Seitenzahl, BibTeX', 'quote'], ['exam', 'Probeklausur', 'KI stellt und korrigiert', 'exam'], ['mindmap', 'Mindmap', 'Kapitel und Markierungen', 'mindmap'], ['studystats', 'Lernstatistik', 'Zeit, Serie, Pomodoro', 'chart'], ['formula', 'Formel als LaTeX', 'Für Word, Notion, LaTeX', 'sigma'], ['transcript', 'Transkript', 'Vorlesung als Text, durchsuchbar', 'mic'], ['asklib', 'Bibliothek fragen', 'KI-Antworten aus allen Skripten', 'spark'], ['cardsx', 'Anki und Lerngruppe', 'Karten austauschen', 'cards']]],
+  ['Büro', [['template', 'Neu aus Vorlage', 'Rechnung, Angebot, Planer', 'template'], ['sign', 'Digital signieren', 'Mit Zertifikat, prüfbar', 'sig'], ['verifysig', 'Signaturen prüfen', 'Wer, wann, unverändert?', 'check'], ['convert', 'Umwandeln', 'Word, Excel, Bilder, Text', 'convert'], ['autotoc', 'Inhaltsverzeichnis', 'Aus Überschriften, als Lesezeichen', 'toc'], ['headfoot', 'Kopf- und Fußzeilen', 'Titel, Datum, Seitenzahlen', 'hf'], ['einvoice', 'E-Rechnung ansehen', 'ZUGFeRD und XRechnung lesen', 'xml'], ['receipts', 'Belege scannen', 'Kassenbons erfassen, CSV', 'receipt'], ['mailmerge', 'Serienbrief', 'Platzhalter plus Tabelle', 'mail'], ['batch', 'Stapelverarbeitung', 'Viele PDFs auf einmal', 'layers'], ['pdfa', 'PDF/A speichern', 'Archivformat für Behörden', 'archive'], ['a11y', 'Barrierefreiheit', 'Prüfen und verbessern', 'access'], ['contract', 'Vertrag auswerten', 'Fristen, Kosten, Klauseln', 'sig'], ['ledger', 'Rechnungen und Mahnungen', 'Offene Posten, EÜR', 'receipt']]],
   ['Werkzeuge', [['ocr', 'Texterkennung (OCR)', 'Scans durchsuchbar machen', 'scan'], ['compress', 'PDF verkleinern', 'Fotos und Scans komprimieren', 'compress'], ['compare', 'Vergleichen', 'Zwei Fassungen Wort für Wort', 'compare'], ['stats', 'Dokument-Statistik', 'Wörter, Lesezeit, Elemente', 'list'], ['dictate', 'Diktieren', 'Sprache in ein Textfeld', 'comment'], ['speak', 'Vorlesen', 'Ab dieser Seite vorlesen', 'book']]],
   ['Speichern und teilen', [['cloudsave', 'In der Cloud speichern', 'Dropbox, iCloud, Nextcloud, Ordner', 'cloud'], ['cloudopen', 'Aus der Cloud öffnen', 'PDF aus deinem Cloud-Speicher', 'cloud'], ['collab', 'Gemeinsam bearbeiten', 'Link für Live-Zusammenarbeit', 'users'], ['werkbank', 'Werkbank-Datei', 'Bearbeitbar weitergeben (.werkbank)', 'save'], ['secure', 'Mit Passwort', 'AES-256 verschlüsselt speichern', 'lock'], ['marks', 'Kommentare als Text', 'Alle Markierungen mit Seitenzahl', 'note']]],
 ];
@@ -5751,14 +5839,14 @@ async function recStart() {
   mr.onstop = recFinish;
   mr.start(1000);
   if (S.player) closePlayer();
-  recBar();
+  recBar(); txLiveStart();
   $('#btnRec') && $('#btnRec').setAttribute('aria-pressed', 'true');
   toast('Aufnahme läuft · alles, was du jetzt schreibst, wird mit der Stelle in der Aufnahme verknüpft');
 }
 function recBar() {
   if (REC.bar) REC.bar.remove();
   const b = document.createElement('div'); b.className = 'recbar';
-  b.innerHTML = `<span class="dot rec"></span><b class="rt">0:00</b><button class="btn" data-r="pause">Pause</button><button class="btn primary" data-r="stop">Beenden</button>`;
+  b.innerHTML = `<span class="dot rec"></span><b class="rt">0:00</b><span class="rtx" aria-live="off"></span><button class="btn" data-r="pause">Pause</button><button class="btn primary" data-r="stop">Beenden</button>`;
   document.body.appendChild(b); REC.bar = b;
   b.addEventListener('click', e => { const k = e.target.closest('[data-r]'); if (!k) return; if (k.dataset.r === 'stop') recStop(); else recPause(); });
   clearInterval(REC.timer); REC.timer = setInterval(() => { const t = $('.rt', b); if (t) t.textContent = fmtDur(recNow()); }, 500);
@@ -5766,8 +5854,8 @@ function recBar() {
 function recPause() {
   if (!REC.mr) return;
   const btn = $('[data-r=pause]', REC.bar);
-  if (REC.mr.state === 'recording') { REC.mr.pause(); REC.pauseAt = performance.now(); btn.textContent = 'Weiter'; REC.bar.classList.add('paused'); }
-  else { REC.paused += performance.now() - REC.pauseAt; REC.pauseAt = 0; REC.mr.resume(); btn.textContent = 'Pause'; REC.bar.classList.remove('paused'); }
+  if (REC.mr.state === 'recording') { REC.mr.pause(); REC.pauseAt = performance.now(); btn.textContent = 'Weiter'; REC.bar.classList.add('paused'); if (TX.sr) try { TX.sr.stop(); } catch (e) { /* egal */ } }
+  else { REC.paused += performance.now() - REC.pauseAt; REC.pauseAt = 0; REC.mr.resume(); btn.textContent = 'Pause'; REC.bar.classList.remove('paused'); if (TX.sr && TX.on) try { TX.sr.start(); } catch (e) { /* läuft */ } }
 }
 function recStop() { if (!REC.mr) return; recStamp(); REC.dur = recNow(); REC.mr.stop(); REC.stream.getTracks().forEach(t => t.stop()); }
 function recFinish() {
@@ -5775,7 +5863,7 @@ function recFinish() {
   const blob = new Blob(REC.chunks, { type: REC.mime }), id = REC.id, n = (S.recs || []).length + 1;
   S.recs = S.recs || [];
   S.recs.push({ id, name: `Aufnahme ${n} · ${new Date().toLocaleString('de-DE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`, mime: REC.mime, dur: Math.round(REC.dur || 0), at: Date.now() });
-  S.audio.set(id, blob);
+  S.audio.set(id, blob); txLiveStop(id);
   if (REC.bar) REC.bar.remove();
   Object.assign(REC, { mr: null, stream: null, bar: null, chunks: [], known: null });
   $('#btnRec') && $('#btnRec').setAttribute('aria-pressed', 'false');
@@ -5821,7 +5909,7 @@ async function openPlayer(rid, at) {
   bar.innerHTML = `<button class="ibtn" data-p="back" title="15 s zurück">−15</button><button class="ibtn pbig" data-p="play" title="Abspielen (Leertaste)">${icon('play')}</button><button class="ibtn" data-p="fwd" title="15 s vor">+15</button>
     <span class="pt">0:00</span><input type="range" min="0" max="${Math.max(1, Math.round(r.dur / 1000))}" value="0" step="0.1" aria-label="Position"><span class="pt pd">${fmtDur(r.dur)}</span>
     <button class="btn" data-p="speed" title="Geschwindigkeit">1×</button>${S.recs.length > 1 ? `<select class="field" data-p="pick">${S.recs.map(x => `<option value="${x.id}" ${x.id === r.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>` : `<span class="pn" title="${esc(r.name)}">${esc(r.name)}</span>`}
-    <button class="ibtn" data-p="dl" title="Aufnahme speichern">${icon('save')}</button><button class="ibtn" data-p="del" title="Aufnahme löschen">${icon('trash')}</button><button class="ibtn" data-p="close" title="Schließen">✕</button>`;
+    <button class="btn" data-p="tx" title="Transkript anzeigen">Text</button><button class="ibtn" data-p="dl" title="Aufnahme speichern">${icon('save')}</button><button class="ibtn" data-p="del" title="Aufnahme löschen">${icon('trash')}</button><button class="ibtn" data-p="close" title="Schließen">✕</button>`;
   document.body.appendChild(bar);
   S.player = { rid: r.id, au, bar, t: 0, raf: 0 };
   const range = $('input[type=range]', bar);
@@ -5859,6 +5947,7 @@ async function openPlayer(rid, at) {
       markDirty(); S.pages.forEach(drawAnnots); toast('Aufnahme gelöscht');
     }
     else if (k === 'close') closePlayer();
+    else if (k === 'tx') transcriptDialog(r.id);
   });
   $('[data-p=pick]', bar) && ($('[data-p=pick]', bar).onchange = e => openPlayer(e.target.value));
   if (at != null) { au.currentTime = at / 1000; }
@@ -5978,7 +6067,7 @@ function renderLearn() {
   const pg = c => { const n = c.pid ? pageNo(c.pid) : null; return n ? `<span class="pg">${n}</span>` : ''; };
   el.innerHTML = `<div class="sphead"><span>Lernkarten</span><span>${cards.length ? `${due.length} fällig · ${cards.length}` : ''}</span></div>
     <div class="lacts"><button class="btn primary" data-l="study" ${due.length ? '' : 'disabled'}>${icon('cards')}Lernen${due.length ? ` (${due.length})` : ''}</button><button class="btn" data-l="quiz" ${cards.length >= 4 ? '' : 'disabled'} title="${cards.length >= 4 ? 'Quiz mit Auswahlantworten' : 'Ab 4 Karten'}">Quiz</button></div>
-    <div class="lacts"><button class="btn" data-l="marks">${icon('hl')}Aus Markierungen</button>${AIX ? `<button class="btn" data-l="ai">${icon('spark')}Mit KI</button>` : ''}<button class="ibtn" data-l="add" title="Karte hinzufügen">${icon('add')}</button></div>` +
+    <div class="lacts"><button class="btn" data-l="marks">${icon('hl')}Aus Markierungen</button>${AIX ? `<button class="btn" data-l="ai">${icon('spark')}Mit KI</button>` : ''}<button class="ibtn" data-l="add" title="Karte hinzufügen">${icon('add')}</button>${window.WBAnki ? `<button class="ibtn" data-l="x" title="Anki und Lerngruppe">${icon('send')}</button>` : ''}</div>` +
     (cards.length ? cards.map(c => `<button class="sitem" data-card="${c.id}"><span class="dot" style="background:${(c.due || 0) <= Date.now() ? 'var(--accent)' : c.reps >= 3 ? '#1f9d55' : '#c9ced8'}"></span><span class="tx">${esc(c.front.length > 110 ? c.front.slice(0, 108) + '…' : c.front)}<small>${(c.due || 0) <= Date.now() ? 'fällig' : 'in ' + Math.max(1, Math.round((c.due - Date.now()) / DAYMS)) + ' Tagen'}${c.ai ? ' · KI' : ''}</small></span>${pg(c)}</button>`).join('')
       : `<p class="sempty">Markiere wichtige Stellen mit dem Textmarker und tippe auf <b>Aus Markierungen</b>: Daraus werden Lückentexte. Ein Kommentar an der Markierung wird zur Frage. Gelernt wird mit Wiederholung im passenden Abstand.</p>`);
 }
@@ -6512,6 +6601,7 @@ function bindLearn() {
     if (c) { const card = (S.cards || []).find(x => x.id === c.dataset.card); if (card) cardDialog(card); return; }
     const b = e.target.closest('[data-l]'); if (!b || b.disabled) return;
     const k = b.dataset.l;
+    if (k === 'x') { cardsExchangeDialog(); return; }
     if (k === 'study') studyOverlay('learn'); else if (k === 'quiz') studyOverlay('quiz'); else if (k === 'marks') cardsFromMarks(); else if (k === 'ai') cardsWithAI(); else if (k === 'add') cardDialog();
   });
 }
@@ -7360,6 +7450,303 @@ async function a11yDialog() {
   };
 }
 
+/* ======================= Version 2.0 ======================= */
+/* ---------- 1. Vorlesung als Transkript ---------- */
+const TX = { sr: null, on: false, rid: null, segs: [], t0: null };
+const txSR = () => (window.wbDesktop ? null : window.SpeechRecognition || window.webkitSpeechRecognition || null);
+function txLiveStart() {
+  const C = txSR(); if (!C || lsGet('pdfwb.txlive') === '0') return;
+  const r = new C(); r.lang = S.meta.lang || 'de-DE'; r.continuous = true; r.interimResults = true;
+  Object.assign(TX, { sr: r, on: true, rid: REC.id, segs: [], t0: null });
+  r.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      if (TX.t0 == null) TX.t0 = Math.max(0, recNow() - 1200);
+      if (res.isFinal) { const text = res[0].transcript.trim(); if (text) TX.segs.push({ t: Math.round(TX.t0), text }); TX.t0 = null; }
+      const el = REC.bar && $('.rtx', REC.bar); if (el) el.textContent = res[0].transcript.trim().slice(-80);
+    }
+  };
+  r.onerror = ev => { if (/not-allowed|service-not-allowed|language-not-supported/.test(ev.error)) TX.on = false; };
+  r.onend = () => { if (TX.on && REC.mr && REC.mr.state === 'recording') { try { r.start(); } catch (er) { /* läuft schon */ } } };
+  try { r.start(); } catch (e) { TX.on = false; }
+}
+function txLiveStop(rid) {
+  if (!TX.sr) return;
+  TX.on = false; try { TX.sr.stop(); } catch (e) { /* egal */ }
+  const rec = (S.recs || []).find(r => r.id === (rid || TX.rid));
+  if (rec && TX.segs.length) { rec.tx = TX.segs.slice(); rec.txVia = 'live'; markDirty(); }
+  TX.sr = null;
+}
+async function decode16k(blob) {
+  const AC = window.AudioContext || window.webkitAudioContext, ac = new AC({ sampleRate: 16000 });
+  try { const buf = await ac.decodeAudioData(await blob.arrayBuffer()); return buf.getChannelData(0); } finally { ac.close(); }
+}
+let asrP = null;
+async function whisperLocal(blob, onProg) {
+  if (!asrP) asrP = (async () => {
+    const T = await import(/* webpackIgnore: true */ (window.WB_CONFIG && WB_CONFIG.transformersUrl) || 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2');
+    const files = new Map();
+    return T.pipeline('automatic-speech-recognition', (window.WB_CONFIG && WB_CONFIG.whisperModel) || 'onnx-community/whisper-base', {
+      dtype: 'q8', device: 'wasm',
+      progress_callback: p => { if (p.status === 'progress' && p.file) { files.set(p.file, [p.loaded || 0, p.total || 0]); const [l, t] = [...files.values()].reduce((a, b) => [a[0] + b[0], a[1] + b[1]], [0, 0]); if (onProg) onProg(`Sprachmodell wird geladen (einmalig) … ${Math.round(l / 1048576)} von ${Math.round(t / 1048576)} MB`); } },
+    });
+  })().catch(e => { asrP = null; throw e; });
+  const asr = await asrP;
+  if (onProg) onProg('Ton wird vorbereitet …');
+  const audio = await decode16k(blob);
+  if (onProg) onProg(`Wird verschriftlicht (${fmtDur(audio.length / 16)}) … das dauert etwa halb so lange wie die Aufnahme`);
+  const out = await asr(audio, { language: 'german', task: 'transcribe', chunk_length_s: 30, stride_length_s: 5, return_timestamps: true });
+  return (out.chunks || [{ timestamp: [0], text: out.text }]).map(c => ({ t: Math.round(((c.timestamp && c.timestamp[0]) || 0) * 1000), text: String(c.text || '').trim() })).filter(s => s.text);
+}
+async function transcribeRec(rid, how) {
+  const r = (S.recs || []).find(x => x.id === rid); if (!r) return;
+  const blob = await audioOf(r.id);
+  if (!blob) { toast('Die Aufnahme ist auf diesem Gerät noch nicht vorhanden.'); return; }
+  busy(true, 'Transkript wird erstellt …');
+  try {
+    let segs;
+    if (how === 'openai') segs = await AIX.transcribe(blob, { lang: (S.meta.lang || 'de').slice(0, 2), name: 'aufnahme.' + (/mp4/.test(r.mime) ? 'm4a' : /ogg/.test(r.mime) ? 'ogg' : 'webm') });
+    else segs = await whisperLocal(blob, m => setMsg(m, true));
+    r.tx = segs; r.txVia = how; markDirty(); busy(false); setMsg('');
+    toast(`Transkript fertig: ${segs.length} Abschnitte`);
+    transcriptDialog(rid);
+  } catch (e) { busy(false); setMsg(''); console.error(e); toast('Transkript fehlgeschlagen: ' + (e.message || e)); }
+}
+function transcriptDialog(rid) {
+  const recs = S.recs || [];
+  const r = recs.find(x => x.id === rid) || recs[0];
+  if (!r) { toast('Noch keine Aufnahme. Über das Mikrofon oben eine Vorlesung aufnehmen.'); return; }
+  const canAI = AIX && AIX.info().provider === 'openai';
+  const segs = r.tx || [];
+  dialog('Transkript', `${recs.length > 1 ? `<select class="field" id="txPick">${recs.map(x => `<option value="${x.id}" ${x.id === r.id ? 'selected' : ''}>${esc(x.name)}${x.tx ? '' : ' (ohne Text)'}</option>`).join('')}</select>` : `<p class="note" style="margin:0"><b>${esc(r.name)}</b> · ${fmtDur(r.dur)}</p>`}
+    ${segs.length ? `<input class="field" id="txQ" type="search" placeholder="Im Transkript suchen …" style="width:100%;margin-top:8px"><div class="txlist" id="txList">${segs.map((s, i) => `<button type="button" class="txs" data-t="${s.t}" data-i="${i}"><span class="tt">${fmtDur(s.t)}</span><span class="tx">${esc(s.text)}</span></button>`).join('')}</div>
+      <div class="row2"><button type="button" class="btn" data-tx="copy">${icon('copy')}Kopieren</button><button type="button" class="btn" data-tx="txt">Als Text speichern</button>${aiReady() ? `<button type="button" class="btn" data-tx="sum">${icon('spark')}Zusammenfassung als Seite</button><button type="button" class="btn" data-tx="cards">${icon('cards')}Lernkarten daraus</button>` : ''}<button type="button" class="btn" data-tx="redo">Neu erstellen …</button></div>`
+      : `<p class="note">Zu dieser Aufnahme gibt es noch keinen Text.${txSR() ? ' Tipp: Bei neuen Aufnahmen schreibt Chrome bzw. Edge live mit.' : ''}</p>`}
+    <div id="txHow" ${segs.length ? 'hidden' : ''}><div class="row2"><button type="button" class="btn primary" data-tx="local">Auf diesem Gerät verschriftlichen</button>${canAI ? '<button type="button" class="btn" data-tx="openai">Mit OpenAI (schneller)</button>' : ''}</div>
+      <p class="note" style="margin:0">Auf dem Gerät: Whisper läuft im Browser, nichts verlässt den Rechner. Beim ersten Mal wird das Sprachmodell geladen (ca. 80 MB).${canAI ? ' OpenAI: der Ton wird an OpenAI geschickt und nach Nutzung abgerechnet.' : ''}</p></div>`, 'Schließen', () => true);
+  $('#dlgCancel').hidden = true; $('#dlg .card').classList.add('wide');
+  const b = $('#dlgBody');
+  const mark = () => { if (!S.player || S.player.rid !== r.id) return; const t = S.player.au.currentTime * 1000; let k = -1; segs.forEach((s, i) => { if (s.t <= t) k = i; }); $$('.txs.on', b).forEach(x => x.classList.remove('on')); const el = $(`.txs[data-i="${k}"]`, b); if (el) { el.classList.add('on'); } };
+  const iv = setInterval(() => { if (!document.body.contains(b) || $('#dlg').hidden) { clearInterval(iv); return; } mark(); }, 500);
+  b.oninput = e => { if (e.target.id !== 'txQ') return; const q = e.target.value.trim().toLowerCase(); $$('.txs', b).forEach(x => { x.hidden = q.length > 1 && !x.textContent.toLowerCase().includes(q); }); };
+  b.onchange = e => { if (e.target.id === 'txPick') { closeDlg(); transcriptDialog(e.target.value); } };
+  b.onclick = async e => {
+    const s = e.target.closest('.txs'); if (s) { openPlayer(r.id, +s.dataset.t); return; }
+    const x = e.target.closest('[data-tx]'); if (!x) return;
+    const full = segs.map(s2 => `[${fmtDur(s2.t)}] ${s2.text}`).join('\n');
+    if (x.dataset.tx === 'copy') toast(await writeSysClip(segs.map(s2 => s2.text).join(' ')) ? 'Transkript kopiert' : 'Kopieren nicht möglich');
+    else if (x.dataset.tx === 'txt') saveBytes(new TextEncoder().encode(full), `${baseName()} – ${r.name.replace(/[\\/:*?"<>|·]/g, '-')}.txt`);
+    else if (x.dataset.tx === 'redo') { $('#txHow', b).hidden = false; }
+    else if (x.dataset.tx === 'local' || x.dataset.tx === 'openai') { closeDlg(); transcribeRec(r.id, x.dataset.tx); }
+    else if (x.dataset.tx === 'sum') {
+      closeDlg(); busy(true, 'Die KI fasst die Vorlesung zusammen …');
+      try {
+        const md = await AIX.ask({ instructions: 'Fasse das Transkript einer Vorlesung für die Klausurvorbereitung auf Deutsch zusammen: Überschrift, die wichtigsten Themen als Abschnitte (## …) mit Stichpunkten, Definitionen fett. Am Ende „Offene Fragen“ falls die Vorlesung Hinweise auf Prüfungsrelevantes enthält. Nur Inhalte aus dem Transkript. Markdown.', messages: [{ role: 'user', text: full.slice(0, 60000) }], maxTokens: 3000 });
+        await insertPdfBytes(await aiPagePdf(md), 'Zusammenfassung Vorlesung.pdf'); busy(false); toast('Zusammenfassung als neue Seite eingefügt');
+      } catch (er) { busy(false); toast('Zusammenfassen fehlgeschlagen: ' + (er.message || er)); }
+    }
+    else if (x.dataset.tx === 'cards') {
+      closeDlg(); busy(true, 'Die KI erstellt Lernkarten …');
+      try {
+        const out = await AIX.ask({ instructions: 'Erstelle aus dem Vorlesungstranskript 8–15 Lernkarten auf Deutsch (Begriffe, Definitionen, Zusammenhänge). Antworte NUR mit JSON: [{"q":"Frage","a":"Antwort"}].', messages: [{ role: 'user', text: full.slice(0, 50000) }], maxTokens: 3000 });
+        const add = aiJson(out).filter(c => c.q && c.a).map(c => ({ id: uid('c'), front: c.q, back: c.a, ai: true, due: Date.now(), created: Date.now(), rec: r.id }));
+        pushHist(); S.cards = [...(S.cards || []), ...add]; markDirty(); renderLearn(); busy(false); toast(`${add.length} Lernkarten aus der Vorlesung`); setSideTab && setSideTab('learn');
+      } catch (er) { busy(false); toast('Lernkarten fehlgeschlagen: ' + (er.message || er)); }
+    }
+  };
+  setTimeout(mark, 50);
+}
+
+/* ---------- 2. Bibliothek fragen ---------- */
+function askLibrary(q) {
+  if (!window.WBLibChat) return;
+  if (!LIB || !window.WBSearch) { toast('Fragen an alle Dokumente gibt es in der Bibliothek. Öffne Dokumente über die Bibliothek.'); return; }
+  window.WBSearch.indexAll();
+  window.WBLibChat.open({ q, items: async () => (await LIB.all()).filter(i => i.kind === 'doc' && !i.trashed && !i.missing), open: (id, n) => { if (S.lib && id === S.lib.id) { scrollToPage(n - 1); return; } libSave().then(() => { location.href = 'index.html?doc=' + encodeURIComponent(id) + '&page=' + n; }); } });
+}
+
+/* ---------- 3. + 4. Lernkarten austauschen: Anki und Lerngruppe ---------- */
+function cardsExchangeDialog() {
+  commitEdit();
+  const cards = S.cards || [];
+  dialog('Lernkarten austauschen', `<h4 class="lh" style="margin-top:0">Anki</h4>
+    <p class="note" style="margin:0">Als Anki-Stapel (.apkg) für Anki, AnkiDroid und AnkiMobile. Der Lernstand wird mitgenommen.</p>
+    <div class="row2"><button type="button" class="btn" data-cx="apkg" ${cards.length ? '' : 'disabled'}>${icon('save')}Anki-Stapel (${cards.length})</button><button type="button" class="btn" data-cx="txt" ${cards.length ? '' : 'disabled'}>Als Text (Tab getrennt)</button><button type="button" class="btn" data-cx="imp">Aus Anki oder CSV importieren …</button></div>
+    <h4 class="lh">Lerngruppe</h4>
+    <p class="note" style="margin:0">Ein Lernpaket enthält deine Karten und Markierungen. Kommilitonen importieren es in ihr eigenes Exemplar desselben Skripts; doppelte Karten werden erkannt. Für gemeinsames Arbeiten in Echtzeit: Bibliothek › Dokument › „Gemeinsam bearbeiten“.</p>
+    <div class="row2"><button type="button" class="btn primary" data-cx="pack" ${cards.length || allAnnots().some(x => x.a.t === 'mark') ? '' : 'disabled'}>Lernpaket teilen</button><button type="button" class="btn" data-cx="unpack">Lernpaket importieren …</button></div>`, 'Schließen', () => true);
+  $('#dlgCancel').hidden = true;
+  $('#dlgBody').onclick = async e => {
+    const x = e.target.closest('[data-cx]'); if (!x || x.disabled) return;
+    const k = x.dataset.cx, name = cleanFile(baseName());
+    const withSrc = () => cards.map(c => ({ ...c, source: `${baseName()}${c.pid && pageNo(c.pid) ? ', S. ' + pageNo(c.pid) : ''}` }));
+    if (k === 'apkg') { busy(true, 'Anki-Stapel wird erstellt …'); try { const b = await WBAnki.exportApkg(withSrc(), name); busy(false); await saveBytes(b, name + '.apkg'); } catch (er) { busy(false); toast(er.message || String(er)); } }
+    else if (k === 'txt') saveBytes(new TextEncoder().encode(WBAnki.exportText(cards)), name + ' (Anki).txt');
+    else if (k === 'imp' || k === 'unpack') {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = k === 'imp' ? '.apkg,.txt,.csv,.tsv' : '.wblern,application/json';
+      inp.onchange = async () => {
+        const f = inp.files[0]; if (!f) return;
+        try {
+          let got = [], marks = [];
+          if (k === 'imp') got = await WBAnki.importFile(f);
+          else { const j = JSON.parse(await f.text()); if (j.format !== 'pdfwb-lernpaket') throw new Error('Das ist kein Lernpaket der PDF Werkbank.'); got = j.cards || []; marks = j.marks || []; }
+          const have = new Set((S.cards || []).map(c => (c.front || '').trim().toLowerCase()));
+          const add = got.filter(c => c.front && c.back && !have.has(c.front.trim().toLowerCase())).map(c => ({ id: uid('c'), front: c.front, back: c.back, pid: c.page && S.pages[c.page - 1] ? S.pages[c.page - 1].id : null, due: Date.now(), created: Date.now(), from: f.name }));
+          pushHist();
+          S.cards = [...(S.cards || []), ...add];
+          let mk = 0;
+          for (const m of marks) { const p = S.pages[m.page - 1]; if (!p || p.annots.some(a => a.t === 'mark' && a.text === m.text)) continue; p.annots.push({ ...m.a, id: uid() }); mk++; drawAnnots(p); }
+          markDirty(); renderLearn(); closeDlg();
+          toast(`${add.length} neue Lernkarten${got.length - add.length ? ` (${got.length - add.length} schon vorhanden)` : ''}${mk ? `, ${mk} Markierungen` : ''} übernommen`);
+        } catch (er) { toast(er.message || String(er)); }
+      };
+      inp.click();
+    } else if (k === 'pack') {
+      const marks = []; S.pages.forEach((p, i) => p.annots.forEach(a => { if (a.t === 'mark' && a.text) marks.push({ page: i + 1, text: a.text, a: { ...a } }); }));
+      const pack = { format: 'pdfwb-lernpaket', v: 1, doc: baseName(), pages: S.pages.length, by: (window.WBShare && WBShare.me.name) || '', at: new Date().toISOString(), cards: cards.map(c => ({ front: c.front, back: c.back, page: c.pid ? pageNo(c.pid) : null })), marks };
+      const bytes = new TextEncoder().encode(JSON.stringify(pack));
+      const file = new File([bytes], name + '.wblern', { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: 'Lernpaket ' + baseName(), text: `${cards.length} Lernkarten und ${marks.length} Markierungen für „${baseName()}“ (PDF Werkbank)` }); return; } catch (er) { if (er.name === 'AbortError') return; } }
+      saveBytes(bytes, name + '.wblern');
+    }
+  };
+}
+
+/* ---------- 6. Verträge auswerten ---------- */
+async function contractDialog() {
+  commitEdit();
+  if (!aiReady()) { toast('Verträge prüft die KI. Bitte zuerst den KI-Assistenten einrichten (Funken-Symbol oben).'); return; }
+  busy(true, 'Die KI liest den Vertrag …');
+  let c;
+  try {
+    const text = await docText(S.pages, 40000);
+    if (!text.trim()) throw new Error('Kein Text gefunden (bei Scans zuerst die Texterkennung ausführen).');
+    const out = await AIX.ask({ instructions: `Du wertest einen Vertrag für eine Privatperson bzw. einen Kleinunternehmer aus. Heute ist der ${new Date().toLocaleDateString('de-DE')}. Antworte NUR mit JSON:
+{"art":"Vertragsart","parteien":["…"],"beginn":"TT.MM.JJJJ oder leer","laufzeit":"z. B. 24 Monate","ende":"TT.MM.JJJJ oder leer","verlaengerung":"Regel zur automatischen Verlängerung oder leer","kuendigung":"Kündigungsfrist in Worten","fristen":[{"was":"z. B. Spätester Kündigungstermin zum Laufzeitende","datum":"TT.MM.JJJJ","s":Seitenzahl}],"kosten":[{"was":"…","betrag":"z. B. 39,99 €","intervall":"monatlich/jährlich/einmalig"}],"pflichten":["…"],"auffaellig":["ungewöhnliche oder nachteilige Klauseln, kurz"],"zusammenfassung":"2-3 Sätze"}
+Berechne konkrete Daten für Fristen, wenn Beginn, Laufzeit und Kündigungsfrist bekannt sind (z. B. Ende minus Kündigungsfrist). Nur Angaben aus dem Text, nichts erfinden.`, messages: [{ role: 'user', text }], maxTokens: 2500 });
+    c = aiJson(out, false); busy(false);
+  } catch (e) { busy(false); toast('Auswertung fehlgeschlagen: ' + (e.message || e)); return; }
+  const L = (t, v) => (v && (!Array.isArray(v) || v.length) ? `<div class="kvr"><span>${t}</span><b>${Array.isArray(v) ? v.map(esc).join('<br>') : esc(v)}</b></div>` : '');
+  const fr = (c.fristen || []).filter(f => f && f.datum);
+  dialog('Vertrag auf einen Blick', `${c.zusammenfassung ? `<p style="margin:0 0 10px">${esc(c.zusammenfassung)}</p>` : ''}<div class="kv">${L('Art', c.art)}${L('Parteien', c.parteien)}${L('Beginn', c.beginn)}${L('Laufzeit', c.laufzeit)}${L('Ende', c.ende)}${L('Verlängerung', c.verlaengerung)}${L('Kündigung', c.kuendigung)}</div>
+    ${(c.kosten || []).length ? `<h4 class="lh">Kosten</h4><div class="kv">${c.kosten.map(k => `<div class="kvr"><span>${esc(k.was)}</span><b>${esc(k.betrag)} ${esc(k.intervall || '')}</b></div>`).join('')}</div>` : ''}
+    ${fr.length ? `<h4 class="lh">Fristen</h4><div class="kv">${fr.map((f, i) => `<label class="kvr chk"><span><input type="checkbox" data-fr="${i}" checked> ${esc(f.was)}</span><b>${esc(f.datum)}</b></label>`).join('')}</div>` : ''}
+    ${(c.pflichten || []).length ? `<h4 class="lh">Pflichten</h4><ul class="kl">${c.pflichten.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+    ${(c.auffaellig || []).length ? `<h4 class="lh">Auffällig</h4><ul class="kl warn">${c.auffaellig.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+    <p class="note">Automatische Auswertung ohne Gewähr, keine Rechtsberatung. Wichtige Fristen bitte im Vertrag nachlesen.</p>`, fr.length ? 'Fristen als Aufgaben' : 'Schließen', b => {
+    if (!fr.length) return true;
+    const pick = fr.filter((f, i) => { const el = $(`[data-fr="${i}"]`, b); return el && el.checked; });
+    if (!pick.length) return true;
+    pushHist();
+    const p0 = S.pages[0], [W] = dims(p0);
+    pick.forEach((f, i) => { const p = S.pages[(+f.s || 1) - 1] || p0; p.annots.push({ id: uid(), t: 'note', x: W - NOTE - 18, y: 30 + i * 34, color: '#ff8a65', text: `[ ] ${f.was} bis ${f.datum}` }); drawAnnots(p); });
+    markDirty(); updateSideLater(); toast(`${pick.length} ${pick.length === 1 ? 'Frist' : 'Fristen'} als Aufgabe angelegt · Erinnerung und Kalender-Export unter „Aufgaben“`);
+    if (typeof setSideTab === 'function') setSideTab('tasks');
+  });
+  $('#dlg .card').classList.add('wide');
+}
+
+/* ---------- 8. Gemeinsam: Zeiger der anderen und @-Erwähnungen ---------- */
+const CURS = new Map();
+function showCursor(c) {
+  const p = pageById(c.pid), el = p && els.get(p.id); if (!el) return;
+  let k = CURS.get(c.id);
+  if (!k) { k = { el: document.createElement('div'), t: 0 }; k.el.className = 'pcur'; CURS.set(c.id, k); }
+  k.el.style.setProperty('--c', c.color || '#3e63dd');
+  k.el.innerHTML = `<svg width="16" height="18" viewBox="0 0 16 18"><path d="M1 1l13 7-6 1.5L5 16z" fill="var(--c)" stroke="#fff" stroke-width="1.2"/></svg><span>${esc(c.name || 'Gast')}</span>`;
+  if (k.el.parentNode !== el.wrap) el.wrap.appendChild(k.el);
+  k.el.style.transform = `translate(${c.x * S.zoom}px, ${c.y * S.zoom}px)`;
+  k.el.classList.remove('idle');
+  clearTimeout(k.t); k.t = setTimeout(() => k.el.classList.add('idle'), 5000);
+}
+const MENT = new Set(JSON.parse(lsGet('pdfwb.mentions.sent') || '[]'));
+let mentT = 0;
+function mentionScan() {
+  if (!S.shareSess || !S.shareSess.mention) return;
+  clearTimeout(mentT);
+  mentT = setTimeout(() => {
+    const peers = (S.shareSess.info().peers || []).map(p => p.name).filter(Boolean);
+    S.pages.forEach((p, i) => p.annots.forEach(a => {
+      const t = [a.text, a.comment].filter(Boolean).join(' ');
+      for (const m of t.matchAll(/@([\p{L}][\p{L}\p{N}_-]{1,30})/gu)) {
+        const name = m[1], key = `${a.id}:${name.toLowerCase()}`;
+        if (MENT.has(key)) continue;
+        MENT.add(key);
+        S.shareSess.mention({ to: name, pid: p.id, aid: a.id, page: i + 1, text: t.slice(0, 140) });
+        if (!peers.some(n => n.toLowerCase().startsWith(name.toLowerCase()))) toast(`@${name} ist gerade nicht online und sieht die Erwähnung beim nächsten Öffnen in der Notiz.`);
+      }
+    }));
+    lsSet('pdfwb.mentions.sent', JSON.stringify([...MENT].slice(-500)));
+  }, 1500);
+}
+function onMention(m) {
+  const me = ((window.WBShare && WBShare.me.name) || '').toLowerCase();
+  if (!me || !me.startsWith(String(m.to).toLowerCase()) && String(m.to).toLowerCase() !== me.split(' ')[0]) return;
+  pomoBeep && pomoBeep();
+  try { if ('Notification' in window && Notification.permission === 'granted' && document.hidden) new Notification(`${m.from} hat dich erwähnt`, { body: m.text }); } catch (e) { /* egal */ }
+  pill(`${icon('note')}<span><b>${esc(m.from)}</b> hat dich auf Seite ${m.page} erwähnt: „${esc(String(m.text).slice(0, 80))}“</span><button class="btn sm" data-x="show">Anzeigen</button><button class="ibtn" data-x="no" aria-label="Schließen">✕</button>`, k => { pill(null); if (k === 'show') { scrollToPage(m.page - 1); setTimeout(() => gotoAnnot(m.aid), 300); } });
+}
+
+/* ---------- 10. Versionen: benennen und vergleichen ---------- */
+function versionDiff(a, b) {
+  // a = ältere Version, b = aktueller Stand (docState)
+  const pa = new Map((a.pages || []).map(p => [p.id, p])), pb = new Map((b.pages || []).map(p => [p.id, p]));
+  const out = { pagesAdded: 0, pagesRemoved: 0, added: 0, removed: 0, changed: 0, per: [] };
+  for (const [id, p] of pb) {
+    const o = pa.get(id);
+    if (!o) { out.pagesAdded++; continue; }
+    const om = new Map((o.annots || []).map(x => [x.id, JSON.stringify(x)])), nm = new Map((p.annots || []).map(x => [x.id, JSON.stringify(x)]));
+    let ad = 0, rm = 0, ch = 0;
+    for (const [k, v] of nm) { if (!om.has(k)) ad++; else if (om.get(k) !== v) ch++; }
+    for (const k of om.keys()) if (!nm.has(k)) rm++;
+    if (ad || rm || ch) out.per.push({ n: (b.pages || []).indexOf(p) + 1, ad, rm, ch });
+    out.added += ad; out.removed += rm; out.changed += ch;
+  }
+  for (const id of pa.keys()) if (!pb.has(id)) out.pagesRemoved++;
+  return out;
+}
+async function saveNamedVersion() {
+  if (!S.lib) { toast('Versionen gibt es für Dokumente in der Bibliothek.'); return; }
+  const name = await new Promise(res => { dialog('Version speichern', `<label class="fld"><span>Name der Version</span><input class="field" id="vName" placeholder="z. B. Vor der Abgabe" maxlength="60" style="width:100%"></label>`, 'Speichern', b => { res($('#vName', b).value.trim() || 'Gespeicherte Version'); return true; }); $('#dlgCancel').addEventListener('click', () => res(null), { once: true }); setTimeout(() => $('#vName').focus(), 30); });
+  if (!name) return;
+  await snapshotVersion(true, name); toast(`Version „${name}“ gespeichert`);
+}
+
+/* ---------- Einführung ---------- */
+const TOUR = [
+  ['#btnOpen', 'Dokument öffnen', 'PDF öffnen oder einfach ins Fenster ziehen. In der Bibliothek (Symbol links oben) liegen alle deine Dokumente.'],
+  ['.toolbar', 'Werkzeuge', 'Markieren, schreiben, zeichnen, Formen, Stempel und mehr. Die Taste mit dem Fragezeichen zeigt alle Tastenkürzel.'],
+  ['.find', 'Suchen', 'Strg+F sucht im Dokument, auch über Zeilenumbrüche und in deinen Notizen. Die Trefferliste zeigt jede Stelle mit Zusammenhang.'],
+  ['#btnAI', 'KI-Assistent', 'Fragen zum Dokument, Zusammenfassungen, Lernkarten, Probeklausuren. Einmal mit ChatGPT-Konto oder API-Schlüssel verbinden.'],
+  ['#btnRec', 'Vorlesung aufnehmen', 'Ton aufnehmen, während du mitschreibst. Später springst du von jeder Notiz an die Stelle in der Aufnahme und bekommst ein Transkript.'],
+  ['.side', 'Seitenleiste', 'Seiten, Lesezeichen, Notizen, Aufgaben und Lernkarten.'],
+  ['#btnMore', 'Alle Funktionen', 'Hier und unter „Alle Werkzeuge“ findest du alles Weitere: Formulare, Signatur, E-Rechnung, Umwandeln, Stapelverarbeitung … Oder Strg+K für die Befehlssuche.'],
+];
+function startTour(force) {
+  if (!force && (lsGet('pdfwb.tour') === '1' || innerWidth < 700 || navigator.webdriver)) return;
+  lsSet('pdfwb.tour', '1');
+  const steps = TOUR.filter(([sel]) => { const e = $(sel); return e && e.offsetParent !== null; });
+  if (!steps.length) return;
+  const ov = document.createElement('div'); ov.className = 'tour';
+  ov.innerHTML = '<div class="tspot"></div><div class="tbox" role="dialog" aria-live="polite"></div>';
+  document.body.appendChild(ov);
+  let i = 0;
+  const show = () => {
+    const [sel, title, text] = steps[i], el = $(sel), r = el.getBoundingClientRect(), pad = 6;
+    Object.assign($('.tspot', ov).style, { left: r.left - pad + 'px', top: r.top - pad + 'px', width: r.width + pad * 2 + 'px', height: r.height + pad * 2 + 'px' });
+    const box = $('.tbox', ov);
+    box.innerHTML = `<small>${i + 1} von ${steps.length}</small><h3>${esc(title)}</h3><p>${esc(text)}</p><div class="row2" style="justify-content:flex-end;margin:0"><button class="btn" data-t="end">${i === steps.length - 1 ? 'Schließen' : 'Überspringen'}</button>${i < steps.length - 1 ? '<button class="btn primary" data-t="next">Weiter</button>' : ''}</div>`;
+    const bw = Math.min(340, innerWidth - 24), below = r.bottom + 14 + 180 < innerHeight;
+    Object.assign(box.style, { width: bw + 'px', left: clamp(r.left + r.width / 2 - bw / 2, 12, innerWidth - bw - 12) + 'px', top: (below ? r.bottom + 14 : Math.max(12, r.top - 14 - box.offsetHeight)) + 'px' });
+    if (!below) requestAnimationFrame(() => { box.style.top = Math.max(12, r.top - 14 - box.offsetHeight) + 'px'; });
+  };
+  const end = () => { ov.remove(); removeEventListener('resize', show); document.removeEventListener('keydown', key, true); };
+  const key = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); end(); } else if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (i < steps.length - 1) { i++; show(); } else end(); } };
+  ov.addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (!b) return; if (b.dataset.t === 'next') { i++; show(); } else end(); });
+  addEventListener('resize', show); document.addEventListener('keydown', key, true);
+  show();
+}
+
 /* ---------- Bedienelemente verbinden ---------- */
 { const sb = $('#shareBar'); if (sb) sb.addEventListener('click', () => collabDialog()); }
 function bindUI() {
@@ -7441,7 +7828,7 @@ function bindUI() {
     saveas: () => saveToFile(true), werkbank: saveWerkbank, collab: collabDialog, toolbar: toolbarDialog, keys: shortcutsDialog, present: () => setPresent(true), speak: () => speakDoc(), dictate, table: () => tableDialog(), qr: qrDialog, versions: versionsDialog, sepia: () => setSepia(!S.sepia), stats: statsDialog, marks: exportMarks, secure: secureDialog, photos: photosDialog, libpages: libPagesDialog,
     tools: toolsHub, organize: () => organizer(true), ocr: ocrDialog, compress: compressDialog, redactsearch: redactSearchDialog, field: () => fieldDialog(), detectfields: detectFields, compare: compareDialog, cloudopen: cloudOpen, cloudsave: cloudSaveDoc,
     record: () => (REC.mr ? recStop() : recStart()), recordings: recordingsDialog, learn: () => openSide('learn'), study: () => studyOverlay('learn'), tasks: () => openSide('tasks'), searchlib: libSearchDialog, split: () => (S2.el ? splitClose() : splitDialog()), hw2text: hwToText, sign: signDialog, verifysig: verifyDialog, cert: certDialog, convert: convertDialog, template: templateNew, autotoc: autoTocDialog, headfoot: headFootDialog,
-    cite: () => citeDialog(), citequote: () => citeQuote(), exam: examDialog, mindmap: mindmapOverlay, studystats: studyStatsDialog, pomodoro: () => (pomoState() ? pomoStop() : pomoStart()), formula: formulaTool, einvoice: einvoiceOpen, mailmerge: mailMergeDialog, receipts: receiptsDialog, batch: batchOpen, pdfa: pdfaDialog, a11y: a11yDialog };
+    cite: () => citeDialog(), citequote: () => citeQuote(), exam: examDialog, mindmap: mindmapOverlay, studystats: studyStatsDialog, pomodoro: () => (pomoState() ? pomoStop() : pomoStart()), formula: formulaTool, einvoice: einvoiceOpen, transcript: () => transcriptDialog(), asklib: () => askLibrary(), cardsx: cardsExchangeDialog, contract: contractDialog, ledger: () => { if (LIB) { libSave().finally(() => { location.href = 'library.html?view=ledger'; }); } else toast('Das Rechnungsbuch gibt es in der Bibliothek.'); }, savever: saveNamedVersion, tour: () => startTour(true), mailmerge: mailMergeDialog, receipts: receiptsDialog, batch: batchOpen, pdfa: pdfaDialog, a11y: a11yDialog };
   ACTS_REF = ACTS;
   $('[data-act="share"]').hidden = !canShareFiles();
   $('#mPencil').hidden = !COARSE;
@@ -7533,8 +7920,21 @@ function bindUI() {
   if (!window.WBScan) hideAct('receipts');
   if (!window.WBBatch) hideAct('batch');
   if (!window.WBPdfA) hideAct('pdfa');
-  if (!AIX) ['formula'].forEach(hideAct);
+  if (!AIX) ['formula', 'contract'].forEach(hideAct);
+  // 2.0
+  if (!window.WBLibChat || !LIB || !window.WBSearch) hideAct('asklib');
+  if (!window.WBAnki) hideAct('cardsx');
+  if (!window.WBLedger || !LIB) hideAct('ledger');
+  if (!LIB) hideAct('savever');
+  if (!S.renderMode && !new URLSearchParams(location.search).get('share')) setTimeout(() => startTour(false), 1800);
   statsBind();
+  viewer.addEventListener('pointermove', e => {
+    if (!S.shareSess || !S.shareSess.cursor) return;
+    const pg = e.target.closest && e.target.closest('.page'); if (!pg) return;
+    const el = els.get(pg.dataset.id); if (!el) return;
+    const r = el.svg.getBoundingClientRect();
+    S.shareSess.cursor({ pid: pg.dataset.id, x: Math.round((e.clientX - r.left) / S.zoom), y: Math.round((e.clientY - r.top) / S.zoom) });
+  }, { passive: true });
   if (!recOk()) { hideAct('record'); $('#btnRec').hidden = true; }
   if (LIB && window.WBSearch) $('#mSearchLib').hidden = false;
   $('#btnRec').onclick = () => ACTS.record();
@@ -7595,8 +7995,20 @@ function bindUI() {
   fi.addEventListener('input', () => { clearTimeout(findT); findT = setTimeout(() => runFind(fi.value), 260); });
   fi.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); if (!S.find || S.find.q !== fi.value.trim().toLowerCase()) runFind(fi.value); else goHit(S.find.i + (e.shiftKey ? -1 : 1)); }
-    if (e.key === 'Escape') { fi.value = ''; runFind(''); fi.blur(); }
+    if (e.key === 'Escape') { fi.value = ''; runFind(''); fi.blur(); closeFind(); }
+    if (e.key === 'ArrowDown' && S.find && S.find.hits.length) { e.preventDefault(); goHit(S.find.i + 1); }
+    if (e.key === 'ArrowUp' && S.find && S.find.hits.length) { e.preventDefault(); goHit(S.find.i - 1); }
   });
+  fi.addEventListener('focus', () => { $('.find').classList.add('open'); if (S.find) findList(true); });
+  $('#findToggle').onclick = () => openFind();
+  $('#findClose').onclick = () => { fi.value = ''; runFind(''); closeFind(); };
+  $('#findList').addEventListener('mousedown', e => e.preventDefault());
+  $('#findList').addEventListener('click', e => {
+    const r = e.target.closest('[data-h]'); if (r) { goHit(+r.dataset.h); if (innerWidth <= 760) closeFind(true); return; }
+    if (e.target.closest('[data-fl="lib"]')) { closeFind(true); libSearchDialog(); }
+  });
+  $('#findList').addEventListener('change', e => { const o = e.target.closest('[data-fo]'); if (!o) return; FIND_OPT[o.dataset.fo] = o.checked; lsSet('pdfwb.findopt', JSON.stringify(FIND_OPT)); runFind(fi.value); });
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('.find')) closeFind(true); }, true);
   $('#findNext').onclick = () => S.find && goHit(S.find.i + 1);
   $('#findPrev').onclick = () => S.find && goHit(S.find.i - 1);
 
@@ -7689,7 +8101,7 @@ function bindUI() {
     if (mod && k === 's' && S.file) { e.preventDefault(); saveToFile(e.shiftKey); return; }
     if (mod && k === 's') { e.preventDefault(); if (S.lib && !e.shiftKey) { libSave().then(() => { setMsg('In der Bibliothek gesichert'); toast('In der Bibliothek gesichert · Als PDF-Datei: „Exportieren“ oder Strg+Umschalt+S'); }); } else savePdf(); return; }
     if (mod && k === 'o') { e.preventDefault(); $('#fileOpen').click(); return; }
-    if (mod && k === 'f') { e.preventDefault(); fi.focus(); fi.select(); return; }
+    if (mod && k === 'f' && !e.shiftKey) { e.preventDefault(); openFind(); return; }
     if (typing) return;
     if (mod && k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
     if (mod && k === 'y') { e.preventDefault(); redo(); return; }
@@ -7929,7 +8341,7 @@ function paletteProvider(q) {
   if (S.lib) A('In der Bibliothek sichern', () => libSave(), 'Strg+S');
   if (LIB) A('Zur Bibliothek', () => goLibrary(), '', 'start ordner home');
   A('PDF öffnen', () => $('#fileOpen').click(), 'Strg+O');
-  A('Im Dokument suchen', () => { const fi = $('#findInput'); fi.focus(); fi.select(); }, 'Strg+F', 'finden');
+  A('Im Dokument suchen', () => openFind(), 'Strg+F', 'finden');
   A('Präsentieren mit Laserpointer', () => { setReading(true); setTool('laser'); }, 'F, J', 'vollbild präsentation laser');
   A('Rückgängig', undo, 'Strg+Z'); A('Wiederholen', redo, 'Strg+Y');
   A('Vergrößern', () => $('#btnZoomIn').click(), 'Strg +'); A('Verkleinern', () => $('#btnZoomOut').click(), 'Strg −');

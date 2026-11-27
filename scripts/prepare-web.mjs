@@ -28,6 +28,8 @@ for (const f of fs.readdirSync(nm('tesseract.js-core'))) if (/^tesseract-core.*l
 // Signieren offline
 fs.copyFileSync(nm('node-forge/dist/forge.min.js'), path.join(OUT, 'lib/forge.min.js'));
 fs.copyFileSync(nm('katex/dist/katex.min.js'), path.join(OUT, 'lib/katex.min.js'));
+fs.mkdirSync(path.join(OUT, 'lib/sql'), { recursive: true });
+for (const f of ['sql-wasm.js', 'sql-wasm.wasm']) fs.copyFileSync(nm('sql.js/dist/' + f), path.join(OUT, 'lib/sql', f));
 for (const l of ['deu', 'eng']) fs.copyFileSync(nm(`@tesseract.js-data/${l}/4.0.0_best_int/${l}.traineddata.gz`), path.join(OCR, l + '.traineddata.gz'));
 
 
@@ -44,7 +46,7 @@ for (const f of ['index.html', 'library.html']) {
   const p = path.join(OUT, f);
   fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/<script>\s*if \('serviceWorker'[\s\S]*?<\/script>\s*/, ''));
 }
-fs.appendFileSync(path.join(OUT, 'js/config.js'), `\nwindow.WB_CONFIG.ocr = { script: 'lib/ocr/tesseract.min.js', workerPath: 'lib/ocr/worker.min.js', corePath: 'lib/ocr/', langPath: 'lib/ocr/', localLangs: ['deu', 'eng'] };\nwindow.WB_CONFIG.forgeScript = 'lib/forge.min.js';\nwindow.WB_CONFIG.katexScript = 'lib/katex.min.js';\n`);
+fs.appendFileSync(path.join(OUT, 'js/config.js'), `\nwindow.WB_CONFIG.ocr = { script: 'lib/ocr/tesseract.min.js', workerPath: 'lib/ocr/worker.min.js', corePath: 'lib/ocr/', langPath: 'lib/ocr/', localLangs: ['deu', 'eng'] };\nwindow.WB_CONFIG.forgeScript = 'lib/forge.min.js';\nwindow.WB_CONFIG.katexScript = 'lib/katex.min.js';\nwindow.WB_CONFIG.sqlBase = 'lib/sql/';\n`);
 // Clientschlüssel der Google-Desktop-Anmeldung kommt aus einem GitHub-Secret, nicht aus dem Repo
 if (process.env.GOOGLE_DESKTOP_SECRET) {
   fs.appendFileSync(path.join(OUT, 'js/config.js'), `\nwindow.WB_CONFIG.googleDesktopSecret = ${JSON.stringify(process.env.GOOGLE_DESKTOP_SECRET)};\n`);

@@ -266,8 +266,20 @@
     el.onchange = e => { if (e.target.matches('[data-ai=model]')) { setModel(e.target.value); if (opts.onChange) opts.onChange(info()); } };
   }
 
+
+  /* Sprache zu Text (nur mit OpenAI-Schlüssel): Segmente mit Zeitstempel */
+  async function transcribe(blob, { lang = 'de', name = 'aufnahme.webm' } = {}) {
+    const key = S.provider === 'openai' ? await getKey('openai') : await getKey('openai').catch(() => '');
+    if (!key) { const e = new Error('Für die Transkription in der Cloud braucht es einen OpenAI-API-Schlüssel.'); e.unsupported = true; throw e; }
+    const fd = new FormData();
+    fd.append('file', blob, name); fd.append('model', 'whisper-1'); fd.append('response_format', 'verbose_json'); fd.append('timestamp_granularities[]', 'segment'); if (lang) fd.append('language', lang);
+    const r = await fetch(OAI() + '/audio/transcriptions', { method: 'POST', headers: { Authorization: 'Bearer ' + key }, body: fd });
+    if (!r.ok) throw await httpError(r, 'openai');
+    const j = await r.json();
+    return (j.segments || [{ start: 0, text: j.text || '' }]).map(s => ({ t: Math.round((s.start || 0) * 1000), text: String(s.text || '').trim() })).filter(s => s.text);
+  }
   global.WBAI = {
-    renderSetup,
+    renderSetup, transcribe,
     info, ask, models, model, setModel, connectChatGPT, useKey, disconnect, getKey, NAMES,
     onChange: fn => { listeners.add(fn); fn(info()); return () => listeners.delete(fn); },
   };

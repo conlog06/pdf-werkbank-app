@@ -239,6 +239,78 @@ output{font:11.5px var(--f-mono);color:var(--ink);min-width:3.6em;font-variant-n
 .chkgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:2px 12px}
 .radios{display:flex;flex-direction:column;gap:2px}
 .chkrow{display:flex;align-items:center;gap:8px;cursor:pointer;min-height:30px}
+/* Kopfzeile 2.0: schrittweise kompakter statt gequetscht */
+.top{position:relative}
+.find{position:relative}
+.find .ftog,.find .fcls{display:none}
+.find input::-webkit-search-cancel-button{display:none}
+.fl-h input{accent-color:var(--accent);width:14px;height:14px}
+.findlist{position:absolute;top:calc(100% + 6px);right:0;width:min(460px,92vw);max-height:min(62vh,560px);display:flex;flex-direction:column;background:var(--raise);border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 50px rgb(0 0 0 / .22);z-index:80;overflow:hidden}
+.findlist[hidden]{display:none}
+.fl-h{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+.fl-h span{flex:1}.fl-h label{display:flex;align-items:center;gap:4px;cursor:pointer;font:600 11px var(--f-mono);color:var(--ink)}
+.fl-l{overflow:auto;flex:1}
+.fl-r{display:flex;gap:10px;width:100%;text-align:left;border:0;background:transparent;padding:7px 10px;cursor:pointer;color:var(--ink);font:13px/1.35 var(--f-ui);border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent)}
+.fl-r:hover,.fl-r.fl-on{background:var(--accent-soft)}
+.fl-p{flex:none;width:76px;font:600 11px/1.6 var(--f-mono);color:var(--muted)}
+.fl-c{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.fl-c mark{background:color-mix(in srgb,#ffd400 70%,transparent);color:inherit;border-radius:2px;padding:0 1px}
+.fl-lib{display:flex;align-items:center;gap:8px;border:0;border-top:1px solid var(--line);background:var(--chrome);padding:9px 12px;cursor:pointer;color:var(--accent);font:500 13px var(--f-ui);text-align:left}
+@media (max-width:1240px){
+  #btnOpen .lbl,#btnMerge .lbl{display:none}
+  #btnOpen,#btnMerge{padding:0 9px}
+  .docname{max-width:18ch}
+  .top{gap:8px}
+}
+@media (max-width:1180px){
+  .top>.find:not(.open){border-color:transparent;background:transparent;padding:0}
+  .find:not(.open)>:not(.ftog){display:none}
+  .find:not(.open) .ftog{display:inline-grid}
+  .top>.find.open{position:absolute;right:56px;top:50%;transform:translateY(-50%);width:min(480px,calc(100% - 120px));z-index:70;box-shadow:0 10px 30px rgb(0 0 0 / .18);height:38px}
+  .find.open input{width:auto;flex:1}
+  .find.open .fcls{display:inline-grid}
+  .find.open .findlist{left:0;right:0;width:auto}
+}
+@media (max-width:1040px){
+  .word,#btnMerge,#btnRead{display:none}
+  .zoomgrp #btnZoomOut,.zoomgrp #btnZoomIn{display:none}
+}
+@media (max-width:900px){
+  .zoomgrp,.docname,.libstate{display:none}
+  #btnSave .lbl{display:none}
+  #btnSave{padding:0 10px}
+}
+@media (max-width:760px){
+  .top>.find:not(.open){flex:none;order:0}
+  .top>.find.open{position:absolute;left:8px;right:8px;width:auto;top:6px;transform:none;order:0}
+  .find.open .findlist{position:fixed;left:8px;right:8px;top:56px;width:auto;max-height:60vh}
+}
+@media (max-width:480px){
+  #btnRec{display:none}
+  .top{gap:4px;padding:6px 8px}
+  .top .mark{width:22px;height:22px}
+}
+/* Version 2.0 */
+.recbar .rtx{max-width:min(36vw,380px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--muted);font-size:12.5px;direction:rtl;text-align:left}
+.recbar .rtx:empty{display:none}
+.txlist{max-height:52vh;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:10px}
+.txs{display:flex;gap:12px;width:100%;text-align:left;border:0;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent);background:transparent;padding:7px 10px;cursor:pointer;color:var(--ink);font:13.5px/1.45 var(--f-ui)}
+.txs:hover{background:var(--chrome)}.txs.on{background:var(--accent-soft)}.txs[hidden]{display:none}
+.txs .tt{flex:none;width:52px;font:600 11px/1.9 var(--f-mono);color:var(--muted)}
+.kv{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.kvr{display:flex;gap:12px;justify-content:space-between;padding:7px 10px;border-top:1px solid var(--line);font-size:13px}.kvr:first-child{border-top:0}
+.kvr span{color:var(--muted)}.kvr b{text-align:right;font-weight:600}.kvr.chk span{color:var(--ink);display:flex;gap:8px;align-items:center}
+.kl{margin:0;padding-left:20px;font-size:13px}.kl li{margin:3px 0}.kl.warn li::marker{color:var(--danger)}
+.pcur{position:absolute;left:0;top:0;z-index:30;pointer-events:none;display:flex;align-items:flex-start;gap:2px;transition:transform .09s linear,opacity .4s}
+.pcur span{margin-top:12px;padding:1px 7px;border-radius:8px;background:var(--c);color:#fff;font:600 11px/1.5 var(--f-ui);white-space:nowrap}
+.pcur.idle{opacity:.25}
+.ver.named{border-left:3px solid var(--accent)}
+.vdiff{margin-top:6px;font-size:12.5px;line-height:1.6;background:var(--chrome);border-radius:8px;padding:6px 8px}
+.verlist .ver{gap:8px;flex-wrap:wrap}
+.tour{position:fixed;inset:0;z-index:500}
+.tspot{position:fixed;border-radius:10px;box-shadow:0 0 0 9999px rgb(10 14 22 / .55);transition:all .25s ease;pointer-events:none;outline:2px solid var(--accent)}
+.tbox{position:fixed;background:var(--raise);color:var(--ink);border-radius:14px;padding:14px 16px;box-shadow:0 20px 60px rgb(0 0 0 / .35);transition:top .25s,left .25s}
+.tbox small{color:var(--muted);font:600 10.5px var(--f-mono);text-transform:uppercase;letter-spacing:.06em}.tbox h3{margin:4px 0 6px;font-size:16px}.tbox p{margin:0 0 12px;font-size:13.5px;line-height:1.5}
 /* Version 1.9 */
 .row2{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
 .btn.sm{height:28px;padding:0 9px;font-size:12px}
@@ -707,11 +779,14 @@ body:not(.present) #presNum{display:none}
     <button class="ibtn recbtn" id="btnRec" title="Vorlesung aufnehmen (Ton wird mit den Notizen verknüpft)" aria-label="Aufnehmen" aria-pressed="false"><i data-i="mic"></i></button>
     <button class="ibtn aibtn" id="btnAI" title="KI-Assistent (Y)" aria-label="KI-Assistent" aria-pressed="false"><i data-i="spark"></i></button>
     <div class="find" role="search">
-      <i data-i="search" style="color:var(--muted)"></i>
+      <button class="ibtn ftog" id="findToggle" title="Suchen (Strg+F)" aria-label="Suchen"><i data-i="search"></i></button>
+      <i data-i="search" class="fic" style="color:var(--muted)"></i>
       <input id="findInput" type="search" placeholder="Suchen" aria-label="Im Dokument suchen" autocomplete="off">
       <span class="cnt" id="findCount"></span>
       <button class="ibtn" id="findPrev" title="Vorheriger Treffer" aria-label="Vorheriger Treffer"><i data-i="up"></i></button>
       <button class="ibtn" id="findNext" title="Nächster Treffer" aria-label="Nächster Treffer"><i data-i="down"></i></button>
+      <button class="ibtn fcls" id="findClose" title="Suche schließen (Esc)" aria-label="Suche schließen"><i data-i="close"></i></button>
+      <div class="findlist" id="findList" hidden></div>
     </div>
     <div class="menuwrap">
       <button class="ibtn" id="btnMore" title="Weitere Funktionen" aria-label="Weitere Funktionen" aria-haspopup="menu" aria-expanded="false"><i data-i="more"></i></button>
@@ -773,6 +848,10 @@ body:not(.present) #presNum{display:none}
         <button role="menuitem" data-act="tasks">Aufgaben</button>
         <button role="menuitem" data-act="searchlib" id="mSearchLib" hidden>In allen Dokumenten suchen …</button>
         <button role="menuitem" data-act="hw2text">Handschrift in Text …</button>
+        <button role="menuitem" data-act="transcript">Transkript der Aufnahmen …</button>
+        <button role="menuitem" data-act="asklib">Bibliothek fragen (KI) …</button>
+        <button role="menuitem" data-act="cardsx">Lernkarten: Anki und Lerngruppe …</button>
+        <button role="menuitem" data-act="contract">Vertrag auswerten …</button>
         <button role="menuitem" data-act="cite">Zitieren und Quellenangabe …</button>
         <button role="menuitem" data-act="exam">Probeklausur …</button>
         <button role="menuitem" data-act="mindmap">Mindmap …</button>
@@ -785,6 +864,8 @@ body:not(.present) #presNum{display:none}
         <button role="menuitem" data-act="redactsearch">Suchen und schwärzen …</button>
         <button role="menuitem" data-act="compare">Vergleichen …</button>
         <button role="menuitem" data-act="versions" id="mVersions" hidden>Versionsverlauf …</button>
+        <button role="menuitem" data-act="savever">Version mit Namen speichern …</button>
+        <button role="menuitem" data-act="ledger">Rechnungen und Mahnungen …</button>
         <button role="menuitem" data-act="dictate">Diktieren in ein Textfeld</button>
         <button role="menuitem" data-act="stats">Dokument-Statistik</button>
         </div></div>
@@ -801,6 +882,7 @@ body:not(.present) #presNum{display:none}
         </div></div>
         <hr>
         <button role="menuitem" data-act="keys">Tastenkürzel und Gesten</button>
+        <button role="menuitem" data-act="tour">Einführung</button>
         <button role="menuitem" data-act="meta">Einstellungen …</button>
       </div>
     </div>
@@ -1085,6 +1167,9 @@ body:not(.present) #presNum{display:none}
 <script src="js/stats.js"></script>
 <script src="js/scan.js"></script>
 <script src="js/batch.js"></script>
+<script src="js/libchat.js"></script>
+<script src="js/anki.js"></script>
+<script src="js/ledger.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/app.js"></script>
 </body>

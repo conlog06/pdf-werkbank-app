@@ -363,6 +363,7 @@
               }
             }
             if ((v('no').trim() || N.no) === N.no) N.commit();
+            if (inv && global.WBLedger) global.WBLedger.add({ no: data.no, date: data.date, terms: data.terms, customer: data.toName, to: data.to, total: Math.round((r.total || 0) * 100) / 100, formal: data.formal, einvoice: !!r.einvoice });
             done(r);
           } catch (er) { x.disabled = false; x.textContent = 'Erneut versuchen'; err(er.message || String(er)); }
         }

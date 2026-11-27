@@ -172,6 +172,8 @@
     try {
       S.chan = c.channel('wbshare:' + tok, { config: { broadcast: { self: false }, presence: { key: me.id + ':' + Math.random().toString(36).slice(2, 6) } } });
       S.chan.on('broadcast', { event: 'rev' }, ({ payload }) => { if (payload && payload.rev > S.rev) { clearTimeout(pullT); pullT = setTimeout(pull, 150); } });
+      S.chan.on('broadcast', { event: 'cur' }, ({ payload }) => { if (payload && payload.id !== me.id && hooks.onCursor) hooks.onCursor(payload); });
+      S.chan.on('broadcast', { event: 'mention' }, ({ payload }) => { if (payload && payload.by !== me.id && hooks.onMention) hooks.onMention(payload); });
       S.chan.on('presence', { event: 'sync' }, () => {
         const st = S.chan.presenceState(), seen = new Map();
         for (const k of Object.keys(st)) for (const p of st[k]) if (p.id !== me.id) seen.set(p.id, p);
@@ -190,6 +192,9 @@
       sourceOf: sid => fetchSource(c, tok, sid),
       changed: (() => { let t = 0; return () => { clearTimeout(t); t = setTimeout(push, 700); }; })(),
       flush: push, pull,
+      cursor: (() => { let last = 0, pend = null, t = 0; const send = () => { last = Date.now(); t = 0; try { if (S.chan && pend) S.chan.send({ type: 'broadcast', event: 'cur', payload: { ...pend, id: me.id, name: me.name || 'Gast', color: me.color } }); } catch (e) { /* egal */ } };
+        return c => { pend = c; if (Date.now() - last > 90) send(); else if (!t) t = setTimeout(send, 90); }; })(),
+      mention: m => { try { if (S.chan) S.chan.send({ type: 'broadcast', event: 'mention', payload: { ...m, by: me.id, from: me.name || 'Gast' } }); } catch (e) { /* egal */ } },
       setPage: n => { try { if (S.chan) S.chan.track({ id: me.id, name: me.name || 'Gast', color: me.color, page: n }); } catch (e) { /* egal */ } },
       close() { S.closed = true; clearInterval(poll); document.removeEventListener('visibilitychange', onVis); try { if (S.chan) c.removeChannel(S.chan); } catch (e) { /* egal */ } },
     };

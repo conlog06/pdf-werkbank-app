@@ -49,6 +49,7 @@
     more: 'M5 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2zM12 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2zM19 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2z',
     chev: 'M9 6l6 6-6 6', check: 'M5 12.5l4.5 4.5L19 7', close: 'M6 6l12 12M18 6L6 18',
     trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6', clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2',
+    chat: 'M4 5h16v11H9l-5 4zM8 9h8M8 12h5', euro: 'M17 6a7 7 0 1 0 0 12M4 10h10M4 14h10', bolt: 'M13 3L5 13h6l-1 8 8-10h-6z',
     docs: 'M8 3h8l4 4v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM16 3v4h4M4 7v12a3 3 0 0 0 3 3h9',
     cloud: 'M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9z', clouddown: 'M7 18a4 4 0 0 1-.5-8A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9zM12 11v6M9.5 14.5L12 17l2.5-2.5',
     upload: 'M12 16V4M7 9l5-5 5 5M5 20h14', move: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM10 13h6M13 10l3 3-3 3',
@@ -117,6 +118,8 @@
       ['fav', null, 'starf', 'Favoriten', docs.filter(d => d.fav).length || ''],
       ['trash', null, 'trash', 'Papierkorb', V.items.filter(i => i.trashed).length || ''],
       ...(window.WBTasks ? [['learn', null, 'check', 'Lernen und Aufgaben', V.dueN || '']] : []),
+      ...(window.WBLibChat && window.WBSearch ? [['ask', null, 'chat', 'Bibliothek fragen', '']] : []),
+      ...(window.WBLedger ? [['ledger', null, 'euro', 'Rechnungen', V.openInv || '']] : []),
     ];
     $('#nav').innerHTML = nav.map(([k, id, ic, label, n]) => `<button class="nitem" data-nav="${k}" ${k === 'folder' ? 'data-drop=""' : ''} aria-current="${V.view.kind === k && (k !== 'folder' || !V.view.id) && !V.q}">${ico(ic)}<span>${label}</span><span class="cnt">${n}</span></button>`).join('');
   }
@@ -429,10 +432,13 @@
     busy(pdfs.length === 1 ? 'PDF wird importiert …' : `${pdfs.length} PDFs werden importiert …`);
     const out = [];
     try {
+      const ruleQ = [];
       for (const f of pdfs) {
         const bytes = new Uint8Array(await f.arrayBuffer());
-        out.push(await importBytes(bytes, f.name, folder));
+        const doc = await importBytes(bytes, f.name, folder);
+        out.push(doc); if (!/\.werkbank$/i.test(f.name)) ruleQ.push([doc, bytes]);
       }
+      if (ruleQ.length && rulesGet().some(r => r.on)) { busy('Regeln werden angewendet …'); let n = 0; for (const [doc, b] of ruleQ) n += await applyRules(doc, b, 'import'); if (n) toast(`${n} ${n === 1 ? 'Regel' : 'Regeln'} angewendet`); }
     } catch (e) { console.error(e); toast('Import fehlgeschlagen: ' + (e.message || e)); }
     busy(false);
     await refresh();
@@ -1122,6 +1128,159 @@
     });
   }
 
+  /* ======================= Version 2.0 ======================= */
+  const dl20 = (bytes, name, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type })); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 6000); };
+  /* Bibliothek fragen (KI über alle Dokumente) */
+  function askLibrary(q) {
+    if (!window.WBLibChat || !window.WBSearch) return;
+    window.WBSearch.indexAll();
+    window.WBLibChat.open({ q, items: async () => V.items.filter(i => i.kind === 'doc' && alive(i) && !i.missing), open: (id, n) => openAt(id, n) });
+  }
+  /* ---------- Rechnungen: offene Posten, Mahnungen, EÜR ---------- */
+  async function allReceipts() {
+    const out = [];
+    for (const d of V.items.filter(i => i.kind === 'doc' && alive(i) && !i.missing)) {
+      let st = null; try { st = await ST.getBlob('state:' + d.id); } catch (e) { continue; }
+      for (const r of (st && st.receipts) || []) out.push({ ...r, doc: d.name });
+    }
+    return out;
+  }
+  async function ledgerDialog() {
+    const L = window.WBLedger; if (!L) return;
+    const F = L.fmt; let year = new Date().getFullYear();
+    await dialog(`<h2>Rechnungen</h2><div id="ldBody"></div><div class="acts"><button class="btn" data-x="euer">EÜR exportieren …</button><button class="btn primary" data-x="0">Fertig</button></div>`, {
+      wide: true,
+      onOpen: (d, close) => {
+        d.classList.add('xwide');
+        const body = d.querySelector('#ldBody');
+        const render = () => {
+          const list = L.list(), open = list.filter(i => L.status(i) !== 'paid'), over = list.filter(i => L.status(i) === 'overdue');
+          const sum = a => a.reduce((s, i) => s + (+i.total || 0), 0);
+          body.innerHTML = list.length ? `<div class="ldtiles"><div><b>${F.eur(sum(open))}</b><small>${open.length} offen</small></div><div class="${over.length ? 'warn' : ''}"><b>${F.eur(sum(over))}</b><small>${over.length} überfällig</small></div><div><b>${F.eur(sum(list.filter(i => i.paid && new Date(i.paid).getFullYear() === year)))}</b><small>bezahlt ${year}</small></div></div>
+            <div class="ldtab"><table><thead><tr><th>Nr.</th><th>Datum</th><th>Kunde</th><th class="r">Betrag</th><th>Fällig</th><th>Status</th><th></th></tr></thead><tbody>${list.map(i => { const st = L.status(i), lv = (i.reminders || []).length; return `<tr class="${st}"><td><b>${esc(i.no)}</b>${i.einvoice ? ' <small class="tag">E</small>' : ''}</td><td>${esc(i.date || '')}</td><td>${esc(i.customer || '')}</td><td class="r">${F.eur(i.total)}</td><td>${F.de(L.dueOf(i))}</td>
+              <td>${st === 'paid' ? `<span class="st ok">bezahlt ${F.de(i.paid)}</span>` : st === 'overdue' ? `<span class="st bad">überfällig${lv ? ` · ${lv}× erinnert` : ''}</span>` : '<span class="st">offen</span>'}</td>
+              <td class="ldact">${st === 'paid' ? `<button class="btn sm" data-ld="unpaid" data-no="${esc(i.no)}">Offen</button>` : `<button class="btn sm" data-ld="paid" data-no="${esc(i.no)}">Bezahlt</button>${st === 'overdue' ? `<button class="btn sm" data-ld="remind" data-no="${esc(i.no)}">${['Erinnerung', '1. Mahnung', '2. Mahnung'][Math.min(lv, 2)]}</button>` : ''}`}<button class="ibtn sm" data-ld="del" data-no="${esc(i.no)}" title="Aus der Liste entfernen">${ico('trash')}</button></td></tr>`; }).join('')}</tbody></table></div>
+            <p class="note">Rechnungen aus dem Assistenten (Neu › Aus Vorlage › Rechnung) landen automatisch hier. Gespeichert auf diesem Gerät.</p>`
+            : '<p class="note">Noch keine Rechnungen. Erstelle eine über Neu › Aus Vorlage › Rechnung; sie erscheint dann hier mit Fälligkeit und Status.</p>';
+        };
+        render();
+        d.addEventListener('click', async e => {
+          const b = e.target.closest('[data-ld]');
+          if (b) {
+            const no = b.dataset.no, inv = L.list().find(x => x.no === no); if (!inv) return;
+            if (b.dataset.ld === 'paid') { const v = await promptDlg('Zahlungseingang', 'Bezahlt am', new Date().toLocaleDateString('de-DE'), 'Als bezahlt markieren'); if (!v) return; const p = F.pDate(v) || new Date(); L.update(no, { paid: +p }); }
+            else if (b.dataset.ld === 'unpaid') L.update(no, { paid: null });
+            else if (b.dataset.ld === 'del') { if (await confirmDlg('Aus der Liste entfernen?', `Rechnung ${no} wird nur aus dem Rechnungsbuch entfernt, das PDF bleibt.`, 'Entfernen', true)) L.remove(no); }
+            else if (b.dataset.ld === 'remind') {
+              const level = Math.min(3, (inv.reminders || []).length + 1);
+              const fee = level >= 2 ? +((await promptDlg(L.LEVEL[level], 'Mahngebühr in € (0 für keine)', level === 2 ? '5,00' : '10,00', 'Erstellen')) || '0').replace(',', '.') || 0 : 0;
+              busy('Wird erstellt …');
+              const bytes = await L.reminderPdf(inv, level, fee);
+              const doc = await importBytes(bytes, `${L.LEVEL[level]} ${no} ${inv.customer || ''}`.trim(), targetFolder());
+              L.update(no, { reminders: [...(inv.reminders || []), { at: Date.now(), level, fee }] });
+              busy(false); close(); openDoc(doc.id); return;
+            }
+            render(); return;
+          }
+          const x = e.target.closest('[data-x]'); if (!x) return;
+          if (x.dataset.x === '0') close();
+          if (x.dataset.x === 'euer') {
+            const y = await promptDlg('Einnahmen-Überschuss-Rechnung', 'Jahr', String(year), 'CSV erstellen'); if (!y) return;
+            year = +y || year; busy('Belege werden gesammelt …');
+            const r = L.euer(year, await allReceipts()); busy(false);
+            dl20(new TextEncoder().encode(r.csv), `EÜR ${year}.csv`, 'text/csv');
+            toast(`EÜR ${year}: Einnahmen ${F.eur(r.income)}, Ausgaben ${F.eur(r.expense)}, Gewinn ${F.eur(r.profit)}`);
+          }
+        });
+        L.onChange(render);
+      },
+    });
+  }
+  /* ---------- Regeln: neue Dokumente automatisch verarbeiten ---------- */
+  const RKEY = 'pdfwb.rules', WKEY = 'pdfwb.watch';
+  const rulesGet = () => { try { return JSON.parse(lsGet(RKEY) || '[]'); } catch (e) { return []; } };
+  const rulesSet = l => lsSet(RKEY, JSON.stringify(l));
+  const match1 = (hay, cond) => !cond || cond.split(',').map(s => s.trim().toLowerCase()).filter(Boolean).some(c => hay.toLowerCase().includes(c));
+  async function applyRules(doc, bytes, from = 'import') {
+    const rules = rulesGet().filter(r => r.on && (r.from === 'any' || !r.from || r.from === from));
+    if (!rules.length || !window.WBBatch) return 0;
+    let info = { text: '' }; try { info = await window.WBBatch.textOf(bytes, 3); } catch (e) { /* Scan */ }
+    let n = 0, name = doc.name, b = bytes;
+    for (const r of rules) {
+      if (!match1(name, r.name) || !match1(info.text, r.text)) continue;
+      n++;
+      if (r.ocr && window.WBTools && info.text.replace(/\s/g, '').length < 40) {
+        try {
+          const x = await window.WBTools.ocr(b, { mode: 'auto' });
+          if (x.bytes) { const d = await ST.loadDoc(doc.id); const sid = 's' + Math.random().toString(36).slice(2, 10); await ST.saveDoc(doc.id, { state: null, sources: [{ id: sid, name: d.sources[0].name, bytes: x.bytes }], pages: doc.pages }); b = x.bytes; info = await window.WBBatch.textOf(b, 3); }
+        } catch (e) { console.warn('Regel OCR', e); }
+      }
+      if (r.rename) { try { name = await window.WBBatch.guessName(b, name, r.rename, false); await ST.update(doc.id, { name }); } catch (e) { /* Name bleibt */ } }
+      if (r.fav) await ST.update(doc.id, { fav: true });
+      if (r.folder && V.byId.get(r.folder)) { try { await ST.move([doc.id], r.folder); } catch (e) { /* Ordner fehlt */ } }
+      if (r.stop) break;
+    }
+    return n;
+  }
+  async function rulesDialog() {
+    let rules = rulesGet();
+    const W = (() => { try { return JSON.parse(lsGet(WKEY) || '{}'); } catch (e) { return {}; } })();
+    const fopts = sel => `<option value="">– nicht verschieben –</option>${folders().filter(alive).map(f => `<option value="${f.id}" ${sel === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}`;
+    await dialog(`<h2>Automatische Regeln</h2><p class="note">Neue PDFs (Import, Belegordner) werden geprüft. Passt eine Regel, wird sie ausgeführt. Mehrere Begriffe mit Komma trennen.</p><div id="ruBody"></div>
+      ${DESK && DESK.fsOp ? `<h3 class="lh">Ordner überwachen</h3><p class="note" id="wInfo">${W.root ? `Überwacht: <b>${esc(W.root)}</b>${W.on ? '' : ' (pausiert)'}` : 'Neue PDFs aus einem Ordner (z. B. vom Scanner oder Downloads) automatisch importieren.'}</p><div class="row"><button class="btn" data-x="wpick">${W.root ? 'Anderen Ordner …' : 'Ordner wählen …'}</button>${W.root ? `<button class="btn" data-x="wtoggle">${W.on ? 'Pausieren' : 'Fortsetzen'}</button>` : ''}</div>` : ''}
+      <div class="acts"><button class="btn" data-x="add">+ Regel</button><button class="btn primary" data-x="save">Speichern</button></div>`, {
+      wide: true,
+      onOpen: (d, close) => {
+        const body = d.querySelector('#ruBody');
+        const render = () => {
+          body.innerHTML = rules.length ? rules.map((r, i) => `<div class="rule" data-i="${i}"><div class="rh"><label><input type="checkbox" data-f="on" ${r.on ? 'checked' : ''}> <input class="field" data-f="title" value="${esc(r.title || '')}" placeholder="Name der Regel"></label><button class="ibtn" data-del="${i}" title="Löschen">${ico('trash')}</button></div>
+            <div class="rgrid"><label class="fld"><span>Wenn Dateiname enthält</span><input class="field" data-f="name" value="${esc(r.name || '')}" placeholder="z. B. scan, rechnung"></label><label class="fld"><span>und Text enthält</span><input class="field" data-f="text" value="${esc(r.text || '')}" placeholder="z. B. Rechnung, Invoice"></label>
+            <label class="fld"><span>Quelle</span><select class="field" data-f="from"><option value="any" ${r.from === 'any' || !r.from ? 'selected' : ''}>alle neuen PDFs</option><option value="import" ${r.from === 'import' ? 'selected' : ''}>nur Import</option><option value="watch" ${r.from === 'watch' ? 'selected' : ''}>nur überwachter Ordner</option></select></label>
+            <label class="fld"><span>Umbenennen nach</span><input class="field" data-f="rename" value="${esc(r.rename || '')}" placeholder="{datum} {art} {titel} – leer lassen: nicht"></label>
+            <label class="fld"><span>Verschieben nach</span><select class="field" data-f="folder">${fopts(r.folder)}</select></label>
+            <div class="rchk"><label><input type="checkbox" data-f="ocr" ${r.ocr ? 'checked' : ''}> Texterkennung bei Scans</label><label><input type="checkbox" data-f="fav" ${r.fav ? 'checked' : ''}> Favorit</label><label><input type="checkbox" data-f="stop" ${r.stop ? 'checked' : ''}> danach keine weitere Regel</label></div></div></div>`).join('') : '<p class="note">Noch keine Regel. Beispiel: Dateiname enthält „scan“ → Texterkennung, umbenennen nach „{datum} {art} {titel}“, verschieben nach „Belege“.</p>';
+        };
+        const read = () => { body.querySelectorAll('.rule').forEach(el => { const r = rules[+el.dataset.i]; el.querySelectorAll('[data-f]').forEach(inp => { r[inp.dataset.f] = inp.type === 'checkbox' ? inp.checked : inp.value.trim(); }); }); };
+        render();
+        d.addEventListener('click', async e => {
+          const del = e.target.closest('[data-del]'); if (del) { read(); rules.splice(+del.dataset.del, 1); render(); return; }
+          const x = e.target.closest('[data-x]'); if (!x) return;
+          if (x.dataset.x === 'add') { read(); rules.push({ id: Date.now().toString(36), on: true, title: 'Neue Regel', from: 'any', name: '', text: '', rename: '{datum} {art} {titel}', ocr: true }); render(); }
+          else if (x.dataset.x === 'save') { read(); rulesSet(rules); toast(`${rules.filter(r => r.on).length} Regeln aktiv`); close(); }
+          else if (x.dataset.x === 'wpick') {
+            const r = await DESK.folderPick(); if (!r || !r.path) return;
+            let seen = {};
+            try { const l = await DESK.fsOp({ op: 'list', root: r.path, rel: [] }); const imp = l.entries.filter(f => !f.dir && /\.pdf$/i.test(f.name)); if (imp.length && !await confirmDlg('Vorhandene PDFs?', `Im Ordner liegen schon ${imp.length} PDFs. Sollen sie auch importiert werden? Sonst werden nur neue übernommen.`, 'Auch importieren')) imp.forEach(f => { seen[f.name] = f.mtime; }); } catch (er) { toast(er.message || String(er)); return; }
+            lsSet(WKEY, JSON.stringify({ root: r.path, on: true, seen })); toast('Ordner wird überwacht'); close(); watchStart(true);
+          } else if (x.dataset.x === 'wtoggle') { const w = JSON.parse(lsGet(WKEY) || '{}'); w.on = !w.on; lsSet(WKEY, JSON.stringify(w)); close(); watchStart(true); }
+        });
+      },
+    });
+  }
+  let watchT = 0, watchBusy = false;
+  async function watchTick() {
+    if (watchBusy) return; watchBusy = true;
+    try {
+      const w = JSON.parse(lsGet(WKEY) || '{}'); if (!w.root || !w.on || !DESK || !DESK.fsOp) return;
+      const l = await DESK.fsOp({ op: 'list', root: w.root, rel: [] });
+      const fresh = l.entries.filter(f => !f.dir && /\.(pdf)$/i.test(f.name) && w.seen[f.name] !== f.mtime && Date.now() - f.mtime > 4000);
+      if (!fresh.length) return;
+      let n = 0;
+      for (const f of fresh) {
+        try {
+          const r = await DESK.fsOp({ op: 'read', root: w.root, rel: [f.name] });
+          const doc = await importBytes(new Uint8Array(r.bytes), f.name, null);
+          await applyRules(doc, new Uint8Array(r.bytes), 'watch'); n++;
+        } catch (e) { console.warn('Ordner', f.name, e); }
+        w.seen[f.name] = f.mtime;
+      }
+      lsSet(WKEY, JSON.stringify(w));
+      if (n) { await refresh(); toast(`${n} ${n === 1 ? 'neue PDF' : 'neue PDFs'} aus dem überwachten Ordner übernommen`); }
+    } catch (e) { console.warn('Ordner überwachen', e); }
+    finally { watchBusy = false; }
+  }
+  function watchStart(now) { clearInterval(watchT); const w = (() => { try { return JSON.parse(lsGet(WKEY) || '{}'); } catch (e) { return {}; } })(); if (!w.root || !w.on || !DESK || !DESK.fsOp) return; watchT = setInterval(watchTick, 20000); if (now) setTimeout(watchTick, 500); }
+
   /* ---------- Als App installieren ---------- */
   const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1253,6 +1412,7 @@
       ${AI ? `<div data-p="ai" hidden><p class="lead" style="margin-top:0">Der KI-Assistent im Editor fasst zusammen, beantwortet Fragen zum PDF, erstellt Lernkarten und liest Handschrift.</p><div id="stAI"></div></div>` : ''}
       <div data-p="backup" hidden>
         <div class="srow"><span class="t"><b>Geräte synchronisieren</b><small>${sI && sI.user ? esc(sI.user.email) + ' · ' + esc((sI.modes || {})[sI.mode] || '') : 'Nicht angemeldet'}</small></span><button type="button" class="btn" data-go="sync">Öffnen</button></div>
+        <div class="srow"><span class="t"><b>Automatische Regeln</b><small>${rulesGet().filter(r => r.on).length} aktiv${DESK && DESK.fsOp ? ' · Ordner überwachen' : ''}</small></span><button type="button" class="btn" data-go="rules">Öffnen</button></div>
         <div class="srow"><span class="t"><b>Cloud-Dienste</b><small>${esc(cloudSummary().sub)}</small></span><button type="button" class="btn" data-go="cloud">Öffnen</button></div>
       </div>
       <div data-p="app" hidden>
@@ -1277,7 +1437,7 @@
           if (g && g.dataset.go === 'default') { makeDefaultPdf(d); return; }
           if (g && g.dataset.go === 'diag') { WBDiag.report().then(t => navigator.clipboard.writeText(t)).then(() => toast('Fehlerprotokoll kopiert'), () => toast('Kopieren nicht möglich')); return; }
           if (g && (g.dataset.go === 'logs' || g.dataset.go === 'backups')) { DESK.showPath(g.dataset.go); return; }
-          if (g) { const k = g.dataset.go; close(); if (k === 'sync') syncDialog(); else if (k === 'drive') driveDialog(); else if (k === 'cloud') cloudHub(); else if (k === 'install') installDialog(); else if (k === 'update' && window.WBUpdate) WBUpdate.check(true); return; }
+          if (g) { const k = g.dataset.go; close(); if (k === 'sync') syncDialog(); else if (k === 'drive') driveDialog(); else if (k === 'cloud') cloudHub(); else if (k === 'install') installDialog(); else if (k === 'rules') rulesDialog(); else if (k === 'update' && window.WBUpdate) WBUpdate.check(true); return; }
           if (e.target.closest('[data-x]')) close();
         });
         d.querySelector('#stTile').oninput = e => setTile(+e.target.value);
@@ -1462,7 +1622,7 @@
     if (window.WBDiag) setTimeout(() => WBDiag.checkSpace(m => toast(m)), 5000);
     if (GD || CL) { $('#driveBtn').onclick = () => { const sm = cloudSummary(); if (sm.s === 'auth' && GD && GD.info().status === 'auth' && !GD.info().desktop) { driveDialog(); return; } cloudHub(); }; if (GD) { GD.onStatus(renderCloud); GD.watch(); } if (CL) { CL.onStatus(renderCloud); CL.watch(); } } else $('#driveBtn').hidden = true;
 
-    $('#nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (!b) return; if (b.dataset.nav === 'learn') { learnDialog(); closeDrawer(); return; } go({ kind: b.dataset.nav, id: null }); };
+    $('#nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (!b) return; if (b.dataset.nav === 'learn') { learnDialog(); closeDrawer(); return; } if (b.dataset.nav === 'ask') { askLibrary(); closeDrawer(); return; } if (b.dataset.nav === 'ledger') { ledgerDialog(); closeDrawer(); return; } go({ kind: b.dataset.nav, id: null }); };
     $('#tree').onclick = e => {
       const tw = e.target.closest('[data-tw]');
       if (tw) { const id = tw.dataset.tw; if (V.open.has(id)) V.open.delete(id); else V.open.add(id); saveOpen(); renderTree(); return; }
@@ -1637,7 +1797,11 @@
     const p = new URLSearchParams(location.search);
     if (p.get('import') === '1') newAction('import');
     if (p.get('new') === 'notebook') newAction('notebook');
-    if (p.get('new') || p.get('import')) history.replaceState(null, '', 'library.html');
+    if (p.get('view') === 'ledger') setTimeout(ledgerDialog, 300);
+    if (p.get('view') === 'ask') setTimeout(() => askLibrary(p.get('q') || ''), 300);
+    if (p.get('new') || p.get('import') || p.get('view')) history.replaceState(null, '', 'library.html');
+    watchStart(false);
+    if (window.WBLedger) { const upd = () => { const n = window.WBLedger.list().filter(i => window.WBLedger.status(i) === 'overdue').length; if (n !== V.openInv) { V.openInv = n || ''; renderNav(); } }; upd(); window.WBLedger.onChange(upd); }
     inbox();
     setTimeout(updateDue, 2500); if (ST.onChange) ST.onChange(() => { clearTimeout(V.dueT); V.dueT = setTimeout(updateDue, 3000); });
     if (CL) CL.handleRedirect().then(r => { if (!r) return; if (r.ok) toast(CL.info(r.pid).label + ' verbunden · Backup läuft'); else { toast(r.error); if (r.pid) cloudDialog(r.pid); } });
